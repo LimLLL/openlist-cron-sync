@@ -1,4 +1,5 @@
-// 维护显式 ENC 清单并逐行读取密文；M0 生产清单为空。
+// 维护显式 ENC 清单并逐行读取生产密文。
+import { instances } from './schema.js';
 import { and, asc, gt, isNotNull, getTableName } from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import type { SQLiteColumn, SQLiteTable } from 'drizzle-orm/sqlite-core';
@@ -26,7 +27,9 @@ export interface EncryptedValue {
 }
 
 export const ENCRYPTED_COLUMNS = Symbol('ENCRYPTED_COLUMNS');
-export const encryptedColumns: readonly EncryptedColumn[] = [];
+export const encryptedColumns: readonly EncryptedColumn[] = [
+  { table: instances, id: instances.id, value: instances.secretEnc },
+];
 
 /** 流式扫描全部非 NULL 密文，不把整库数据载入内存。
  * @param db 已打开的 Drizzle 数据库。

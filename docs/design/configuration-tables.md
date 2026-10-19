@@ -47,6 +47,8 @@
 索引：(archived_at,created_at,id)。base_url不设唯一：不同账号可访问同实例，规范化地址相同的Instance按“accountBasePath+path”的全局路径参与路径重叠、占用与隔离比较，见[调度与恢复](scheduling-recovery.md#资源层级)。
 每次/api/me成功时比较account_username与account_base_path：实例没有[未决责任](data-model.md#responsibility)时以新值覆盖；有未决责任且任一值不同时不覆盖旧值，置auth_blocked（ACCOUNT_CHANGED），规则见[OpenList集成](openlist-integration.md#认证与实例身份)。
 
+M1 已实现本表，并将 `secret_enc` 登记到生产 ENC 清单；AAD 为 `instances:<id>:secret_enc:v1`。尚无责任表时身份更新允许覆盖，DELETE 只归档并清空该列；未来检查接入点见[认证实现边界](openlist-integration.md#m1-实现边界)。
+
 ## jobs
 
 | 字段                            | 类型            | 默认/约束                                                             |

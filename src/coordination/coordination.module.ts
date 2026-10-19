@@ -1,4 +1,5 @@
-// M0 协调模块仅持有 ready 标志，不预建后续调度能力。
+// 协调叶子模块持有就绪标志与每实例 API 配额。
+import { ApiQuota } from './api-quota.service.js';
 import { Injectable, Module } from '@nestjs/common';
 
 /** 当前进程的就绪状态。
@@ -17,5 +18,5 @@ export class Readiness {
  * @returns 不适用。
  * @throws 不适用。
  */
-@Module({ providers: [Readiness], exports: [Readiness] })
+@Module({ providers: [Readiness, ApiQuota], exports: [Readiness, ApiQuota] })
 export class CoordinationModule {}

@@ -42,25 +42,25 @@ Error={error:{code:string,message:string,details:FieldError[]},requestId:string}
 
 ### 扫描与计划
 
-| code                        | 含义                                                                                                                    |
-| --------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| SCAN_INCOMPLETE             | 子树或端点读取不完整（list失败、权限不足等）；不能当作缺失                                                              |
-| SOURCE_ROOT_UNAVAILABLE     | source根目录无法读取；Run failed，不执行任何计划动作                                                                    |
-| SUSPECT_VIEW                | 视图可疑（检测到嵌套挂载，或目录是挂载点的祖先）；该范围删除禁止，判定见[可疑视图](../design/deletion.md#可疑视图)      |
-| SCAN_DEPTH_EXCEEDED         | 目录深度超过SCAN_MAX_DEPTH；该子树不再下探并受保护（protectSubtree=true），Run不因此失败                                |
-| TARGET_ROOT_WILL_BE_CREATED | Target根不存在（其父目录可列出且无此名）；dry-run报告此码并规划全部create，实跑先以prepare mkdir创建根                  |
-| TARGET_ROOT_UNAVAILABLE     | Target根无法列出且不能证明缺失（父目录列表失败、权限错误或同名为文件）；该Target按SCAN_INCOMPLETE处理，不create、不删除 |
-| MOUNT_BOUNDARY_UNKNOWN      | 管理员模式下storage列表不可读或重读后仍不一致；该Instance所有目录按可疑视图处理，相关删除禁止                           |
-| INVALID_NAME                | 条目名含`/`、`\`、NUL，或为`.`、`..`；保护其父目录                                                                      |
-| UNKNOWN_SIZE                | 源文件大小未知；不传输，存在大小过滤时也不能判为符合                                                                    |
-| INVALID_SIZE                | size不是可处理的整数或超过JS安全整数；协议读取失败的具体原因。负数按UNKNOWN_SIZE/TARGET_UNKNOWN_SIZE处理                |
-| TARGET_UNKNOWN_SIZE         | 目标文件大小未知；该路径受保护：不替换、不算extra、不计入阈值分母D                                                      |
-| TYPE_CONFLICT               | 同一相对路径在源与目标的文件/目录类型不同；所有模式都不自动删除阻挡对象                                                 |
-| NAME_COLLISION              | NFC/大小写折叠后名称相同（source内部、source与Target之间或Target内部）                                                  |
-| EMPTY_SOURCE                | 有效源集合为空且allowEmptySource=false；删除禁止                                                                        |
-| DELETE_LIMIT                | 超过数量/比例阈值，或retry_cleanup超出剩余预算；相关delete及其依赖create跳过                                            |
-| PLAN_INVALID                | 计划内部断言失败（例如R>D）；按实现缺陷记录日志，该Target的删除及依赖create跳过                                         |
-| PREVIOUS_OUTCOME_UNKNOWN    | 路径受未决unknown保护：隔离仍active，或到期/释放后的重新观察读取失败                                                    |
+| code                        | 含义                                                                                                                                                                                                                  |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SCAN_INCOMPLETE             | 子树或端点读取不完整（list失败、权限不足等）；不能当作缺失                                                                                                                                                            |
+| SOURCE_ROOT_UNAVAILABLE     | source根目录无法读取；Run failed，不执行任何计划动作                                                                                                                                                                  |
+| SUSPECT_VIEW                | 视图可疑（检测到嵌套挂载，或目录是挂载点的祖先）；该范围删除禁止，判定见[可疑视图](../design/deletion.md#可疑视图)；连接测试/浏览也用作账号缺少权限位0（CanSeeHides，列表可能漏掉隐藏条目）或目录含嵌套挂载提示的警告 |
+| SCAN_DEPTH_EXCEEDED         | 目录深度超过SCAN_MAX_DEPTH；该子树不再下探并受保护（protectSubtree=true），Run不因此失败                                                                                                                              |
+| TARGET_ROOT_WILL_BE_CREATED | Target根不存在（其父目录可列出且无此名）；dry-run报告此码并规划全部create，实跑先以prepare mkdir创建根                                                                                                                |
+| TARGET_ROOT_UNAVAILABLE     | Target根无法列出且不能证明缺失（父目录列表失败、权限错误或同名为文件）；该Target按SCAN_INCOMPLETE处理，不create、不删除                                                                                               |
+| MOUNT_BOUNDARY_UNKNOWN      | 管理员模式下storage列表不可读或重读后仍不一致；该Instance所有目录按可疑视图处理，相关删除禁止；连接测试/浏览也用作非管理员不能核实完整挂载或不存在唯一可用挂载的警告                                                  |
+| INVALID_NAME                | 条目名含`/`、`\`、NUL，或为`.`、`..`；保护其父目录                                                                                                                                                                    |
+| UNKNOWN_SIZE                | 源文件大小未知；不传输，存在大小过滤时也不能判为符合                                                                                                                                                                  |
+| INVALID_SIZE                | size不是可处理的整数或超过JS安全整数；协议读取失败的具体原因。负数按UNKNOWN_SIZE/TARGET_UNKNOWN_SIZE处理                                                                                                              |
+| TARGET_UNKNOWN_SIZE         | 目标文件大小未知；该路径受保护：不替换、不算extra、不计入阈值分母D                                                                                                                                                    |
+| TYPE_CONFLICT               | 同一相对路径在源与目标的文件/目录类型不同；所有模式都不自动删除阻挡对象                                                                                                                                               |
+| NAME_COLLISION              | NFC/大小写折叠后名称相同（source内部、source与Target之间或Target内部）                                                                                                                                                |
+| EMPTY_SOURCE                | 有效源集合为空且allowEmptySource=false；删除禁止                                                                                                                                                                      |
+| DELETE_LIMIT                | 超过数量/比例阈值，或retry_cleanup超出剩余预算；相关delete及其依赖create跳过                                                                                                                                          |
+| PLAN_INVALID                | 计划内部断言失败（例如R>D）；按实现缺陷记录日志，该Target的删除及依赖create跳过                                                                                                                                       |
+| PREVIOUS_OUTCOME_UNKNOWN    | 路径受未决unknown保护：隔离仍active，或到期/释放后的重新观察读取失败                                                                                                                                                  |
 
 ### 执行
 
@@ -99,6 +99,8 @@ Error={error:{code:string,message:string,details:FieldError[]},requestId:string}
 | CONFIG_KEY_CONFLICT          | 启动失败                               | 同一密钥在环境变量与keys.json中都存在且不一致，见[密钥规则](configuration.md#密钥优先级)      |
 | KEY_MISMATCH                 | 启动失败                               | master key无法解密数据库中已有的ENC值；不写入任何新ENC值                                      |
 
+实例认证阻断原因补充：`LOGIN_401`（密码拒绝）、`LOGIN_402`（需要二次认证）、`LOGIN_429`（登录冷却）、`TOKEN_401`（静态 token 拒绝）、`GUEST`（实际为游客）、`MISSING_SECRET`（未保存凭据）。这些值仅作为 InstanceView.authBlockReason，不直接用作 HTTP error.code。
+
 ## 管理认证
 
 | 方法/路径                  | 请求                                        | 成功响应                                                                                 |
@@ -131,6 +133,8 @@ Error={error:{code:string,message:string,details:FieldError[]},requestId:string}
 | DELETE /instances/:id      | 无                             | 204；有活动引用409                                   |
 | POST /instances/:id/test   | TestRequest                    | 200 TestResult；只读测试不上传探测文件               |
 | POST /instances/:id/browse | BrowseRequest                  | 200 BrowseResult；上游失败502                        |
+
+M1 的身份比较后允许覆盖，DELETE 归档并清空凭据；下述 Job 引用及未决责任 409 检查随 M2/M3a 表落地接入，当前不伪造责任判断。
 
 浏览使用POST避免路径密码进URL。分页为本服务切分OpenList列表，不保证云端游标一致性。
 PATCH本身不调用OpenList。地址、账号（password模式的username）或base_path变化在存在[未决责任](../design/data-model.md#responsibility)时返回409 ENDPOINT_IN_USE；同地址同账号的凭据修复允许。

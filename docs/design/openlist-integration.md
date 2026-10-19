@@ -26,6 +26,14 @@ token模式使用管理员静态token，Authorization直接传token，不加Bear
 
 账号身份核对：每次/api/me成功（连接测试、untested后首次使用、重新登录）都把返回的base_path和username与实例已保存的accountBasePath和账号用户名比较；token模式同样保存/api/me返回的username。实例没有未决责任（与Instance编辑使用同一责任判断，见[数据模型](data-model.md)）时用新值覆盖。有未决责任且任一值不同时不覆盖旧值，实例置auth_blocked、原因ACCOUNT_CHANGED，相关操作立即失败，直到管理员处理这些责任，或换回原账号凭据（实例回到untested后重新核对）。PATCH本身不调用OpenList，因此只有这一步能阻止token模式换成另一账号的token绕过“有责任时禁止身份变化”。
 
+### M1 实现边界
+
+认证阻断由 Security 的 `InstanceAuthState` 持久化，所有 OpenList 调用共享 `OpenListAuth`，不依赖 Instances controller。JWT 只在进程内；重启后重新登录仍先检查持久阻断。`authBlockReason` 的认证值为 `LOGIN_401`、`LOGIN_402`、`LOGIN_429`、`TOKEN_401`、`GUEST`、`MISSING_SECRET`；未来责任冲突使用 `ACCOUNT_CHANGED`。登录网络错误不写入凭据阻断。成功登录后先验证 `/api/me` 再发布会话。
+
+M1 尚无 jobs/runs/operations，身份比较后允许覆盖；PATCH 不访问上游，DELETE 归档并清空 `secret_enc`。M2 接入活动 Job 引用检查，M3a 接入真实未决责任查询：分别在 Instances 的 PATCH/DELETE 和 Security 身份保存前的比较点执行 `ENDPOINT_IN_USE` / `ACCOUNT_CHANGED` 规则。不提供永远返回 false 的责任占位函数。
+
+M1 客户端只返回协议事实；不执行 observe-after-500、unknown/quarantine、任务状态推进或 relay。`putEmpty` 若意外收到 `data.task`，返回该任务事实，供 M3a 登记 tid 并报告协议异常，不丢失已知远端任务。chunk/complete 必须由调用方传入截止信号，不使用控制 API 的短超时、不占 API 并发位；init/status/abort 仍占用实例 API 配额，其中 init 是新提交，不享有控制请求的优先位置。人工重试（retryAuth=true）只越过持久阻断尝试一次，阻断在该次尝试成功前保持不变，网络失败不会解除。
+
 ## 路径与URL
 
 文件API body中的path/src_dir/dst_dir/dir、File-Path均相对账号base_path，前导/是账号根。GET /d和/p路径为OpenList全局虚拟路径，不使用账号JoinPath。
@@ -48,7 +56,7 @@ fs/list、fs/get缺失可返回code500，不能按码或消息把它当absent；
 | 永久错误     | 权限403、请求400、不支持405、凭据阻断 | 不自动重复                                              |
 | 下载401      | /d自身签名失败                        | 重新list取sign一次，不账号登录；云端401另报下载失败     |
 
-不按message字符串分支，不维护任意云盘错误字符串规则引擎。真实HTTP重定向对API管理请求禁用，避免凭据换域；下载使用受控重定向。通用上游失败使用OPENLIST_ERROR并保存脱敏摘要；协议异常用UPSTREAM_PROTOCOL_ERROR，不能把任意上游message变成新的业务code。
+不按message字符串分支，不维护任意云盘错误字符串规则引擎。真实HTTP重定向对API管理请求禁用，避免凭据换域；下载使用受控重定向。M1 不保存或转发上游 message，统一生成只含 HTTP/应用码的摘要，因此不会保留 URL、凭据或 storage addition。通用上游失败使用OPENLIST_ERROR并保存脱敏摘要；协议异常用UPSTREAM_PROTOCOL_ERROR，不能把任意上游message变成新的业务code。
 HTTP层自动重放只用于读取和明确尚未执行的认证拒绝（JSON401重新登录后重放一次）。变更不在HTTP层重放；failed后的再次尝试按[状态机](state-machines.md)创建新Operation。multipart chunk只在同一session内按[relay规则](relay.md#单文件流程)重传；其他上传body不在HTTP层重放。
 
 ## 任务跟踪
@@ -100,7 +108,7 @@ relay以完整字节及complete结果为准，见[relay结果分类](relay.md#�
 
 source/target scan refresh默认分别关闭；删除前、删除确认、变更报错后的观察和隔离解除后的读取强制refresh=true，不受scan开关影响。权限不允许即阻断相关动作。
 管理员每Run读取完整storage/list（per_page=100，page递增直到覆盖total）；发现total变化或重复id时重取一次，仍不一致则本轮边界不可信，该Instance的视图按[挂载边界](deletion.md#挂载边界)的suspect规则处理。只提取id,mount_path,driver,disabled,status；立即丢弃addition等秘密。
-尚未覆盖total却返回空页、必要字段缺失、无效total或累计数量超过total同样视为分页不一致；整表重读最多一次后记MOUNT_BOUNDARY_UNKNOWN，不无限翻页或使用部分映射。全部请求受当前Run期限及响应大小限制。
+尚未覆盖total却返回空页、必要字段缺失、无效total或累计数量超过total同样视为分页不一致；整表重读最多一次后记MOUNT_BOUNDARY_UNKNOWN，不无限翻页或使用部分映射。全部请求受当前Run期限及响应大小限制。M1 的一次完整映射读取（含一次重读）共同受 OPENLIST_API_TIMEOUT_MS 约束。
 有效mount按OpenList算法计算：mount_path在最后一次出现`.balance`处截断（strings.LastIndex语义，不是后缀判断：`/a.balance/b`得`/a`，`/x.balancesheet`得`/x`），再在候选storage中按路径段边界做最长匹配；同一有效mount有多个候选时不猜。测试包含`/a.balance1`与`/a.balance/b`。读取失败不降级到普通账号路径。
 mount_details可因设置、超时、驱动能力和中间虚拟目录而缺失，仅用于提示风险。元数据变更和底层别名不在本服务完整证明范围内。
 

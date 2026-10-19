@@ -19,11 +19,12 @@ AuthInput为判别联合：{mode:'token',secret:string}或{mode:'password',usern
 InstanceLimits={maxApiConcurrency?:integer,apiRequestsPerSecond?:integer,maxOutstandingTasks?:integer,maxDownloadConnections?:integer,maxUploadSessions?:integer,maxChunkConcurrency?:integer}。
 InstancePatch={name?:string,baseUrl?:string,auth?:AuthInput,limits?:InstanceLimits,downloadMode?:'d'|'p'}，至少一个字段；嵌套limits按字段合并。auth整体替换，不接受掩码或secret:null。
 InstanceView=Entity+{name,baseUrl,auth:{mode,username:string|null,hasSecret:boolean},limits:所有有效值,downloadMode,authState,authBlockReason:string|null,authBlockedUntil:Time|null,accountUsername:string|null,accountBasePath:string|null,accountRole:integer|null,accountPermissions:integer|null,lastTestAt:Time|null,openlistVersion:string|null,multipartEnabled:boolean|null,lastError:{code,message}|null,archivedAt:Time|null}。
+M1 中 AuthInput 的 username 仅 password 模式允许，token 模式提供它返回400；可选字段的 null 不等于省略。
 accountUsername/accountBasePath/accountRole/accountPermissions是最近一次/api/me成功时记录的账号身份，两种auth mode都保存；身份不一致时不覆盖，authBlockReason=ACCOUNT_CHANGED。
 
-TestRequest={retryAuth?:boolean=false}；TestResult={reachable:boolean,authenticated:boolean,account:{username,basePath,role,permissions}|null,warnings:{code,message}[],error:{code,message}|null}。测试失败仍200表示测试已完成；无认证权限执行请求返回401。
+TestRequest={retryAuth?:boolean=false}；TestResult={reachable:boolean,authenticated:boolean,account:{username,basePath,role,permissions}|null,warnings:{code,message}[],error:{code,message}|null}。MULTIPART_DISABLED 作为 warnings 返回并保存为 lastError，认证仍可成功；不支持的版本作为 error 返回。测试失败仍200表示测试已完成；无认证权限执行请求返回401。
 BrowseRequest={path:string,password?:string,refresh?:boolean=false,page?:integer=1,pageSize?:integer=50}。
-BrowseResult={path:string,items:{name:string,size:Size|null,isDir:boolean,modified:string|null}[],page,pageSize,total,write:boolean,warnings:{code,message}[]}。不返回raw_url或sign。
+BrowseResult={path:string,items:{name:string,size:Size|null,isDir:boolean,modified:string|null}[],page,pageSize,total,write:boolean,warnings:{code,message}[]}。不返回raw_url或sign。M1 浏览的 total 为可用条目数，非法名称和根下 `@s` 前缀条目排除并返回 INVALID_NAME 警告，分页作用于剩余条目。
 
 ## Endpoint、Job、Target
 

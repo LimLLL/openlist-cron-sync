@@ -5,6 +5,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigurationModule } from '../configuration/configuration.module.js';
 import { DatabaseModule } from '../database/database.module.js';
+import { InstanceAuthState } from './instance-auth-state.service.js';
 import { KeysService } from './keys.service.js';
 import { AuthService } from './auth.service.js';
 import { LoginLimiter } from './login-limiter.js';
@@ -20,12 +21,13 @@ import { AuthController } from './auth.controller.js';
   imports: [ConfigurationModule, DatabaseModule, JwtModule.register({})],
   providers: [
     KeysService,
+    InstanceAuthState,
     AuthService,
     LoginLimiter,
     { provide: APP_GUARD, useClass: AuthGuard },
   ],
   controllers: [AuthController],
-  exports: [KeysService, AuthService],
+  exports: [KeysService, AuthService, InstanceAuthState],
 })
 export class SecurityModule implements OnModuleInit {
   /** 保存需顺序初始化的服务。

@@ -36,7 +36,7 @@ export class KeysService {
   /** 保存初始化所需依赖。
    * @param config 应用配置。
    * @param database 已迁移的数据库。
-   * @param columns 显式 ENC 清单，生产 M0 为空。
+   * @param columns 显式 ENC 清单，包含实例凭据。
    * @returns 不适用。
    * @throws 不适用。
    */

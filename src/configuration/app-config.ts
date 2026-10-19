@@ -1,4 +1,4 @@
-// 在每次应用创建时解析 M0 配置，管理员凭据延迟到首次初始化。
+// 在每次应用创建时解析已实现功能的配置，管理员凭据延迟到首次初始化。
 import { Inject, Injectable } from '@nestjs/common';
 import type { OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -42,6 +42,20 @@ export class AppConfig implements OnModuleInit {
   readonly jwtTtlSeconds: number;
   readonly loginMaxFailures: number;
   readonly loginWindowSeconds: number;
+  /** 上游建连超时，毫秒。 */
+  readonly openlistConnectTimeoutMs: number;
+  /** 控制 API 请求期限，毫秒。 */
+  readonly openlistApiTimeoutMs: number;
+  /** 读取总尝试次数，包含首次。 */
+  readonly retryMaxAttempts: number;
+  /** 指数退避基数，毫秒。 */
+  readonly retryBaseMs: number;
+  /** 含抖动的退避上限，毫秒。 */
+  readonly retryMaxMs: number;
+  /** 登录限流后冷却，秒。 */
+  readonly openlistAuthCooldownSeconds: number;
+  /** 上游 JSON 最大字节数。 */
+  readonly openlistMaxJsonBytes: number;
   private readonly environment: Environment;
 
   /** 解析常规配置，故意不访问 ADMIN_USERNAME/PASSWORD。
@@ -90,6 +104,44 @@ export class AppConfig implements OnModuleInit {
       86400,
     );
     this.loginMaxFailures = integerSetting(env, 'LOGIN_MAX_FAILURES', 5, 1, 20);
+    this.openlistConnectTimeoutMs = integerSetting(
+      env,
+      'OPENLIST_CONNECT_TIMEOUT_MS',
+      10000,
+      1000,
+      120000,
+    );
+    this.openlistApiTimeoutMs = integerSetting(
+      env,
+      'OPENLIST_API_TIMEOUT_MS',
+      30000,
+      1000,
+      300000,
+    );
+    this.retryMaxAttempts = integerSetting(env, 'RETRY_MAX_ATTEMPTS', 3, 1, 10);
+    this.retryBaseMs = integerSetting(env, 'RETRY_BASE_MS', 1000, 100, 60000);
+    this.retryMaxMs = integerSetting(
+      env,
+      'RETRY_MAX_MS',
+      30000,
+      this.retryBaseMs,
+      300000,
+    );
+    if (this.retryMaxMs < this.retryBaseMs) invalidConfig('RETRY_MAX_MS');
+    this.openlistAuthCooldownSeconds = integerSetting(
+      env,
+      'OPENLIST_AUTH_COOLDOWN_SECONDS',
+      600,
+      600,
+      86400,
+    );
+    this.openlistMaxJsonBytes = integerSetting(
+      env,
+      'OPENLIST_MAX_JSON_BYTES',
+      33554432,
+      1024,
+      268435456,
+    );
     this.loginWindowSeconds = integerSetting(
       env,
       'LOGIN_WINDOW_SECONDS',

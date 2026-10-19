@@ -1,6 +1,6 @@
 用途：规定 NestJS 模块职责、依赖方向及单进程运行视图。
 
-范围：目标实现的应用结构与启动/停止顺序；M0 已建立 Config、Database、Security、Coordination（仅 ready 标志）与 System（health），其余模块随对应里程碑加入。
+范围：目标实现的应用结构与启动/停止顺序；M0 已建立基础模块；M1 加入 OpenList、Instances、Security 的实例认证状态持久化及 Coordination 的每实例 API 配额，其余模块随对应里程碑加入。
 
 # 架构
 
@@ -10,10 +10,10 @@
 | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
 | ConfigModule        | 环境解析、校验、有效默认值                                                                                                                                                                | 无；只用 Node 标准库和已有验证库                             |
 | DatabaseModule      | Drizzle、迁移、事务、仓储                                                                                                                                                                 | Config                                                       |
-| SecurityModule      | 管理员 JWT、scrypt、AES-GCM、日志脱敏                                                                                                                                                     | Config、Database                                             |
+| SecurityModule      | 管理员 JWT、scrypt、AES-GCM、实例认证阻断与身份事实持久化、日志脱敏                                                                                                                       | Config、Database                                             |
 | CoordinationModule  | ready 标志与恢复闸门、执行位、全局 FIFO 队列状态、路径占用、隔离路径检查、每 Instance 的 API/task 信号量与请求速率限制、relay 下载连接/上传 session/chunk 名额、每 Job relay token bucket | Config、Database                                             |
 | OpenListModule      | envelope、token、路径、列表、挂载、task HTTP；每个管理 API 请求在客户端内取得该 Instance 的 API 并发位与速率令牌（含浏览、连接测试、登录）                                                | Config、Security、Coordination；Instance 配置由调用者传入    |
-| InstancesModule     | Instance CRUD、认证状态、目录浏览                                                                                                                                                         | Database、Security、OpenList                                 |
+| InstancesModule     | Instance CRUD、连接测试、目录浏览                                                                                                                                                         | Database、Security、OpenList                                 |
 | RelayModule         | 下载/上传 worker、spool、multipart 会话、计数、背压、限速、取消                                                                                                                           | Config、OpenList、Coordination                               |
 | SyncModule          | 扫描、纯 diff、保护检查、计划及依赖执行                                                                                                                                                   | Database、OpenList、Relay、Coordination                      |
 | NotificationsModule | 渠道管理、HMAC、有界投递                                                                                                                                                                  | Config、Database、Security                                   |
@@ -31,6 +31,10 @@
 - RunsModule 拥有 Run 的接受、派发、取消和启动恢复。它通过 Database 仓储读取 Job/Instance 配置并固定快照，不导入 Jobs 或 Instances，从而避免 Jobs → Scheduling → Runs → Jobs 的循环。
 - SchedulingModule 只注册 cron，单向调用 Runs 的触发服务；手动触发由 Runs 自己的 controller 接收。
 - Run 终态事务写入 delivery 行，提交后 Runs 调用 Notifications 的投递服务；Notifications 不依赖 Runs。
+
+M1 的 `InstanceAuthState` 位于 Security，直接使用 Database 持久化认证事实；OpenListAuth 对所有调用方统一执行阻断检查、单次登录和身份核对。实例连接配置仍由调用方提供，OpenList 不导入 Instances 或 Database。凭据更新/归档后旧在途响应不能覆盖新配置；比较使用已有地址、认证方式、用户名和密文字段，不增加指纹、版本列或持久化锁。
+
+AppModule 仅导入顶层消费模块（当前按 Instances、System 排列），Instances 先导入 OpenList，再导入共享 Security/Database。Nest 12 的共享依赖拓扑重挂接会受首次遍历顺序影响；从最深消费链开始装配，确保 Config → Database → Security 的初始化顺序。生产初始化路径、完整 API e2e 与编译产物重启测试覆盖这一顺序，不增加根模块协调器。
 
 纯 planner/filter 函数不依赖 Nest、HTTP、数据库；仓储只提供数据访问，不承载同步业务决策。使用具体 service 即可，不为了单一实现引入工厂/策略接口。
 

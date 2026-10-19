@@ -40,10 +40,24 @@ L1/L3在M3a/M3b验收时真实运行，L2的server_copy部分属于M6，M8用固
 ### 集成测试运行方式
 
 - 真实OpenList测试使用`*.int-spec.ts`后缀。现有`pnpm test`只匹配`**/*.spec.ts`，`pnpm test:e2e`只匹配`**/*.e2e-spec.ts`，两者都不会选中它，因此单元与e2e运行不依赖外部实例。
-- M1新增独立的vitest配置和`pnpm test:integration`脚本，只运行`*.int-spec.ts`。修改package.json和新增配置前须取得项目维护者确认（见[约定](conventions.md#验证与修改纪律)）；不新增npm依赖（例如不引入Testcontainers）。
+- M1 已经维护者确认，新增 `vitest.config.integration.ts` 与 `pnpm test:integration`，只运行 `*.int-spec.ts`；不新增测试依赖。
 - OpenList实例在测试进程外准备：使用固定版本的官方发布镜像（docker run或compose）或官方release二进制，禁止docker build。每次记录镜像tag/digest或二进制版本、OpenList版本、平台、Local storage配置和实际响应。
-- 实例地址、凭据和各Local storage的挂载路径通过环境变量传入，统一使用前缀`OPENLIST_IT_`，具体变量名在M1添加脚本时登记在本节。变量缺失时`pnpm test:integration`立即失败并列出缺少的变量，而不是跳过：跳过会让一次“零测试”的运行显示为通过。
+- 实例地址、凭据和各Local storage的挂载路径通过环境变量传入，统一使用前缀`OPENLIST_IT_`，变量名见下表。变量缺失时`pnpm test:integration`立即失败并列出缺少的变量，而不是跳过：跳过会让一次“零测试”的运行显示为通过。
 - 只使用临时实例与临时数据，测试结束由夹具清理；禁止指向生产目录。
+
+M1 必需变量（缺失或空字符串均在 Vitest 收集测试前失败，一次列出全部缺失名称）。本地开发可写在项目根 `.env` 中：`pnpm test:integration` 只从中读取 `OPENLIST_IT_*`，已在环境中设置的值优先；`.env.example` 有占位示例。
+
+| 变量                    | 含义                                                                                                 |
+| ----------------------- | ---------------------------------------------------------------------------------------------------- |
+| OPENLIST_IT_BASE_URL    | 官方 OpenList 实例的 http(s) 地址，可带反向代理子路径                                                |
+| OPENLIST_IT_ADMIN_TOKEN | OpenList 管理员静态 token（裸 token）                                                                |
+| OPENLIST_IT_USERNAME    | 密码认证账号；必须能读取下述 Local 目录，不支持启用 OTP 的账号                                       |
+| OPENLIST_IT_PASSWORD    | 该账号的原始密码；测试按上游静态哈希协议登录                                                         |
+| OPENLIST_IT_LOCAL_PATH  | 两种账号均可访问的账号相对 Local 目录；管理员全局映射必须唯一解析为已启用、status=work 的 Local 存储 |
+
+M1 集成用例只读：验证两种认证、连接测试、浏览与管理员完整挂载解析，不创建远端文件，也不调用 multipart init。测试自己的 Nest/SQLite 资源放在临时目录并清理。若两账号 base_path 不同，所给相对目录必须对两者都有效。运行命令为 `mise exec -- pnpm test:integration`。M1 已对官方镜像实际运行，记录见[OpenList依赖表](../reference/openlist-api.md#兼容版本)；只读用例不涉及驱动写入语义，不据此把驱动矩阵标为 integration-tested。
+
+M1 的 F1 用例在 `pnpm test` 内覆盖认证竞态与跨重启阻断、HTTP/envelope/大小边界、读取退避与 Retry-After、禁止跳转、执行前401只重放一次且上传body不重放、挂载分页、名称编码、任务和 multipart 协议；API e2e 覆盖公共路由与生产 ENC 错/缺密钥启动失败。注释与测试均不替代真实镜像兼容验收。
 
 MVP兼容记录中只有Local相关操作在实际通过后可标integration-tested；其余source-derived，真实云盘由用户使用时手工验证并记录manual证据，不自动升级为integration-tested。
 

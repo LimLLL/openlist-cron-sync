@@ -1,11 +1,9 @@
-// 仅装配 M0 模块，每次应用创建时独立加载环境。
+// 装配当前已实现的模块，每次应用创建时独立加载环境。
 import { Module } from '@nestjs/common';
 import type { DynamicModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { ConfigurationModule } from './configuration/configuration.module.js';
 import type { Environment } from './configuration/validation.js';
-import { DatabaseModule } from './database/database.module.js';
-import { SecurityModule } from './security/security.module.js';
+import { InstancesModule } from './instances/instances.module.js';
 import { SystemModule } from './system/system.module.js';
 
 /** 根模块只声明导入，不协调业务初始化。
@@ -14,7 +12,8 @@ import { SystemModule } from './system/system.module.js';
  * @throws 不适用。
  */
 @Module({
-  imports: [ConfigurationModule, DatabaseModule, SecurityModule, SystemModule],
+  // 从最深消费模块开始装配，使共享依赖先于其消费方初始化。
+  imports: [InstancesModule, SystemModule],
 })
 export class AppModule {}
 
