@@ -95,5 +95,5 @@ SQLite 存自身配置、运行及操作记录，不存跨运行文件索引。�
 
 ## 工程基线
 
-Node 24.15+、NestJS 12、ESM/NodeNext、TypeScript 6、pnpm。相对 TS import 写 .js；DTO 保留运行时 class 类型。依赖选择与版本固定见[约定](../development/conventions.md)。
+运行目标 Node 24（镜像 node:24-bookworm-slim），本地开发最低 Node 22.22.3；NestJS 12、ESM/NodeNext、TypeScript 6、pnpm。相对 TS import 写 .js；DTO 保留运行时 class 类型。依赖选择与版本固定见[约定](../development/conventions.md)。
 JSON ConsoleLogger 已满足 MVP，禁止默认引入 Redis、BullMQ、Passport、Pino 或第二套 schema 库。

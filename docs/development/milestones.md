@@ -12,7 +12,7 @@
 
 ## M0 基础设施
 
-交付：Node24约束、配置验证、Drizzle schema及生成迁移、WAL/FULL、JSON日志、错误DTO、单管理员JWT/scrypt/AES-GCM、health、OpenAPI文档路由、spool目录与权限。
+交付：Node版本约束（engines `^22.22.3 || >=24.15.0`）、配置验证、Drizzle schema及生成迁移、WAL/FULL、JSON日志、错误DTO、单管理员JWT/scrypt/AES-GCM、health、OpenAPI文档路由、spool目录与权限。
 
 任务：
 
