@@ -7,9 +7,9 @@
 ## 镜像与进程
 
 生产运行Node 24，官方基础系列node:24-bookworm-slim；本地开发最低Node 22.22.3。package.json的engines为`^22.22.3 || >=24.15.0`，与Nest CLI依赖链（@angular-devkit/core）声明的支持范围一致；发布时记录精确镜像版本或digest，避免浮动标签被误认为固定运行时。
-构建和运行均采用相同libc/目标架构，better-sqlite3固定版本并显式允许必要的pnpm原生构建脚本；禁止将macOS node_modules拷入Linux。
-多阶段镜像最终仅含dist、生产依赖和发行版迁移SQL；drizzle-kit为dev依赖，启动调用ORM migrator，不执行generate/push。
-容器非root，uid/gid建议1000，工作目录/app，数据/data；管理员自行预建卷并设置权限。应用不以root递归chown宿主目录。
+构建和运行均采用相同libc/目标架构，better-sqlite3固定版本，随包附带含Linux glibc/musl在内的预编译二进制，无需放开pnpm构建脚本；禁止将macOS node_modules拷入Linux。
+多阶段镜像最终仅含dist、生产依赖和发行版迁移目录（drizzle/下的SQL与meta/_journal.json，缺journal时migrator无法运行）；drizzle-kit为dev依赖，启动调用ORM migrator，不执行generate/push。
+容器非root，uid/gid建议1000，工作目录/app，数据/data；管理员自行预建卷并设置权限。应用不以root递归chown宿主目录；启动时只把数据目录与spool目录自身收紧为0700，因此卷须由运行用户拥有，否则启动失败。
 启动命令显式node dist/main.js。一个数据目录只运行一个应用进程，不开PM2 cluster或Kubernetes多副本；这是部署前提，不新增自造文件锁。
 
 ## 数据目录

@@ -7,7 +7,7 @@
 ## 解析和优先级
 
 启动参数读取process.env；.env仅本地开发通过@nestjs/config加载。启动环境决定服务级设置及新配置对象默认值；已保存Job/Instance值优先，Run采用固定后的值。
-数字只接受十进制整数，拒绝NaN、小数、负值和单位字符串。BOOL环境只接受true/false。空字符串不是未设置；非法配置启动失败并指明字段，不输出值中的秘密。
+数字只接受十进制整数，拒绝NaN、小数、负值和单位字符串。BOOL环境只接受true/false。空字符串不是未设置；非法配置启动失败并指明字段，不输出值中的秘密。各变量由使用它的模块校验，尚未实现的里程碑不读取其变量。ADMIN_USERNAME/ADMIN_PASSWORD只在数据库没有管理员时读取并校验，已有管理员后两者完全忽略。
 时间内部用UTC；毫秒/秒按本表，不隐式混用。API以camelCase字段映射数据库。
 
 ## 环境变量
@@ -118,7 +118,7 @@ SQLite busy_timeout=5000ms、WAL/FULL/foreign_keys、令牌桶单次取用64KiB�
 | 只有一处提供，或两处一致          | 使用该值                                               | 使用该值，并通过下方启动校验                                                 |
 | 两处都没有                        | 生成新key写入keys.json，记录告警：已有管理会话全部失效 | 数据库没有任何ENC值时生成并写入keys.json；已有ENC值则启动失败，不生成替代key |
 
-keys.json={version:1,jwtSecret?:base64,encryptionMasterKey?:base64}，两个字段各自可选。文件只保存服务生成的key，从不写入环境变量提供的key；写入时保留已有字段并原子替换，目录0700、文件0600。
+keys.json={version:1,jwtSecret?:base64,encryptionMasterKey?:base64}，两个字段各自可选。文件只保存服务生成的key，从不写入环境变量提供的key；写入时保留已有字段并原子替换，目录0700、文件0600；已有文件权限更宽时启动先收紧，无法收紧即启动失败。
 启动校验：在注册调度和写入任何ENC值之前，用master key试解密数据库中已有的ENC值；任一失败即以KEY_MISMATCH退出，不写入新ENC值，避免数据库混用两把key。数据库没有ENC值时无需校验。轮换流程见[安全](../design/security.md)。
 
 ## ExecutionSettings固定映射

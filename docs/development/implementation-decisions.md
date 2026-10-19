@@ -33,4 +33,6 @@
 
 具体字段规范：[API schemas](../reference/api-schemas.md)、[配置](../reference/configuration.md)、[数据模型](../design/data-model.md)。上述选择如将来改变，先更新对应规范和验收，不增加并行同义配置。
 
-补充TECH：统计按逻辑动作最后attempt聚合，失败历史不改写。ORM/驱动候选固定为drizzle-orm0.45.1、better-sqlite3 13.0.3，M0必须实际验证兼容性，当前没有安装或宣称通过。
+补充TECH：统计按逻辑动作最后attempt聚合，失败历史不改写。ORM/驱动在M0固定为drizzle-orm 0.45.1、better-sqlite3 13.0.3、drizzle-kit 0.31.8，已在Node 22.23.3上实际验证加载、PRAGMA与迁移；Node 24待M8镜像验证。
+
+补充TECH：启动密文校验由代码显式登记的加密列清单驱动，M0清单为空，校验逻辑用测试夹具（真实SQLite与AES-GCM）验证；生产数据上“主密钥错误即启动失败”的端到端验收在M1首个ENC列出现时完成。不为此新增哨兵表，避免keys.json丢失时只有管理员账号的库也无法启动。

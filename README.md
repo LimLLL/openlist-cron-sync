@@ -1,114 +1,146 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# openlist-cron-sync
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+基于 [OpenList](https://github.com/OpenListTeam/OpenList) API 的自托管定时同步服务：按计划把一个 OpenList 目录中的文件同步到一个或多个目标目录，目标可以和源在同一个 OpenList 实例上，也可以在另一个实例上。
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+> **开发中**：目前只完成了服务底座（启动、管理员登录、健康检查、API 文档），同步功能还不能使用。进度见[开发进度](#开发进度)。
 
-## Description
+## 功能
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+规划中的完整功能如下，设计细节见[设计文档](docs/README.md)：
 
-## Project setup
+- **定时或手动同步**：按 cron 表达式定时运行，也可以手动触发。每次运行比较源目录和目标目录中文件的名称、类型和大小，新建目标缺失的文件，替换大小发生变化的文件。
+- **两种目标模式**：`incremental` 只新增和替换文件；`mirror` 还会删除目标上源目录中没有的文件。
+- **跨实例传输**：默认由本服务边下载边分片上传，适用于任意两个 OpenList 实例；源和目标在同一实例时，也可以改用 OpenList 自带的服务端复制。
+- **删除保护**：支持 dry-run 预览、删除数量和比例阈值；扫描不完整时禁止删除；结果不明的路径会被暂时隔离，不再写入。
+- **安全**：单管理员登录（JWT）；保存的 OpenList 凭据用 AES-256-GCM 加密存储。
+- **管理与集成**：REST API 加 OpenAPI 文档，支持 Webhook 通知、配置导入导出和 Docker 部署。
 
-```bash
-$ pnpm install
+明确不做的事：
+
+- 不修改源目录：对源只读，没有“同步后删除源文件”的移动模式。
+- 不做双向同步。
+- 只比较名称、类型和大小，不比较修改时间或内容 hash。
+- 暂时没有 Web 界面，后端完成后再开发。
+
+## 开发进度
+
+| 里程碑  | 内容                                                         | 状态   |
+| ------- | ------------------------------------------------------------ | ------ |
+| M0      | 基础设施：配置、数据库、管理员认证、密钥、健康检查、API 文档 | 已完成 |
+| M1      | OpenList 客户端与实例管理                                    | 计划中 |
+| M2      | 扫描、规划与 dry-run 预览                                    | 计划中 |
+| M3a/M3b | 跨实例传输：新建与替换文件                                   | 计划中 |
+| M4      | 定时调度与重启恢复                                           | 计划中 |
+| M5      | mirror 模式与历史记录保留                                    | 计划中 |
+| M6      | 同实例服务端复制                                             | 计划中 |
+| M7      | Webhook 通知与配置导入导出                                   | 计划中 |
+| M8      | Docker 镜像与正式发布                                        | 计划中 |
+
+## 快速开始
+
+环境要求：Node.js `^22.22.3` 或 `>=24.15.0`，pnpm 10。
+
+```sh
+pnpm install --frozen-lockfile
+pnpm build
+DATA_DIR=/path/to/data ADMIN_PASSWORD='your-strong-password' node dist/main.js
 ```
 
-## Compile and run the project
+- `DATA_DIR` 必须是绝对路径，并且属于运行服务的用户。服务启动时会把它的权限收紧为 0700。
+- 如果不设置 `ADMIN_PASSWORD`，首次启动会生成一个随机密码，并在 stderr 打印一次；用它首次登录后必须修改密码。
+- 服务默认监听 `0.0.0.0:3000`。
 
-```bash
-# development
-$ pnpm run start
+启动后可以这样验证：
 
-# watch mode
-$ pnpm run start:dev
+```sh
+# 就绪检查
+curl http://localhost:3000/api/v1/system/health/ready
 
-# production mode
-$ pnpm run start:prod
+# 登录，获取访问令牌
+curl -X POST http://localhost:3000/api/v1/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"admin","password":"your-strong-password"}'
 ```
 
-## Run tests
+在浏览器中打开 <http://localhost:3000/api/v1/docs> 可以查看 API 文档，OpenAPI JSON 位于 `/api/v1/openapi.json`。
 
-```bash
-# unit tests
-$ pnpm run test
+Docker 镜像会在正式发布时提供。
 
-# e2e tests
-$ pnpm run test:e2e
+## 配置
 
-# test coverage
-$ pnpm run test:cov
+服务通过环境变量配置。以 `NODE_ENV=development` 启动时，还会读取项目根目录下的 `.env` 文件。当前版本用到的变量如下：
+
+| 变量                    | 默认值           | 说明                                                      |
+| ----------------------- | ---------------- | --------------------------------------------------------- |
+| `HOST`                  | `0.0.0.0`        | 监听地址                                                  |
+| `PORT`                  | `3000`           | 监听端口                                                  |
+| `DATA_DIR`              | `/data`          | 数据目录，必须是绝对路径                                  |
+| `SPOOL_DIR`             | `DATA_DIR/spool` | 传输时的临时缓冲目录，可以放在独立磁盘上                  |
+| `LOG_LEVEL`             | `info`           | `error`、`warn`、`info` 或 `debug`；日志为 JSON 格式      |
+| `API_DOCS_ENABLED`      | `true`           | 是否提供 API 文档页面和 OpenAPI JSON                      |
+| `TRUST_PROXY_HOPS`      | `0`              | 服务前面可信反向代理的层数，用于识别客户端真实 IP         |
+| `ADMIN_USERNAME`        | `admin`          | 首次初始化时的管理员用户名                                |
+| `ADMIN_PASSWORD`        | 未设置           | 首次初始化时的管理员密码，12–128 个字符；不设置则随机生成 |
+| `ADMIN_JWT_TTL_SECONDS` | `28800`          | 登录令牌的有效期，单位为秒                                |
+| `LOGIN_MAX_FAILURES`    | `5`              | 一个计数窗口内允许的登录失败次数                          |
+| `LOGIN_WINDOW_SECONDS`  | `900`            | 登录失败计数窗口的长度，单位为秒                          |
+| `JWT_SECRET`            | 自动生成         | 令牌签名密钥：32 字节，标准 base64 编码                   |
+| `ENCRYPTION_MASTER_KEY` | 自动生成         | 凭据加密主密钥：32 字节，标准 base64 编码                 |
+
+- `ADMIN_USERNAME` 和 `ADMIN_PASSWORD` 只在首次启动、数据库中还没有管理员时使用；之后以数据库中保存的账号为准。
+- 配置值不合法时，服务拒绝启动并报告是哪个字段，但不会打印该字段的值。
+- 完整说明见[配置参考](docs/reference/configuration.md)。
+
+## 数据与备份
+
+| 路径                                       | 内容                                       |
+| ------------------------------------------ | ------------------------------------------ |
+| `DATA_DIR/app.sqlite`（及 `-wal`、`-shm`） | 配置与运行记录                             |
+| `DATA_DIR/keys.json`                       | 自动生成的密钥（没有用环境变量提供时才有） |
+| `SPOOL_DIR`                                | 传输时的临时缓冲                           |
+
+- **`keys.json` 必须和数据库一起备份。** 主密钥一旦丢失，数据库中加密保存的 OpenList 凭据就无法再解密，只能重新录入。如果数据库里已有加密数据，而密钥缺失或不匹配，服务会拒绝启动，不会换一把新密钥继续运行。
+- 备份时先停止服务，再整体复制数据目录（spool 目录除外）。不要在服务运行时只复制 `app.sqlite`。
+- 一个数据目录同一时间只能被一个服务进程使用。
+- 忘记管理员密码时，参考[安全文档](docs/design/security.md#管理员)中的离线重置步骤。
+
+## API
+
+所有接口都在 `/api/v1` 下。除登录、健康检查和 API 文档外，其余接口都需要请求头 `Authorization: Bearer <token>`。
+
+| 接口                         | 说明                               |
+| ---------------------------- | ---------------------------------- |
+| `POST /auth/login`           | 登录，返回访问令牌                 |
+| `GET /auth/me`               | 获取当前管理员信息                 |
+| `POST /auth/change-password` | 修改密码；成功后所有旧令牌立即失效 |
+| `GET /system/health/live`    | 存活检查                           |
+| `GET /system/health/ready`   | 就绪检查，未就绪时返回 503         |
+
+连续登录失败会被限流：默认 15 分钟内失败 5 次后，接口返回 429 并带上 `Retry-After` 响应头。完整接口规范见 [REST API](docs/reference/rest-api.md)。
+
+## 开发
+
+技术栈：NestJS 12、TypeScript 6（ESM）、SQLite（better-sqlite3 + Drizzle ORM）、Vitest、oxlint。
+
+```sh
+NODE_ENV=development pnpm run start:dev   # 开发模式：监听文件变化，读取 .env
+pnpm run lint                              # 代码检查
+pnpm exec tsc --noEmit --incremental false -p tsconfig.json   # 类型检查（含测试代码）
+pnpm test                                  # 单元测试
+pnpm test:e2e                              # 端到端测试
+pnpm build                                 # 构建
+node test/compiled-smoke.mjs               # 构建产物冒烟测试，需先 build
+pnpm run db:generate                       # 修改数据库 schema 后生成迁移
 ```
 
-## Deployment
+数据库迁移由 drizzle-kit 生成到 `drizzle/` 目录，服务启动时会自动应用，生成的文件不要手工修改。部署时需要一起带上 `dist/`、生产依赖和整个 `drizzle/` 目录。
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+开发约定和测试策略见[开发约定](docs/development/conventions.md)与[测试策略](docs/development/testing.md)。
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+## 文档
 
-```bash
-$ pnpm install -g @nestjs/mau
-$ mau deploy
-```
+完整的设计文档（中文）见 [docs/README.md](docs/README.md)，建议从[概览](docs/design/overview.md)开始读。
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+## 许可证
 
-## Observability
-
-In production applications, observability is essential for understanding how your system behaves, detecting issues early, and maintaining reliable performance.
-
-[NestJS Observe](https://observe.nestjs.com) automatically instruments your NestJS application, giving you deep visibility into your system with minimal setup:
-
-- **Distributed tracing:** Follow requests across services and understand how they flow through your system.
-- **Waterfall analysis:** Visualize request execution and identify slow operations, bottlenecks, and unexpected delays.
-- **Performance analysis:** Analyze application performance in real time and quickly pinpoint areas that need optimization.
-- **Metrics:** Track key application and infrastructure metrics to understand system health and performance trends.
-- **Logging:** Centralize and correlate logs with traces and other telemetry to make debugging easier.
-- **Error tracking:** Detect errors quickly and investigate their root causes with the surrounding context.
-- **SLA monitoring:** Track service-level objectives and identify when your application is approaching or exceeding defined thresholds.
-- **Alarms and alerts:** Set up alerts for critical errors, performance degradation, SLA violations, and other anomalies so your team can react quickly.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Auto-instrument your application with [NestJS Observer](https://observer.nestjs.com). Distributed tracing, metrics, and logging made easy. Error tracking and performance monitoring for your NestJS applications.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+项目计划以 AGPL-3.0 开源，并要求贡献者签署 CLA。许可证文件会在首个正式版本发布前加入（见 [ADR 0008](docs/adr/0008-license-cla.md)），目前仓库还没有附带许可证文件。

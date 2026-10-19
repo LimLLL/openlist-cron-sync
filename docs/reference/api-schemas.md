@@ -65,6 +65,6 @@ DeliveryView={id,runId:Id|null,channelId,eventId,eventType,status:'pending'|'sen
 
 ## 系统
 
-Health={status:'ok'|'not_ready',database:'ok'|'error',schedulerReady:boolean}，不含秘密/路径。
+Health={status:'ok'|'not_ready',database:'ok'|'error'}，不含秘密/路径。
 Info={version:string,schemaVersion:integer,nodeVersion:string,singleProcess:true,activeRuns:integer,queuedRuns:integer,unresolvedOperations:integer,oldestUnresolvedAt:Time|null,spool:{dir:string,usedBytes:Size,availableBytes:Size,reserveBytes:Size},defaults:非秘密有效服务配置}。
 导入导出形状见[配置传输](import-export.md)。

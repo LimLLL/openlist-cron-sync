@@ -89,15 +89,16 @@ supertest验证真实Nest路由、Guard、ValidationPipe、DTO metadata、错误
 
 实现阶段相关命令：
 
-| 命令                                                              | 检查内容                                                                                                                                                                |
-| ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| pnpm run lint                                                     | oxlint检查src/与test/；当前配置未生效，不检查any与悬空Promise，见[约定](conventions.md#已核查基线)                                                                      |
-| pnpm exec tsc --noEmit --incremental false -p tsconfig.build.json | 应用代码类型检查（排除test/与`*spec.ts`）                                                                                                                               |
-| pnpm exec tsc --noEmit --incremental false -p tsconfig.json       | 含src、test与vitest配置的类型检查（Vitest只转译不检查类型）；当前因test/app.e2e-spec.ts第4行导入的'supertest/types'在NodeNext下无法解析而失败，M0修正该导入后才成为门禁 |
-| pnpm test                                                         | 单元与组件测试（`**/*.spec.ts`，含F1）                                                                                                                                  |
-| pnpm test:e2e                                                     | API e2e（`**/*.e2e-spec.ts`）                                                                                                                                           |
-| pnpm test:integration                                             | 真实OpenList拓扑（`*.int-spec.ts`）；M1起提供，需要外部实例                                                                                                             |
-| pnpm build                                                        | 仅验证应用构建，不等于镜像构建                                                                                                                                          |
+| 命令                                                              | 检查内容                                                                                                                          |
+| ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| pnpm run lint                                                     | oxlint检查src/与test/（.oxlintrc.json，no-explicit-any为error）；不检查悬空Promise，见[约定](conventions.md#已核查基线)           |
+| pnpm exec tsc --noEmit --incremental false -p tsconfig.build.json | 应用代码类型检查（排除test/与`*spec.ts`）                                                                                         |
+| pnpm exec tsc --noEmit --incremental false -p tsconfig.json       | 含src、test与vitest配置的类型检查（Vitest只转译不检查类型）                                                                       |
+| pnpm test                                                         | 单元与组件测试（`**/*.spec.ts`，含F1）                                                                                            |
+| pnpm test:e2e                                                     | API e2e（`**/*.e2e-spec.ts`）                                                                                                     |
+| pnpm test:integration                                             | 真实OpenList拓扑（`*.int-spec.ts`）；M1起提供，需要外部实例                                                                       |
+| pnpm build                                                        | 仅验证应用构建，不等于镜像构建                                                                                                    |
+| pnpm exec node test/compiled-smoke.mjs                            | 先build；用临时数据目录从其他工作目录启动编译产物，验证迁移、认证、改密撤销、SIGTERM、重启、文档开关、fail-fast及JSON日志不含秘密 |
 
 纯文档变更不要求运行会在docs外生成dist/tsbuildinfo的build；可运行无输出的typecheck与lint并执行下节文档检查，同时明确报告未运行的应用/容器测试。
 

@@ -1,6 +1,6 @@
 用途：规定 NestJS 模块职责、依赖方向及单进程运行视图。
 
-范围：目标实现的应用结构与启动/停止顺序；现有 scaffold 在 M0 按本文建立模块。
+范围：目标实现的应用结构与启动/停止顺序；M0 已建立 Config、Database、Security、Coordination（仅 ready 标志）与 System（health），其余模块随对应里程碑加入。
 
 # 架构
 
@@ -65,11 +65,13 @@ flowchart TD
 
 ## 启动和停止
 
-1. Config 校验环境；Database 打开 SQLite，设置 foreign_keys、WAL、FULL、busy_timeout，应用随发行版附带的结构迁移。此时不初始化管理员、不写入 ENC、不开放 HTTP 或后台工作；迁移不得自行生成密钥或重加密业务数据。
+1. Config 校验环境并准备数据目录与 spool 目录（权限见[安全](security.md)）；Database 打开 SQLite，设置 foreign_keys、WAL、FULL、busy_timeout，应用随发行版附带的结构迁移。此时不初始化管理员、不写入 ENC、不开放 HTTP 或后台工作；迁移不得自行生成密钥或重加密业务数据。
 2. Security 按数据库中是否已有 ENC 读取或生成密钥（规则见[配置](../reference/configuration.md)），逐批试解密已有密文。缺密钥或密钥不匹配直接失败，不写入任何新密文；校验通过后才初始化管理员及其他秘密。
 3. Runs 执行启动恢复：先在 Coordination 中重建全部未决路径责任（非终态 Run 的路径占用，以及从数据库读取的 unknown 隔离），再按[启动恢复](scheduling-recovery.md#启动恢复)处理旧 Run。queued 重新入队；scanning/planned 转为 interrupted；executing/cancelling/recovering 转为 recovering，后台有界跟踪已知 task，最终 interrupted（stopReason=PROCESS_RESTART）。recovery_deadline_at 只在首次进入 recovering 时写入，后续重启沿用。
 4. 启动 HTTP；迁移完成且未决责任重建完毕后，Coordination 置 ready=true。恢复中的 Run 继续占用路径，但不占新 Run 执行位。
 5. Coordination 在第 3 步的责任重建完成前，不为新 Run 或维护发放执行位与路径占用。重建完成后，Runs 开始派发 queued Run，Scheduling 注册 enabled Job 的 cron，Maintenance 启动定时器。
+
+第 1、2 步由各模块的初始化钩子按导入依赖顺序执行，生产入口与 e2e 测试共用同一初始化路径。任一步失败即关闭已打开的资源并以非零码退出；日志只记录错误码、异常名与系统/SQLite 错误码，不记录可能含路径或 SQL 参数的原始 message。
 
 SIGTERM（计划内停止）不写任何 Run 终态，完整规则见[优雅停止](scheduling-recovery.md#优雅停止)：
 

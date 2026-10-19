@@ -1,6 +1,6 @@
 用途：把设计拆分为可执行任务与行为验收标准。
 
-范围：M0–M8的交付物、任务与验收条件；实现尚未开始，设计文档存在不等于功能完成。
+范围：M0–M8的交付物、任务与验收条件；设计文档存在不等于功能完成，完成以验收测试为准。
 
 # 实施里程碑
 
@@ -18,14 +18,14 @@
 
 - 固定已批准依赖；按[架构](../design/architecture.md)建立模块，模块依赖无环、不使用forwardRef。
 - 首次bootstrap与密钥文件权限；迁移先于scheduler；OpenAPI基础。
-- 让lint配置真正生效：oxlint不会读取现有的oxlint.json，需改名为.oxlintrc.json（或在lint脚本中传`-c`），并把typescript/no-explicit-any设为error。这是配置修改，须先取得项目维护者确认，背景见[约定](conventions.md#已核查基线)。
+- 让lint配置真正生效：使用oxlint自动加载的.oxlintrc.json，并把typescript/no-explicit-any设为error，背景见[约定](conventions.md#已核查基线)。
 - 修正test/app.e2e-spec.ts中对'supertest/types'的导入，使含测试代码的`tsc -p tsconfig.json`检查通过。
 
 验收：
 
-- 错误环境变量、缺密钥、迁移失败均fail-fast；环境与keys.json中同一密钥不一致时启动失败；主密钥错误（无法解密已有ENC值）时启动失败，且不写入任何新的ENC值。
+- 错误环境变量、迁移失败均fail-fast；环境与keys.json中同一密钥不一致时启动失败。M0没有生产ENC列：“主密钥错误或缺失时启动失败且不写入新ENC值”的校验逻辑用测试夹具（真实SQLite与AES-GCM）验证，生产数据上的端到端验收在M1完成。
 - 改密后旧JWT失效；日志和错误体中无secret。
-- API_DOCS_ENABLED=true时GET /api/v1/docs与GET /api/v1/openapi.json无需认证即可访问，文档只含公共DTO；设为false时两个路由都不提供。除login与health外，其余路由缺少本服务JWT时返回401。
+- API_DOCS_ENABLED=true时GET /api/v1/docs与GET /api/v1/openapi.json无需认证即可访问，文档只含公共DTO；设为false时两个路由都不提供。除login、health与启用时的API文档路由外，其余路由缺少本服务JWT时返回401。
 - NodeNext构建、DI测试、lint及[测试策略](testing.md#api-e2e与命令)中的两条tsc检查通过；不执行Docker build。
 
 ## M1 OpenList与实例
@@ -44,6 +44,7 @@
 - 名称含`/`或`\`的条目记INVALID_NAME，从不进入names[]、File-Path或/d、/p URL。
 - 缺少集成测试环境变量时`pnpm test:integration`立即失败并列出缺少的变量，不以“全部跳过”结束。
 - 连接测试：版本低于4.2.5或无法解析时OPENLIST_VERSION_UNSUPPORTED；multipart_enabled=false时报告MULTIPART_DISABLED；不调用multipart init。
+- 实例凭据（首个生产ENC列）登记到加密列清单；已保存凭据后以错误或缺失的主密钥启动时以KEY_MISMATCH失败，且不写入任何新的ENC值。
 
 ## M2 扫描、规划、预览
 

@@ -6,7 +6,7 @@
 
 ## 管理员
 
-首次数据库无admins时读取ADMIN_USERNAME/PASSWORD；无密码生成至少24字节随机base64url密码，只在首次启动时于控制台提示一次，不写普通结构日志，mustChangePassword=true。注意容器的stdout通常会被日志系统收集，这个初始密码因此会留在容器日志里；强制首次改密是对此的缓解。
+首次数据库无admins时读取ADMIN_USERNAME/PASSWORD，已有管理员时两者不读取也不校验；无密码生成至少24字节随机base64url密码，只在首次启动时直接写入stderr一次（不经过结构化日志器，这是“日志不含秘密”的唯一例外），mustChangePassword=true；提供了ADMIN_PASSWORD则不生成、不输出、不强制改密。注意容器的stdout/stderr通常会被日志系统收集，这个初始密码因此会留在容器日志里；强制首次改密是对此的缓解。
 忘记管理员密码时的离线重置：停止服务并备份数据目录，删除admins表中的唯一一行，再带ADMIN_PASSWORD启动，服务会按首次初始化重新创建管理员。由于token_version从1重新开始，同时更换JWT key（或等待ADMIN_JWT_TTL_SECONDS过期），使旧会话失效。MVP不提供在线重置接口。
 随机密码JWT在改密前只允许me/change-password；改密需要currentPassword，成功tokenVersion加1、mustChangePassword=false，旧JWT立即失效。
 密码采用Node异步scrypt：N=131072、r=8、p=1、salt随机16bytes、derivedKey32bytes、maxmem=201326592bytes；编码scrypt$v1$N$r$p$saltBase64$keyBase64。
@@ -19,7 +19,7 @@ JWT HS256，独立32bytes secret；claims={sub:'1',ver:tokenVersion,iss:'openlis
 AES-256-GCM、每次随机12bytes nonce、16bytes tag；封装JSON={v:1,nonce,tag,ciphertext}，base64编码binary字段。
 AAD=utf8(tableName + ':' + recordId + ':' + fieldName + ':v1')，防止密文搬到另一字段后仍可解密。snapshot是独立字段，重新加密，不直接复制AAD绑定的密文。
 加密实例token/password、endpoint路径密码、Webhook完整URL与secret（推送服务常把key放在URL路径里）、需要恢复的短期secret snapshot；管理员密码只hash不加密。Webhook在API与导出中只显示scheme://host[:port]。
-key由环境或/data/keys.json提供，目录0700、文件0600、容器非root。来源优先级与生成规则见[配置](../reference/configuration.md#密钥优先级)。已有密文但缺key时fail-fast，不自动生成替代key；启动时在写入任何ENC值之前试解密已有密文，key不匹配以KEY_MISMATCH退出，避免数据库混用两把key。
+key由环境或/data/keys.json提供，目录0700、文件0600、容器非root。启动时把数据目录、spool目录和keys.json自身（非递归）收紧到上述权限；目录可以是符号链接，作用于解析后的目录；无法收紧即启动失败。来源优先级与生成规则见[配置](../reference/configuration.md#密钥优先级)。已有密文但缺key时fail-fast，不自动生成替代key；启动时在写入任何ENC值之前试解密已有密文，key不匹配以KEY_MISMATCH退出，避免数据库混用两把key。
 密钥与DB共同泄露时不提供保护；威胁模型是单独数据库/导出泄露。文件路径和名称也可能敏感，日志默认不打印完整路径，只保留run/operation id和相对路径的必要错误展示。
 MVP无在线master-key轮换API；维护窗口停止服务，备份DB+旧key，用未来专用迁移工具全量重加密后切换，不能只改环境key。该工具未实现前用备份恢复或重新录入配置，不宣称支持轮换。
 
