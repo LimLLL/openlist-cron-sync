@@ -29,7 +29,7 @@ const statsSchema = {
     ),
   ),
   description:
-    '预览执行结果计数及 downloadedBytes/transferredBytes/actualDeletedBytes 为 0；plannedBytes 保留计划字节；skippedOperations 反映计划跳过行；源计数只计一次',
+    '预览执行结果和实际字节为0；真实结果按逻辑动作最后attempt计算，传输字节含重传；目录删除不计文件数；源计数只计一次',
 };
 const errorSchema = nullable(
   objectSchema({ code: stringSchema, message: stringSchema }),
@@ -180,7 +180,7 @@ export const operationViewSchema = objectSchema({
   error: {
     ...errorSchema,
     description:
-      'DELETE_BLOCKED：扫描保护阻断；DELETE_LIMIT：数值阈值拒绝；PLAN_INTERRUPTED：旧计划失效',
+      'DELETE_BLOCKED：删除保护；DELETE_LIMIT：数值/清理预算拒绝；PREVIOUS_OUTCOME_UNKNOWN：隔离或重新观察失败；SPOOL_FULL：真实ENOSPC/EDQUOT或session落库后独占容量不足，摘要区分insufficient spool capacity；PLAN_INTERRUPTED：旧计划失效',
   },
   createdAt: timeSchema,
   updatedAt: timeSchema,

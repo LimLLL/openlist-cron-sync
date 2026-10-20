@@ -11,6 +11,8 @@ export class OpenListError extends Error {
    * @param httpStatus 已收到的 HTTP 状态，未收到为 null。
    * @param upstreamCode 有效 envelope 的应用码，未收到为 null。
    * @param retryAfterMs 上游建议等待时间。
+   * @param data 有效错误envelope的内部数据，只供端点验证，不暴露到日志或API。
+   * @param dispatched 此请求是否可能已经到达远端；false表示尚未派发。
    * @returns 不适用。
    * @throws 不适用。
    */
@@ -20,6 +22,10 @@ export class OpenListError extends Error {
     readonly httpStatus: number | null = null,
     readonly upstreamCode: number | null = null,
     readonly retryAfterMs = 0,
+    /** 有效envelope的内部data；仅供端点验证，不进入日志或API。 */
+    readonly data: unknown = undefined,
+    /** 请求是否可能已到达目标；false表示尚未派发。 */
+    readonly dispatched = true,
   ) {
     super(message);
   }

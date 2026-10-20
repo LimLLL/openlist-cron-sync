@@ -16,7 +16,7 @@ relay 是 Job 的默认创建方式（见[创建方式](sync-engine.md#创建方
 
 - 下载 worker 的工作单位是一个 spool 块：取得空间额度、从该文件的 GET 流读满 1 MiB（或读到 EOF）、写盘、发布，然后立即去处理下一个块或下一个文件，不等待上传。
 - 上传 worker 的工作单位是一次 chunk 请求：取若干已发布的连续块拼成 chunk 发送，确认后释放这些块。
-- 文件协调器连接两端：负责准入、删除依赖、init、最后 chunk 的发布时机、complete 和结果落库。等待 complete 不占 chunk worker。
+- Sync 的文件协调器连接两端：负责删除依赖和结果落库；Relay 提供准备句柄，并等待 submitting、session 和 EOF 的持久化检查点后才继续网络操作。等待 complete 不占 chunk worker。
 - 每个 (源文件, Target) 独立下载一次；同一文件发往多个 Target 时各自下载，不共享 spool 块。
 
 ## 资源
@@ -36,14 +36,14 @@ init、status、abort 及 list/remove 等控制请求走实例的 API 并发与�
 ## Spool
 
 - 目录 `SPOOL_DIR`，默认 `DATA_DIR/spool`，权限 0700，文件 0600。块固定 1 MiB（最后一块可更短），先写临时文件，关闭后才发布给上传 worker；未完成的块不可消费。
-- 块内容与引用只存在于当前进程，不建持久化块表或续传索引。启动时在重建未决责任之后清空 spool；备份排除 spool。
+- 块内容与引用只存在于当前进程，不建持久化块表或续传索引。启动时在重建未决责任之后清理私有relay-UUID目录，保留其它内容；若清理范围与DATA_DIR重叠则拒绝启动，防止误删数据库。备份排除 spool。
 - 预算 = 文件系统对本进程的可用空间 − `SPOOL_RESERVE_BYTES`（默认 512 MiB，保证同卷的 SQLite/WAL 仍可写）− 已承诺未完成的写入。不需要配置上限，默认可用全部剩余空间。
-- 预算不足时下载暂停等待上传释放空间，这是正常背压，不报错。真实写入失败（ENOSPC、EDQUOT 或其他 I/O 错误，例如其他进程占满磁盘）记 SPOOL_FULL 或 SPOOL_IO_ERROR，按下文“主动 abort”收尾该文件。
+- 预算不足时下载暂停等待上传释放空间，这是正常背压，不报错。明确例外：init 的 session 已持久化后，如果该文件 frontier 的实际 payload 即使释放本进程全部 spool 仍无法容纳，则有界主动 abort，记 failed SPOOL_FULL（摘要为 insufficient spool capacity）。自身其它 session 的临时争用只等待；容量条件未改变时本 Run 不反复创建 session。真实写入失败（ENOSPC、EDQUOT 或其他 I/O 错误，例如其他进程占满磁盘）记 SPOOL_FULL 或 SPOOL_IO_ERROR，按下文“主动 abort”收尾该文件。
 - spool 含明文文件内容（crypt 源下载后即为明文）；清理是普通删除，不承诺安全擦除。
 
 防死锁规则：
 
-1. 每个已开始上传的文件保留至少两块的进展空间。
+1. 以 init 返回的 chunk_size 和剩余文件大小计算 frontier 的实际 payload；为可推进的 session 保留完整 chunk 的进展额度，不把两块 1 MiB 当作足够条件。已发送但未确认的数据仍须保留供重传。
 2. 已开始上传的文件，其下一个缺失块优先于任何预读；上传优先发送最靠近 session frontier 的 chunk。
 3. 尚未开始上传的文件最多预读一个块，处于预读状态的文件总数不超过下载 worker 数。
 4. 空间紧张时停止接纳新文件和预读，让已有上传消费并释放块。
@@ -104,7 +104,7 @@ Agent 按 origin 分池；下载最多跟随 5 次跳转，每跳仅 http(s)，�
 
 | 证据                                                                                                  | Operation 结果                                                                                                    |
 | ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| 准入、打开源或读首块失败（未发生任何远程写入）                                                        | failed，可按读取规则重试，不隔离                                                                                  |
+| 准入、打开源或读首块失败（尚未提交当前create）                                                        | failed，可按读取规则重试，不隔离；SOURCE_CHANGED在此窗口为skipped，不回滚先前已成功的mkdir/delete                 |
 | init 执行前明确拒绝：400（请求头无效）、403（已存在、无权限、IgnoredSystemFile、分片上传被关闭）、405 | failed，无需观察                                                                                                  |
 | init 返回其他非成功 code                                                                              | 一次有界 refresh 观察：目标名缺失→failed，否则 unknown                                                            |
 | init 响应丢失、超时或进程在 submitting 崩溃                                                           | unknown（init 一旦执行就已启动驱动写入）                                                                          |

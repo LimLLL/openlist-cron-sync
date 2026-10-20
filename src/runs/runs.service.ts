@@ -1,4 +1,4 @@
-// 原子接受预览并提供分页运行视图，不依赖 Jobs 或 Instances 模块。
+// 原子接受运行并提供分页历史视图，不依赖 Jobs 或 Instances 模块。
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { and, asc, count, desc, eq, isNull } from 'drizzle-orm';
@@ -41,7 +41,7 @@ export class RunsService {
    * @param keys 密钥。
    * @param config 当前进程配置。
    * @param readiness 启动和关闭闸门。
-   * @param dispatcher 只读派发器。
+   * @param dispatcher 扫描、执行与恢复派发器。
    * @returns 不适用。
    * @throws 不适用。
    */
@@ -52,15 +52,13 @@ export class RunsService {
     @Inject(Readiness) private readonly readiness: Readiness,
     @Inject(RunDispatcher) private readonly dispatcher: RunDispatcher,
   ) {}
-  /** 接受手动预览，事务内固定所有非秘密配置和独立密码快照。
+  /** 接受手动运行，事务内固定所有非秘密配置和独立密码快照。
    * @param jobId Job ID。
-   * @param input 预览参数。
+   * @param input 真实执行或预览参数。
    * @returns 已持久化的 queued 公共视图。
    * @throws ApiError 不就绪、忙、队列满或配置错误；Error 数据库失败。
    */
   trigger(jobId: string, input: TriggerRunDto) {
-    if (input.dryRun !== true)
-      throw new ApiError(400, 'VALIDATION_ERROR', 'M2 requires dryRun=true');
     if (
       !this.readiness.ready ||
       !this.readiness.recovered ||
@@ -86,6 +84,12 @@ export class RunsService {
         if (queued >= this.config.maxQueuedRuns)
           throw new ApiError(503, 'QUEUE_FULL', 'Run queue is full');
         const job = jobView(row, targets);
+        if (!input.dryRun && job.createMode === 'server_copy')
+          throw new ApiError(
+            400,
+            'VALIDATION_ERROR',
+            'Real server_copy execution is available in M6',
+          );
         const records = validateEndpoints(db, job, true);
         const snapshots: RunConfig['instances'] = {};
         for (const [id, instance] of records)
@@ -114,7 +118,7 @@ export class RunsService {
             id,
             jobId,
             trigger: 'manual',
-            dryRun: true,
+            dryRun: input.dryRun ?? false,
             confirmDeletes: input.confirmDeletes,
             status: 'queued',
             config,
@@ -146,12 +150,20 @@ export class RunsService {
       },
     );
     this.dispatcher.accept(run);
-    this.logger.log('Preview accepted', {
+    this.logger.log('Run accepted', {
       jobId,
       runId: run.id,
       confirmDeletes: input.confirmDeletes,
     });
     return runView(run);
+  }
+  /** 请求取消；重复请求不重复远程abort。
+   * @param id Run ID。
+   * @returns 当前公共运行视图。
+   * @throws ApiError 不存在；Error 数据库失败。
+   */
+  cancel(id: string) {
+    return runView(this.dispatcher.cancel(id));
   }
   /** 读取运行记录，历史不依赖 Job 当前配置。
    * @param id Run ID。

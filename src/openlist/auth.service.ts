@@ -305,6 +305,7 @@ export class OpenListAuth implements BeforeApplicationShutdown {
         const data = object(
           await this.transport.call(instance, {
             settings: context.settings,
+            cleanup: context.cleanup,
             endpoint: '/api/auth/login/hash',
             method: 'POST',
             json: {
@@ -350,6 +351,7 @@ export class OpenListAuth implements BeforeApplicationShutdown {
           method: 'GET',
           read: true,
           settings: context.settings,
+          cleanup: context.cleanup,
         },
         token,
       );

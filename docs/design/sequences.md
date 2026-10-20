@@ -7,7 +7,7 @@
 ## 正常运行
 
 1. 手动REST请求或cron回调调用RunsModule的触发服务；同一事务建立queued Run、固定配置，获取Job名额。
-2. 从CoordinationModule得到全局执行位及路径占用，进入scanning。先列source根（失败则Run failed）和各Target根：Target根缺失时实跑先计划一个prepare mkdir，无法判定时该Target记TARGET_ROOT_UNAVAILABLE（规则见[同步引擎](sync-engine.md)）。随后逐目录source→各Target，批量存计划。
+2. 从CoordinationModule得到全局执行位及路径占用（dry-run全部端点read；实跑source=read、targets=write），进入scanning。先列source根（失败则Run failed）和各Target根：Target根缺失时实跑先计划一个prepare mkdir，无法判定时该Target记TARGET_ROOT_UNAVAILABLE（规则见[同步引擎](sync-engine.md)）。随后逐目录source→各Target，批量存计划。
 3. scanCompletedAt与planned同事务落库；计算保护与预算。
 4. executing；父mkdir成功后按Job的[创建方式](sync-engine.md#创建方式)创建文件：relay走分片流水线，server_copy为无task成功或task终态成功；替换按下节链执行。
 5. 每Target创建阶段成功且无阻断类异常，才执行mirror extras删除；仅当mirror且syncEmptyDirs=true时，再自底向上移除Target独有的空目录。
@@ -90,3 +90,5 @@ unknownUntil到期，或管理员release写入释放时间 → 下一个要写�
 符合条件则记录独立observed resolution；缺失create；大小变化按删除链；冲突保护。所有新操作仍受阈值和完整性约束。
 到期、提前release或abandon不修改旧unknown。
 旧请求仍可能在这个序列之后写入；本产品接受此风险（见[ADR 0004](../adr/0004-quarantine-expiry.md)），不宣称刷新是远程操作屏障。完整规则见[Unknown隔离](scheduling-recovery.md#unknown隔离)。
+
+M3的零字节put若返回意外task：写unknown及UPSTREAM_PROTOCOL_ERROR并隔离，不保存tid或启动上传task跟踪。init session落库后若frontier实际payload无法在当前独占spool预算中容纳：有界abort后failed SPOOL_FULL，不在容量条件未变时反复init。

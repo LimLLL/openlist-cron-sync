@@ -35,7 +35,7 @@ glob用例的预期以[路径与过滤](../design/filters-paths.md)为准；rela
 | S1可选 | MinIO经S3 driver                          | 观察/d是否实际302，验证可达性；只作为可选传输夹具，不把S3全驱动标集成认证                                                    |
 | F1     | 测试进程内的Node可控HTTP服务（node:http） | 稳定制造失败窗口、JSON 500、302、401、429/409、短流、超长流、Range、session消失、成功无task；随pnpm test运行，不需要外部实例 |
 
-L1/L3在M3a/M3b验收时真实运行，L2的server_copy部分属于M6，M8用固定发布镜像重跑；见[里程碑](milestones.md)。
+L1/L2-relay/L3在M3a/M3b验收时真实运行，L1/L2的server_copy部分属于M6，M8用固定发布镜像重跑；见[里程碑](milestones.md)。
 
 ### 集成测试运行方式
 
@@ -70,7 +70,7 @@ MVP兼容记录中只有Local相关操作在实际通过后可标integration-tes
 5. 变更得到JSON 500后的观察（F1）：create的同名文件以预期大小出现、mkdir的目录出现、remove的路径消失→succeeded（OBSERVED_AFTER_ERROR）；create名称不存在或delete原路径仍以预期类型和大小存在→failed并在预算内重试；大小不同、观察读取失败、视图suspect→unknown并隔离。
 6. relay分片：init已启动驱动写入但响应丢失→unknown；chunk响应丢失后按status补发；429/409退避；complete成功后响应丢失、status 404→unknown；session转为failed_retriable/failed_permanent→failed且不发chunk 0；abort立即返回而驱动稍后才退出（Local迟到删除）。
 7. relay源异常：源过长、过短、Content-Length不符、Range返回206/200/416、validator变化、/d 401重新取sign；源异常主动abort后记failed，同Run重试前先refresh观察并清理残留。
-8. relay空间：文件明显大于可用spool时仍持续推进，已开始上传的文件不被预读饿死；预算不足时下载暂停不报错；真实ENOSPC记SPOOL_FULL；SPOOL_RESERVE_BYTES保护同卷SQLite；重启后spool被清空。
+8. relay空间：文件明显大于可用spool时仍持续推进，已开始上传的文件不被预读饿死；自身session临时争用只等待；持久化init后独占容量仍不足一个frontier payload则主动abort并failed SPOOL_FULL，同Run不反复init；真实ENOSPC/EDQUOT也记SPOOL_FULL并区分摘要；SPOOL_RESERVE_BYTES保护同卷SQLite；重启后spool被清空。
 9. 替换链，按[替换链](../design/sync-engine.md#替换链)记录：
    - relay打开源或读首块失败：旧文件不动，create failed。
    - 删除前重读父目录失败、403或视图suspect：不提交delete；delete跳过，create跳过（DEPENDENCY_FAILED），该Target extras禁止。
@@ -133,3 +133,11 @@ supertest验证真实Nest路由、Guard、ValidationPipe、DTO metadata、错误
 - [驱动矩阵](../reference/driver-matrix.md)对当前源码基线中每个非模板上游驱动（86个）各有一行，列为驱动、Copy（server_copy 同存储）、Put（relay 写入；目标已有同名时）、Remove（删除）、说明、主要证据、实测；每个结论有源码证据，“实测”列只记录真实执行过的测试，不伪造。
 - 纯文档变更时git status --porcelain仅含docs/。
 - Prettier检查docs Markdown格式；使用现有依赖，不新增文档lint包。
+
+## M3a/M3b合并验收
+
+真实拓扑沿用v4.2.7的两个Local存储与维护者准备的v4.2.5实例，不创建或修改容器。除了M1变量，必须提供OPENLIST_IT_SECOND_LOCAL_PATH、OPENLIST_IT_PEER_BASE_URL、OPENLIST_IT_PEER_ADMIN_TOKEN、OPENLIST_IT_PEER_LOCAL_PATH；仍只从.env读取OPENLIST_IT_*并在缺失时立即失败。密码账号保留只读M1验收，真实写入使用管理员身份。
+
+relay.int-spec覆盖L1、L2-relay、L3两个方向，每例建立UUID命名的临时根，清理不越出自有根。F1覆盖真实执行链、错误session快照、chunk/complete丢响应、重试cleanup预算、remove/零字节put错误后的观察分类、删除无效确认、源长度与编码异常、Range 206/200/416及validator/总大小变化、签名401只重新读取一次、缺失根刷新、目录非空保护、容量不足和小spool多文件进展。relay-spool-errors在文件系统写入边界注入ENOSPC/EDQUOT，不实际填满宿主磁盘。execution-checkpoints在实际submitting、session、EOF、completed、Operation结果及remove确认检查点的提交前后注入故障，用当时已提交的SQLite页启动新应用，验证恢复不重放旧请求；这不是操作系统SIGKILL测试。execution-recovery补充历史状态组合；execution-lifecycle覆盖取消、SIGTERM、恢复期限、隔离释放和多目标隔离。operations.e2e覆盖新路由、输入验证、OpenAPI、release/abandon幂等及历史unknown不改写。
+
+Phase 5回归增加：取消后再SIGTERM采用较短关机期限；准备失败或等待worker时取消归还spool承诺和连接；部分块清理失败不重复扣额；完整frontier预留先于小额预读、同级FIFO；提前响应等待上传body退出；超长Retry-After不溢出为紧密重试；非法Location按单文件上游错误分类。隔离用例另覆盖无动作空目录的observed和后续mkdir的superseded，保持历史unknown不变。真实拓扑各含10 MiB+4097字节模式数据，并覆盖L3限速上传取消。

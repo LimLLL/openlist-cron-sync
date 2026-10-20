@@ -1,4 +1,4 @@
-// 承担预览派发、独立队列过期和最小重启收尾，不执行远程写入。
+// 派发扫描与真实执行，拥有取消、启动恢复和关闭编排。
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type {
   OnApplicationBootstrap,
@@ -7,19 +7,30 @@ import type {
 } from '@nestjs/common';
 import { HttpAdapterHost } from '@nestjs/core';
 import type { Server } from 'node:http';
-import { and, asc, count, eq, inArray } from 'drizzle-orm';
+import { and, asc, eq, inArray } from 'drizzle-orm';
 import { AppConfig } from '../configuration/app-config.js';
 import { DatabaseService } from '../database/database.service.js';
-import { runs, runTargets } from '../database/run-schema.js';
+import { runs } from '../database/run-schema.js';
 import type { RunRecord } from '../database/run-schema.js';
-import { operations } from '../database/operation-schema.js';
 import { RunQueue } from '../coordination/run-queue.js';
 import { Readiness } from '../coordination/coordination.module.js';
+import { PathOccupancy } from '../coordination/path-occupancy.js';
 import { SyncService } from '../sync/sync.service.js';
+import { Executor } from '../sync/executor.service.js';
 import { PlanError } from '../sync/stats.js';
-import { errorTraits } from '../common/errors.js';
+import { errorTraits, ApiError } from '../common/errors.js';
+import { finishRun, recoveringRun, TERMINAL_RUNS } from './run-finalizer.js';
 
-/** 仅 M2 可产生状态的派发服务。
+/** 关闭宽限到期后等待worker完成本地收尾的固定余量，毫秒。 */
+const SHUTDOWN_SETTLE_MS = 5000;
+/** 正在执行或恢复的本地生命周期。 */
+interface Worker {
+  /** 停止本地工作，清理使用独立期限。 */
+  controller: AbortController;
+  /** 已带fail-fast处理的完成Promise。 */
+  promise: Promise<void>;
+}
+/** 单进程运行派发器，不注册cron。
  * @param 不适用。
  * @returns 不适用。
  * @throws 不适用。
@@ -29,20 +40,19 @@ export class RunDispatcher
   implements OnApplicationBootstrap, OnModuleDestroy, BeforeApplicationShutdown
 {
   private readonly logger = new Logger(RunDispatcher.name);
-  private readonly workers = new Map<
-    string,
-    { controller: AbortController; promise: Promise<void> }
-  >();
-  private timer: ReturnType<typeof setTimeout> | undefined;
-  private startHandle: ReturnType<typeof setImmediate> | undefined;
-  private server: Server | undefined;
-  /** 保存协调、数据库及扫描依赖。
+  private readonly workers = new Map<string, Worker>();
+  private timer?: ReturnType<typeof setTimeout>;
+  private startHandle?: ReturnType<typeof setImmediate>;
+  private server?: Server;
+  /** 保存单向依赖和共享协调资源。
    * @param database 数据库。
-   * @param config 进程执行位与队列配置。
-   * @param queue 协调叶子队列。
-   * @param readiness 就绪与停止事实。
-   * @param sync 只读规划服务。
-   * @param adapter HTTP 生命周期。
+   * @param config 进程资源限制。
+   * @param queue FIFO与执行位。
+   * @param readiness 进程就绪状态。
+   * @param paths 全局路径占用。
+   * @param sync 扫描规划。
+   * @param executor 执行和已知副作用恢复。
+   * @param adapter HTTP监听生命周期。
    * @returns 不适用。
    * @throws 不适用。
    */
@@ -51,63 +61,80 @@ export class RunDispatcher
     @Inject(AppConfig) private readonly config: AppConfig,
     @Inject(RunQueue) private readonly queue: RunQueue,
     @Inject(Readiness) private readonly readiness: Readiness,
+    @Inject(PathOccupancy) private readonly paths: PathOccupancy,
     @Inject(SyncService) private readonly sync: SyncService,
+    @Inject(Executor) private readonly executor: Executor,
     @Inject(HttpAdapterHost) private readonly adapter: HttpAdapterHost,
   ) {}
-  /** 初始化先收尾旧扫描，再恢复原始 queued 候选。
+  /** 先重建责任，再清spool、重排queued并开放HTTP派发。
    * @param 不适用。
-   * @returns 不适用。
-   * @throws Error 数据库失败。
+   * @returns 责任重建完成；远端恢复可继续后台进行。
+   * @throws Error 数据库或spool清理失败。
    */
-  onApplicationBootstrap(): void {
+  async onApplicationBootstrap(): Promise<void> {
     const db = this.database.db;
-    const interrupted = db
+    const old = db
       .select()
       .from(runs)
-      .where(inArray(runs.status, ['scanning', 'planned']))
+      .where(
+        inArray(runs.status, [
+          'scanning',
+          'planned',
+          'executing',
+          'cancelling',
+          'recovering',
+        ]),
+      )
       .all();
-    for (const run of interrupted)
-      this.finish(run.id, 'interrupted', 'PROCESS_RESTART', null, 'skipped');
-    const queued = db
+    for (const run of old) this.paths.restore(run);
+    for (const run of old) {
+      if (run.status === 'scanning' || run.status === 'planned') {
+        finishRun(db, run.id, 'interrupted', 'PROCESS_RESTART');
+        this.paths.release(run.id);
+      }
+    }
+    await this.executor.resetSpool();
+    for (const run of old) {
+      if (run.status === 'scanning' || run.status === 'planned') continue;
+      const recovering = recoveringRun(db, run.id);
+      const controller = new AbortController();
+      const promise = this.recover(recovering, controller).catch(
+        /** 把后台拒绝交给统一持久化失败出口。
+         * @param error 原始错误，仅转换为受控结果或安全特征。
+         * @returns 不适用。
+         * @throws 不适用。
+         */
+        (error: unknown) => this.fatal(error),
+      );
+      this.workers.set(run.id, { controller, promise });
+    }
+    for (const run of db
       .select()
       .from(runs)
       .where(eq(runs.status, 'queued'))
       .orderBy(asc(runs.createdAt), asc(runs.id))
-      .all();
-    for (const run of queued) this.queue.enqueue(run);
+      .all())
+      this.queue.enqueue(run);
     this.expire();
     this.readiness.recovered = true;
     this.server = this.adapter.httpAdapter.getHttpServer();
     this.server?.once('listening', this.listening);
   }
-  /** 等待所有 listening 回调更新 ready 后开始派发。
+  /** 等待其它监听回调完成后派发。
    * @param 不适用。
    * @returns 不适用。
    * @throws 不适用。
    */
-  private readonly listening = (): void => {
-    this.startHandle = setImmediate(
-      /** 在其他 listening 回调执行后的下一事件循环清除启动句柄并开始派发。
-       * @param 不适用。
-       * @returns 不适用。
-       * @throws 不适用。
-       */
-      () => {
-        this.startHandle = undefined;
-        this.wake();
-      },
-    );
-  };
-  /** 已提交 Run 入队后唤醒，HTTP 响应不等待扫描。
-   * @param run 持久化 Run。
+  private readonly listening = (): void => this.schedule();
+  /** 在下一事件循环唤醒，不让HTTP触发等待扫描。
+   * @param 不适用。
    * @returns 不适用。
    * @throws 不适用。
    */
-  accept(run: RunRecord): void {
-    this.queue.enqueue(run);
+  private schedule(): void {
     if (!this.startHandle)
       this.startHandle = setImmediate(
-        /** 在下一事件循环清除启动句柄并唤醒派发器，使 HTTP 响应不等待扫描。
+        /** 清除唤醒句柄后按当前就绪状态派发。
          * @param 不适用。
          * @returns 不适用。
          * @throws 不适用。
@@ -118,10 +145,19 @@ export class RunDispatcher
         },
       );
   }
-  /** 处理过期并按执行位派发；所有后台异常有明确出口。
+  /** 已落库Run加入FIFO。
+   * @param run queued记录。
+   * @returns 不适用。
+   * @throws 不适用。
+   */
+  accept(run: RunRecord): void {
+    this.queue.enqueue(run);
+    this.schedule();
+  }
+  /** 按FIFO尝试取得全部路径和执行位，冲突项保留排队。
    * @param 不适用。
    * @returns 不适用。
-   * @throws 不适用；不可恢复错误触发 fail-fast。
+   * @throws 不适用；不可恢复错误fail-fast。
    */
   private wake(): void {
     if (
@@ -132,239 +168,245 @@ export class RunDispatcher
       return;
     try {
       this.expire();
-      while (
-        this.queue.active.size < this.config.globalMaxRuns &&
-        this.queue.waiting.length > 0
+      for (
+        let index = 0;
+        index < this.queue.waiting.length &&
+        this.queue.active.size < this.config.globalMaxRuns;
       ) {
-        const entry = this.queue.waiting.shift();
-        if (!entry) break;
-        const db = this.database.db;
-        const row = db
+        const entry = this.queue.waiting[index];
+        const row = this.database.db
           .select()
           .from(runs)
           .where(and(eq(runs.id, entry.id), eq(runs.status, 'queued')))
           .get();
-        if (!row) continue;
-        const now = Date.now();
-        if (now >= row.queueDeadlineAt) {
-          this.finish(row.id, 'failed', null, 'QUEUE_TIMEOUT', 'skipped');
+        if (!row) {
+          this.queue.waiting.splice(index, 1);
           continue;
         }
-        const deadlineAt = now + row.config.job.timeoutSeconds * 1000;
-        db.update(runs)
-          .set({
-            status: 'scanning',
-            startedAt: now,
-            deadlineAt,
-            updatedAt: now,
-          })
-          .where(eq(runs.id, row.id))
-          .run();
+        if (!this.paths.acquire(row)) {
+          index++;
+          continue;
+        }
+        this.queue.waiting.splice(index, 1);
+        const now = Date.now();
         const run = {
           ...row,
           status: 'scanning' as const,
           startedAt: now,
-          deadlineAt,
+          deadlineAt: now + row.config.job.timeoutSeconds * 1000,
         };
-        const controller = new AbortController();
+        this.database.db
+          .update(runs)
+          .set({
+            status: run.status,
+            startedAt: now,
+            deadlineAt: run.deadlineAt,
+            updatedAt: now,
+          })
+          .where(eq(runs.id, run.id))
+          .run();
         this.queue.active.add(run.id);
+        const controller = new AbortController();
         const promise = this.work(run, controller).catch(
-          /** 将异步失败交给已定义的异常出口。
-           * @param error worker 未处理的失败，通常是终态持久化失败。
+          /** 把后台拒绝交给统一持久化失败出口。
+           * @param error 原始错误，仅转换为受控结果或安全特征。
            * @returns 不适用。
            * @throws 不适用。
            */
-          (error: unknown) => {
-            this.fatal(error);
-          },
+          (error: unknown) => this.fatal(error),
         );
         this.workers.set(run.id, { controller, promise });
       }
       if (this.timer) clearTimeout(this.timer);
       this.timer = undefined;
-      if (this.queue.waiting.length > 0) {
-        const deadline = Math.min(
-          ...this.queue.waiting.map(
-            /** 取出等待项的排队截止时间。
-             * @param row 等待中的队列条目。
-             * @returns 排队截止毫秒。
-             * @throws 不适用。
-             */
-            (row) => row.queueDeadlineAt,
-          ),
-        );
+      if (this.queue.waiting.length)
         this.timer = setTimeout(
-          /** 最早的排队期限到期后唤醒派发器以清除过期候选。
+          /** 队列期限到达后处理过期并重新派发。
            * @param 不适用。
            * @returns 不适用。
            * @throws 不适用。
            */
-          () => {
-            this.timer = undefined;
-            this.wake();
-          },
-          Math.max(0, deadline - Date.now()),
+          () => this.wake(),
+          Math.max(
+            0,
+            Math.min(
+              ...this.queue.waiting.map(
+                /** 提取候选Run原有的排队截止时刻。
+                 * @param row 当前查询记录。
+                 * @returns UTC毫秒。
+                 * @throws 不适用。
+                 */
+                (row) => row.queueDeadlineAt,
+              ),
+            ) - Date.now(),
+          ),
         );
-      }
     } catch (error) {
       this.fatal(error);
     }
   }
-  /** 独立于执行位清除过期候选，保留 startedAt=null。
+  /** 队列过期不依赖执行位或路径是否空闲。
    * @param 不适用。
    * @returns 不适用。
    * @throws Error 数据库失败。
    */
   private expire(): void {
-    const now = Date.now();
     for (let i = this.queue.waiting.length - 1; i >= 0; i--) {
       const entry = this.queue.waiting[i];
-      if (now < entry.queueDeadlineAt) continue;
-      this.finish(entry.id, 'failed', null, 'QUEUE_TIMEOUT', 'skipped');
+      if (Date.now() < entry.queueDeadlineAt) continue;
+      finishRun(this.database.db, entry.id, 'failed', null, 'QUEUE_TIMEOUT');
       this.queue.waiting.splice(i, 1);
     }
   }
-  /** 扫描超时只中止本地工作；关机不写 Run 终态。
-   * @param run 已开始扫描的 Run。
-   * @param controller 本地中止器。
-   * @returns 本地工作全部停止。
+  /** 持久化取消意图并停止新派发，重复请求不重复abort。
+   * @param id Run ID。
+   * @param reason 用户取消或Run总期限。
+   * @returns 当前Run记录。
+   * @throws ApiError Run不存在；Error 数据库失败。
+   */
+  cancel(
+    id: string,
+    reason: 'USER_CANCEL' | 'RUN_TIMEOUT' = 'USER_CANCEL',
+  ): RunRecord {
+    const db = this.database.db;
+    const row = db.select().from(runs).where(eq(runs.id, id)).get();
+    if (!row) throw new ApiError(404, 'NOT_FOUND', 'Run not found');
+    if (TERMINAL_RUNS.includes(row.status) || row.cancelRequestedAt !== null)
+      return row;
+    const now = Date.now();
+    db.update(runs)
+      .set({
+        cancelRequestedAt: now,
+        updatedAt: now,
+        ...(row.status === 'recovering'
+          ? {}
+          : { status: 'cancelling' as const, stopReason: reason }),
+      })
+      .where(eq(runs.id, id))
+      .run();
+    if (row.status === 'queued') {
+      finishRun(db, id, 'cancelled', reason);
+      const index = this.queue.waiting.findIndex(
+        /** 匹配需要从队列移除的已取消Run。
+         * @param entry 当前队列或目录条目。
+         * @returns 是否是指定Run。
+         * @throws 不适用。
+         */
+        (entry) => entry.id === id,
+      );
+      if (index >= 0) this.queue.waiting.splice(index, 1);
+    } else if (row.status !== 'recovering')
+      this.workers.get(id)?.controller.abort(new PlanError(reason));
+    const current = db.select().from(runs).where(eq(runs.id, id)).get();
+    if (!current) throw new Error('Cancelled run missing');
+    return current;
+  }
+  /** 持有执行位贯穿扫描、安全检查和执行。
+   * @param run 已派发Run。
+   * @param controller 本地停止器。
+   * @returns 全部本地工作退出。
    * @throws Error 终态持久化失败。
    */
   private async work(
     run: RunRecord,
     controller: AbortController,
   ): Promise<void> {
-    let finalized = false;
     const timer = setTimeout(
-      /** 扫描期限到期时以 RUN_TIMEOUT 中止本地扫描。
+      /** 把后台拒绝交给统一持久化失败出口。
        * @param 不适用。
        * @returns 不适用。
        * @throws 不适用。
        */
-      () => controller.abort(new PlanError('RUN_TIMEOUT')),
+      () => {
+        try {
+          this.cancel(run.id, 'RUN_TIMEOUT');
+        } catch (error) {
+          this.fatal(error);
+        }
+      },
       Math.max(0, (run.deadlineAt ?? Date.now()) - Date.now()),
     );
+    const signal = AbortSignal.any([
+      controller.signal,
+      this.readiness.shutdown.signal,
+    ]);
+    let persisted = false;
     try {
-      await this.sync.preview(
-        run,
-        AbortSignal.any([controller.signal, this.readiness.shutdown.signal]),
-      );
-      finalized = true;
+      await this.sync.preview(run, signal);
+      if (!run.dryRun) {
+        const current = this.database.db
+          .select()
+          .from(runs)
+          .where(eq(runs.id, run.id))
+          .get();
+        if (!current) throw new Error('Planned run missing');
+        signal.throwIfAborted();
+        if (current.status === 'executing') {
+          await this.executor.execute(current, signal);
+          signal.throwIfAborted();
+          finishRun(this.database.db, run.id);
+        }
+      }
+      persisted = true;
     } catch (error) {
       if (!this.readiness.stopping) {
-        if (
-          controller.signal.aborted &&
-          controller.signal.reason instanceof PlanError &&
-          controller.signal.reason.code === 'RUN_TIMEOUT'
-        )
-          this.finish(run.id, 'cancelled', 'RUN_TIMEOUT', null, 'cancelled');
+        if (controller.signal.aborted)
+          finishRun(
+            this.database.db,
+            run.id,
+            'cancelled',
+            controller.signal.reason instanceof PlanError
+              ? controller.signal.reason.code
+              : 'USER_CANCEL',
+          );
         else {
           const code =
             error instanceof PlanError ? error.code : 'INTERNAL_ERROR';
-          this.logger.error('Preview stopped', {
+          this.logger.error('Run stopped', {
             runId: run.id,
             errorCode: code,
             ...errorTraits(error),
           });
-          this.finish(run.id, 'failed', null, code, 'skipped');
+          finishRun(this.database.db, run.id, 'failed', null, code);
         }
       }
-      finalized = true;
+      persisted = true;
     } finally {
       clearTimeout(timer);
-      this.queue.active.delete(run.id);
       this.workers.delete(run.id);
-      // 终态保存失败时由外层 fail-fast；不能在其 catch 运行前派发下一轮。
-      if (finalized && !this.readiness.stopping) this.wake();
+      this.queue.active.delete(run.id);
+      if (persisted || this.readiness.stopping) this.paths.release(run.id);
+      if (persisted && !this.readiness.stopping) this.schedule();
     }
   }
-  /** 原子收尾未派发操作与 Run，预览执行计数保持零。
-   * @param id Run ID。
-   * @param status 目标终态。
-   * @param stopReason 停止原因。
-   * @param errorCode Run 失败码。
-   * @param operationStatus 剩余 pending 的终态。
-   * @returns 不适用。
+  /** 恢复只保留路径占用，不占新运行执行位。
+   * @param run 已进入recovering。
+   * @param controller 当前进程恢复停止器。
+   * @returns 恢复结束。
    * @throws Error 数据库失败。
    */
-  private finish(
-    id: string,
-    status: 'failed' | 'cancelled' | 'interrupted',
-    stopReason: string | null,
-    errorCode: string | null,
-    operationStatus: 'skipped' | 'cancelled',
-  ): void {
-    const db = this.database.db;
-    const now = Date.now();
-    db.transaction(
-      /** 在一个事务内将剩余 pending 操作收尾，重算各目标与 Run 的跳过计数，再写入 Run 终态并清除秘密快照。
-       * @param 不适用。
-       * @returns 不适用。
-       * @throws Error Run 记录缺失或数据库失败。
-       */
-      () => {
-        const run = db.select().from(runs).where(eq(runs.id, id)).get();
-        if (!run) throw new Error('Run missing during finalization');
-        db.update(operations)
-          .set({
-            status: operationStatus,
-            errorCode:
-              operationStatus === 'skipped' ? 'PLAN_INTERRUPTED' : null,
-            errorMessage:
-              operationStatus === 'skipped' ? 'PLAN_INTERRUPTED' : null,
-            endedAt: now,
-            updatedAt: now,
-          })
-          .where(
-            and(eq(operations.runId, id), eq(operations.status, 'pending')),
-          )
-          .run();
-        const skipped =
-          db
-            .select({ n: count() })
-            .from(operations)
-            .where(
-              and(eq(operations.runId, id), eq(operations.status, 'skipped')),
-            )
-            .get()?.n ?? 0;
-        for (const target of db
-          .select()
-          .from(runTargets)
-          .where(eq(runTargets.runId, id))
-          .all()) {
-          const n =
-            db
-              .select({ n: count() })
-              .from(operations)
-              .where(
-                and(
-                  eq(operations.runTargetId, target.id),
-                  eq(operations.status, 'skipped'),
-                ),
-              )
-              .get()?.n ?? 0;
-          db.update(runTargets)
-            .set({ stats: { ...target.stats, skippedOperations: n } })
-            .where(eq(runTargets.id, target.id))
-            .run();
-        }
-        db.update(runs)
-          .set({
-            status,
-            stopReason,
-            errorCode,
-            errorMessage: errorCode,
-            endedAt: now,
-            updatedAt: now,
-            stats: { ...run.stats, skippedOperations: skipped },
-            secretSnapshotEnc: null,
-          })
-          .where(eq(runs.id, id))
-          .run();
-      },
-    );
+  private async recover(
+    run: RunRecord,
+    controller: AbortController,
+  ): Promise<void> {
+    const signal = AbortSignal.any([
+      controller.signal,
+      this.readiness.shutdown.signal,
+      AbortSignal.timeout(
+        Math.max(0, (run.recoveryDeadlineAt ?? Date.now()) - Date.now()),
+      ),
+    ]);
+    try {
+      await this.executor.recover(run, signal);
+      if (!this.readiness.stopping)
+        finishRun(this.database.db, run.id, 'interrupted', 'PROCESS_RESTART');
+    } finally {
+      this.workers.delete(run.id);
+      this.paths.release(run.id);
+      if (!this.readiness.stopping) this.schedule();
+    }
   }
-  /** 停止接收和派发，再中止本地扫描，不改历史结果。
+  /** 撤销就绪并停止本地数据工作，不写Run终态。
    * @param 不适用。
    * @returns 不适用。
    * @throws 不适用。
@@ -377,27 +419,53 @@ export class RunDispatcher
     for (const worker of this.workers.values())
       worker.controller.abort(new PlanError('PROCESS_RESTART'));
   }
-  /** 数据库关闭前等待全部本地扫描真正退出。
+  /** 数据库关闭前等待本地清理；到宽限后进程必须退出而非留下晚回调。
    * @param 不适用。
-   * @returns 等待完成。
-   * @throws 不适用；worker 已具有失败处理。
+   * @returns 清理完成。
+   * @throws Error 超过关闭宽限。
    */
   async beforeApplicationShutdown(): Promise<void> {
-    await Promise.all(
-      [...this.workers.values()].map(
-        /** 取出本地扫描 worker 的完成 Promise。
-         * @param worker 在途扫描 worker。
-         * @returns 已带失败处理的完成 Promise。
-         * @throws 不适用。
-         */
-        (worker) => worker.promise,
-      ),
-    );
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        Promise.all(
+          [...this.workers.values()].map(
+            /** 提取数据库关闭前必须等待的本地工作。
+             * @param worker 当前本地工作。
+             * @returns 已经安装异常处理的完成Promise。
+             * @throws 不适用。
+             */
+            (worker) => worker.promise,
+          ),
+        ),
+        new Promise<never>(
+          /** 关闭宽限届满时拒绝等待，禁止在晚回调仍存在时关闭数据库。
+           * @param _resolve 正常完成回调，本超时分支不调用。
+           * @param reject 交付失败的回调。
+           * @returns 不适用。
+           * @throws 不适用。
+           */ (_resolve, reject) => {
+            timer = setTimeout(
+              /** 关闭宽限届满时拒绝等待，禁止在晚回调仍存在时关闭数据库。
+               * @param 不适用。
+               * @returns 不适用。
+               * @throws 不适用。
+               */
+              () => reject(new Error('Shutdown grace exceeded')),
+              // 宽限到期时在途远端动作已被中止，余量只覆盖随后的本地持久化与资源释放。
+              this.config.shutdownGraceSeconds * 1000 + SHUTDOWN_SETTLE_MS,
+            );
+          },
+        ),
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
   }
-  /** 数据库无法保存时停止服务并以非零码退出，不输出原始错误。
-   * @param error 原始异常，仅提取安全特征。
+  /** 持久化无法继续时阻止任何后续派发并退出。
+   * @param error 本地错误，仅记录安全特征。
    * @returns 不适用。
-   * @throws Error 下一事件循环抛出固定异常以 fail-fast。
+   * @throws Error 下一事件循环抛出固定错误。
    */
   private fatal(error: unknown): void {
     this.logger.error('Run persistence failed', {
@@ -406,10 +474,10 @@ export class RunDispatcher
     });
     this.onModuleDestroy();
     setImmediate(
-      /** 在下一事件循环抛出固定异常，使进程以未捕获异常退出。
+      /** 以固定摘要终止无法继续保存责任的进程。
        * @param 不适用。
-       * @returns 不适用。
-       * @throws Error 固定的 Run persistence failed。
+       * @returns 不返回。
+       * @throws Error 固定持久化失败摘要。
        */
       () => {
         throw new Error('Run persistence failed');

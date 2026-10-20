@@ -85,3 +85,5 @@ DeliveryView、错误信息和日志都不包含URL的path或query。同步任�
 ## 用户可见风险
 
 OpenList成功但云端稍后失败时，不撤销旧通知；后续扫描可能产生另一Run结果。管理员release或resolution不重发历史终态事件。
+
+M3定期持久化relay字节并在本地收尾强制保存；强杀可能丢失最近一个进度周期，interrupted统计不承诺逐字节精确。没有每chunk数据库日志，也不据此增加续传索引。通知仍在M7实现。

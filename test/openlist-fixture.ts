@@ -37,6 +37,8 @@ export interface Reply {
   headers?: Record<string, string>;
   /** 断开连接而不响应。 */
   disconnect?: boolean;
+  /** 可控分段响应，用于真实网络断流；拥有结束response的责任。 */
+  stream?: (response: ServerResponse) => Promise<void>;
 }
 /** 可替换的异步故障处理器。 */
 export type Responder = (
@@ -219,8 +221,12 @@ export class F1Server {
       'content-type': 'application/json',
       ...reply.headers,
     });
+    if (reply.stream) {
+      await reply.stream(response);
+      return;
+    }
     response.end(
-      typeof reply.body === 'string'
+      Buffer.isBuffer(reply.body) || typeof reply.body === 'string'
         ? reply.body
         : JSON.stringify(reply.body ?? { code: 200, message: '', data: null }),
     );

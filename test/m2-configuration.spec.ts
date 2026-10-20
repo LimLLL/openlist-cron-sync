@@ -79,11 +79,8 @@ describe('M2 configuration and persistence', () => {
     const config = new AppConfig(
       new ConfigService({
         environment: environmentFor('/tmp/m2-settings', {
-          RELAY_DOWNLOAD_WORKERS: 'invalid',
-          RELAY_UPLOAD_WORKERS: 'invalid',
           RUN_RETENTION_DAYS: 'invalid',
           NOTIFICATION_TIMEOUT_SECONDS: 'invalid',
-          SHUTDOWN_GRACE_SECONDS: 'invalid',
         }),
       }),
     );

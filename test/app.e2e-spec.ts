@@ -184,12 +184,7 @@ describe('M0 HTTP', () => {
    * @throws Error 断言失败。
    */
   it('keeps application environments independent', async () => {
-    app = await startApplication(
-      environmentFor(directory.path, {
-        RELAY_DOWNLOAD_WORKERS: 'invalid',
-        SHUTDOWN_GRACE_SECONDS: 'invalid',
-      }),
-    );
+    app = await startApplication(environmentFor(directory.path, {}));
     const otherDirectory = await temporaryDirectory();
     try {
       const other = await startApplication(

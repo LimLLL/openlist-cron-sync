@@ -3,12 +3,11 @@ import { ConfigService } from '@nestjs/config';
 import { AppConfig } from '../src/configuration/app-config.js';
 import { environmentFor } from './helpers.js';
 
-describe('M1 configuration', /** 注册本组 M1 行为验收用例。
+describe('M1 configuration' /** 注册本组 M1 行为验收用例。
  * @param 不适用。
  * @returns 不适用。
  * @throws 不适用。
- */
-() => {
+ */, () => {
   it.each([
     ['OPENLIST_CONNECT_TIMEOUT_MS', '999'],
     ['OPENLIST_CONNECT_TIMEOUT_MS', '120001'],
@@ -51,16 +50,14 @@ describe('M1 configuration', /** 注册本组 M1 行为验收用例。
       ).toThrow(`Invalid configuration: ${name}`);
     },
   );
-  it('ignores unimplemented milestone environment settings', /** 验证当前场景的协议输入、输出与副作用。
+  it('ignores unimplemented milestone environment settings' /** 验证当前场景的协议输入、输出与副作用。
    * @param 不适用。
    * @returns 断言完成；异步用例返回完成 Promise。
    * @throws Error 断言或测试资源操作失败。
-   */
-  () => {
+   */, () => {
     const config = new AppConfig(
       new ConfigService({
         environment: environmentFor('/tmp/m1-config', {
-          RELAY_DOWNLOAD_WORKERS: 'invalid',
           RUN_RETENTION_DAYS: 'invalid',
           NOTIFICATION_TIMEOUT_SECONDS: 'invalid',
         }),

@@ -4,6 +4,8 @@ import type { InstanceRecord } from '../database/schema.js';
 import { OpenListAuth } from './auth.service.js';
 import { integer, object, protocol, string } from './errors.js';
 import { childPath } from './paths.js';
+import type { Readable } from 'node:stream';
+import type { RequestContext } from './request-context.js';
 import { taskInfo } from './tasks.service.js';
 import type { TaskInfo } from './tasks.service.js';
 
@@ -127,6 +129,7 @@ export class OpenListMultipart {
    * @param instance 实例。
    * @param file 目标文件。
    * @param size 精确正整数字节数。
+   * @param context 调用方固定设置、停止信号及提交前持久化检查点。
    * @returns 上游会话事实。
    * @throws RangeError 大小非法；OpenListError 请求或协议失败。
    */
@@ -134,11 +137,13 @@ export class OpenListMultipart {
     instance: InstanceRecord,
     file: UploadFile,
     size: number,
+    context: RequestContext = {},
   ): Promise<MultipartSnapshot> {
     if (!Number.isSafeInteger(size) || size <= 0)
       throw new RangeError('Multipart upload size must be a positive integer');
     return multipartSnapshot(
       await this.auth.call(instance, {
+        ...context,
         endpoint: '/api/fs/multipart/init',
         method: 'POST',
         // init 一经执行即启动驱动写入，属于新提交，不占用控制请求的优先位置。
@@ -153,21 +158,31 @@ export class OpenListMultipart {
    * @param index 零起始序号。
    * @param body 精确字节。
    * @param signal relay 提供的期限信号。
+   * @param context 调用方固定设置、停止信号及提交前持久化检查点。
+   * @param size 流式body的精确Content-Length，流式body必填；Buffer默认采用自身长度。
    * @returns 上游会话事实。
-   * @throws RangeError 分片序号非法；OpenListError 请求或协议失败。
+   * @throws RangeError 分片序号或长度非法；OpenListError 请求或协议失败。
    */
   async chunk(
     instance: InstanceRecord,
     uploadId: string,
     index: number,
-    body: Buffer,
+    body: Buffer | Readable,
     signal: AbortSignal,
+    context: RequestContext = {},
+    size?: number,
   ): Promise<MultipartSnapshot> {
     if (!Number.isSafeInteger(index) || index < 0)
-      throw new RangeError('Multipart chunk index must be a non-negative integer');
+      throw new RangeError(
+        'Multipart chunk index must be a non-negative integer',
+      );
+    const length = Buffer.isBuffer(body) ? (size ?? body.length) : size;
+    if (length === undefined || !Number.isSafeInteger(length) || length <= 0)
+      throw new RangeError('Multipart chunk length must be a positive integer');
     return this.checked(
       uploadId,
       await this.auth.call(instance, {
+        ...context,
         endpoint: '/api/fs/multipart/chunk',
         method: 'PUT',
         transfer: true,
@@ -176,7 +191,7 @@ export class OpenListMultipart {
         headers: {
           'X-Upload-Id': uploadId,
           'X-Chunk-Index': String(index),
-          'Content-Length': String(body.length),
+          'Content-Length': String(length),
         },
       }),
     );
@@ -185,17 +200,20 @@ export class OpenListMultipart {
    * @param instance 实例。
    * @param uploadId 会话 ID。
    * @param signal relay 的期限信号。
-   * @returns completed 快照。
-   * @throws OpenListError 请求失败或非完成成功响应。
+   * @param context 调用方固定设置、停止信号及提交前持久化检查点。
+   * @returns 已验证session快照，由Relay按state决定是否完成。
+   * @throws OpenListError 请求失败或session结构非法。
    */
   async complete(
     instance: InstanceRecord,
     uploadId: string,
     signal: AbortSignal,
+    context: RequestContext = {},
   ): Promise<MultipartSnapshot> {
     const result = this.checked(
       uploadId,
       await this.auth.call(instance, {
+        ...context,
         endpoint: '/api/fs/multipart/complete',
         method: 'POST',
         transfer: true,
@@ -203,22 +221,24 @@ export class OpenListMultipart {
         headers: { 'X-Upload-Id': uploadId },
       }),
     );
-    if (result.state !== 'completed') protocol('multipart completion');
     return result;
   }
   /** 按 ID 查询会话，不按 path+size 接管。
    * @param instance 实例。
    * @param uploadId 会话 ID。
+   * @param context 调用方固定设置、停止信号及提交前持久化检查点。
    * @returns 快照。
    * @throws OpenListError 请求或结构错误。
    */
   async status(
     instance: InstanceRecord,
     uploadId: string,
+    context: RequestContext = {},
   ): Promise<MultipartSnapshot> {
     return this.checked(
       uploadId,
       await this.auth.call(instance, {
+        ...context,
         endpoint: `/api/fs/multipart/status?${new URLSearchParams({ upload_id: uploadId })}`,
         method: 'GET',
         read: true,
@@ -228,11 +248,17 @@ export class OpenListMultipart {
   /** 请求中止，不表示底层驱动已停止。
    * @param instance 实例。
    * @param uploadId 会话 ID。
+   * @param context 调用方固定设置、停止信号及提交前持久化检查点。
    * @returns 不适用。
    * @throws OpenListError 请求失败。
    */
-  async abort(instance: InstanceRecord, uploadId: string): Promise<void> {
+  async abort(
+    instance: InstanceRecord,
+    uploadId: string,
+    context: RequestContext = {},
+  ): Promise<void> {
     await this.auth.call(instance, {
+      ...context,
       endpoint: '/api/fs/multipart/abort',
       method: 'POST',
       headers: { 'X-Upload-Id': uploadId },
@@ -241,14 +267,17 @@ export class OpenListMultipart {
   /** 上传已证明为空的文件，保留任何意外任务供调用方处理。
    * @param instance 实例。
    * @param file 目标文件。
-   * @returns 上游任务事实；正常为空，非空由执行器登记并报告协议异常。
+   * @param context 调用方固定设置、停止信号及提交前持久化检查点。
+   * @returns 上游任务事实；正常为空，非空由执行器记unknown协议异常，不持久化tid。
    * @throws OpenListError 请求失败。
    */
   async putEmpty(
     instance: InstanceRecord,
     file: UploadFile,
+    context: RequestContext = {},
   ): Promise<TaskInfo[]> {
     const data = await this.auth.call(instance, {
+      ...context,
       endpoint: '/api/fs/put',
       method: 'PUT',
       control: false,

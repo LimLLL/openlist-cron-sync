@@ -1,0 +1,423 @@
+// 协调源准备、替换/重试清理和relay提交；delete不能脱离此工作流派发。
+import { Logger } from '@nestjs/common';
+import { setTimeout as delay } from 'node:timers/promises';
+import type { OperationRecord } from '../database/operation-schema.js';
+import type { RunTargetRecord } from '../database/run-schema.js';
+import type { RelayService } from '../relay/relay.service.js';
+import type { PreparedTransfer } from '../relay/relay-types.js';
+import { RelayError } from '../relay/errors.js';
+import { OpenListError } from '../openlist/errors.js';
+import { splitPath } from './execution-context.js';
+import type { ExecutionContext } from './execution-context.js';
+import type { OperationStore, Outcome } from './operation-store.js';
+import { Mutations, observeError, rejected } from './mutations.js';
+import type { QuarantineObserver } from './quarantine-observer.js';
+
+/** 一个Run的具体文件执行协调器。
+ * @param 不适用。
+ * @returns 不适用。
+ * @throws 不适用。
+ */
+export class FileCoordinator {
+  private readonly logger = new Logger(FileCoordinator.name);
+  /** 保存当前Run协作对象。
+   * @param context 固定身份与观察。
+   * @param store 原子操作存取。
+   * @param relay 传输实现。
+   * @param mutations 删除执行与确认。
+   * @param quarantine 提交前隔离检查。
+   * @param failRun 持久化失败时立即停止整个Run的回调。
+   * @returns 不适用。
+   * @throws 不适用。
+   */
+  constructor(
+    private readonly context: ExecutionContext,
+    private readonly store: OperationStore,
+    private readonly relay: RelayService,
+    private readonly mutations: Mutations,
+    private readonly quarantine: QuarantineObserver,
+    private readonly failRun: (error: unknown) => void,
+  ) {}
+  /** 执行一个逻辑create及其有界重试，每次尝试独立留痕。
+   * @param target 当前目标。
+   * @param initial pending create。
+   * @returns 当前逻辑动作已收敛。
+   * @throws Error 取消或不可恢复本地错误。
+   */
+  async execute(
+    target: RunTargetRecord,
+    initial: OperationRecord,
+  ): Promise<void> {
+    let op = initial;
+    for (;;) {
+      this.context.signal.throwIfAborted();
+      if (op.nextAttemptAt)
+        await delay(Math.max(0, op.nextAttemptAt - Date.now()), undefined, {
+          signal: this.context.signal,
+        });
+      if (!(await this.quarantine.allows(target, op.targetPath, 'create'))) {
+        this.store.end(op.id, {
+          status: 'skipped',
+          code: 'PREVIOUS_OUTCOME_UNKNOWN',
+        });
+        this.settleDeletes(op);
+        return;
+      }
+      const dependencies = this.store.dependencies(op.id);
+      if (
+        dependencies.some(
+          /** 检查create的父目录依赖，delete由文件工作流单独处理。
+           * @param dep 当前create依赖。
+           * @returns 是否存在未成功的父目录依赖。
+           * @throws 不适用。
+           */
+          (dep) => dep.action !== 'delete' && dep.status !== 'succeeded',
+        )
+      ) {
+        this.store.end(op.id, { status: 'skipped', code: 'DEPENDENCY_FAILED' });
+        this.settleDeletes(op);
+        return;
+      }
+      let transfer: PreparedTransfer | undefined;
+      let retryable = false;
+      let progressTimer: ReturnType<typeof setInterval> | undefined;
+      let persistenceFailure: unknown;
+      const localStop = new AbortController();
+      const settings = this.context.run.config.settings;
+      // 文件级硬期限（持久化失败或relay总期限），与Run停止信号分开传给删除执行器。
+      const deadline = AbortSignal.any([
+        localStop.signal,
+        AbortSignal.timeout(settings.relayTotalTimeoutSeconds * 1000),
+      ]);
+      const signal = AbortSignal.any([this.context.signal, deadline]);
+      try {
+        if (
+          !op.sourcePath ||
+          !op.sourceInstanceId ||
+          op.expectedSourceSize === null
+        )
+          throw new Error('Incomplete create plan');
+        transfer = await this.relay.prepare(
+          {
+            operationId: op.id,
+            jobId: this.context.run.jobId,
+            bandwidth: this.context.run.config.job.relayBandwidthLimit,
+            instance: this.context.instance(op.sourceInstanceId),
+            target: this.context.instance(op.targetInstanceId),
+            ...splitPath(op.sourcePath),
+            file: {
+              ...splitPath(op.targetPath),
+              modified: op.expectedSourceModified,
+            },
+            size: op.expectedSourceSize,
+            password: this.context.secrets.sourcePassword ?? '',
+            settings,
+            signal,
+            control: AbortSignal.any([this.context.hard, deadline]),
+          },
+          /** 保存当前尝试的累计下载和上传字节。
+           * @param downloaded 累计下载字节。
+           * @param transferred 累计上传payload字节。
+           * @returns 不适用。
+           * @throws Error 数据库失败。
+           */
+          (downloaded, transferred) =>
+            this.store.bytes(op.id, downloaded, transferred),
+        );
+        const progress = transfer;
+        progressTimer = setInterval(
+          /** 定期保存累计传输字节；持久化失败立即停止整个Run。
+           * @param 不适用。
+           * @returns 不适用。
+           * @throws 不适用；错误由停止信号交给协调器。
+           */
+          () => {
+            try {
+              this.store.bytes(
+                op.id,
+                progress.download.downloadedBytes,
+                progress.transferredBytes,
+              );
+            } catch (error) {
+              persistenceFailure = error;
+              localStop.abort(error);
+              this.failRun(error);
+            }
+          },
+          5000,
+        );
+        for (const dep of dependencies) {
+          if (dep.action !== 'delete') continue;
+          const latest = this.store.latest(dep);
+          const result =
+            latest.status === 'pending'
+              ? await this.mutations.execute(target, latest, deadline)
+              : latest;
+          if (
+            result.status !== 'succeeded' &&
+            result.errorCode !== 'PRECONDITION_ALREADY_ABSENT'
+          ) {
+            this.store.end(op.id, {
+              status: 'skipped',
+              code: 'DEPENDENCY_FAILED',
+            });
+            return;
+          }
+        }
+        if (op.attemptNo > 1 && !(await this.cleanRetry(target, op, deadline)))
+          return;
+        if (!(await this.quarantine.allows(target, op.targetPath, 'create'))) {
+          this.store.end(op.id, {
+            status: 'skipped',
+            code: 'PREVIOUS_OUTCOME_UNKNOWN',
+          });
+          return;
+        }
+        await this.relay.upload(transfer, {
+          /** 在实际派发前提交submitting事务并复查停止信号。
+           * @param 不适用。
+           * @returns 不适用。
+           * @throws Error 取消或持久化失败。
+           */
+          submitting: () => this.store.submitting(op.id, signal),
+          /** 在chunk开放前持久化已验证session快照。
+           * @param session 已验证的上游session快照。
+           * @returns 不适用。
+           * @throws Error 持久化失败。
+           */
+          session: (session) => this.store.session(op.id, session),
+          /** 在最后chunk开放前持久化完整源EOF。
+           * @param 不适用。
+           * @returns 不适用。
+           * @throws Error 持久化失败。
+           */
+          eof: () => this.store.eof(op.id),
+        });
+        this.store.end(op.id, { status: 'succeeded' });
+        this.supersede(target, op);
+      } catch (error) {
+        if (persistenceFailure) throw persistenceFailure;
+        const current = this.store.get(op.id);
+        // 停止后仍收到的0字节put响应是明确结果，按完成分类观察，而不是直接记unknown。
+        const answered =
+          op.expectedSourceSize === 0 &&
+          error instanceof OpenListError &&
+          (error.upstreamCode !== null || error.httpStatus !== null);
+        if (this.context.signal.aborted && !answered) {
+          if (current.status !== 'pending')
+            this.store.end(op.id, {
+              status: 'unknown',
+              code: 'OPENLIST_ERROR',
+              message: 'Run stopped with unconfirmed write',
+            });
+          if (transfer?.session) await this.abort(transfer);
+          throw this.context.signal.reason;
+        }
+        if (transfer?.session) await this.abort(transfer);
+        const outcome = await this.classify(
+          target,
+          current,
+          error,
+          deadline.aborted,
+        );
+        this.store.end(op.id, outcome);
+        retryable =
+          outcome.status === 'failed' &&
+          (error instanceof RelayError
+            ? error.retryable
+            : error instanceof OpenListError &&
+              (current.status === 'pending'
+                ? error.code !== 'AUTH_BLOCKED' &&
+                  ![400, 401, 403, 405].includes(error.upstreamCode ?? -1)
+                : !rejected(error)));
+        this.logger.warn('Relay attempt ended', {
+          runId: this.context.run.id,
+          operationId: op.id,
+          errorCode: outcome.code,
+          status: outcome.status,
+        });
+      } finally {
+        if (progressTimer) clearInterval(progressTimer);
+        if (transfer) {
+          try {
+            this.store.bytes(
+              op.id,
+              transfer.download.downloadedBytes,
+              transfer.transferredBytes,
+            );
+          } finally {
+            await this.relay.dispose(transfer);
+          }
+        }
+      }
+      const result = this.store.get(op.id);
+      const retry =
+        retryable && !this.context.signal.aborted
+          ? this.store.retry(result)
+          : null;
+      if (!retry) {
+        if (result.status !== 'succeeded') this.settleDeletes(op);
+        return;
+      }
+      op = retry;
+    }
+  }
+  /** 原动作已明确失败后刷新残留；清理仍使用同一删除保护和剩余预算。
+   * @param target 当前目标。
+   * @param op 新create attempt。
+   * @param deadline 文件级硬期限，传给清理删除。
+   * @returns 是否可以继续init。
+   * @throws Error 本地错误或取消。
+   */
+  private async cleanRetry(
+    target: RunTargetRecord,
+    op: OperationRecord,
+    deadline: AbortSignal,
+  ): Promise<boolean> {
+    try {
+      const entry = await this.context.entry(target, op.targetPath);
+      if (entry === null) return true;
+      if (entry.isDir || entry.size === null) {
+        this.store.end(op.id, {
+          status: 'skipped',
+          code: 'PRECONDITION_CHANGED',
+        });
+        return false;
+      }
+      const cleanup = this.store.cleanup(
+        op,
+        entry.size,
+        target.deleteBudgetCount,
+        target.plannedReplaceCount + target.plannedExtraCount,
+      );
+      if (!cleanup) {
+        this.store.end(op.id, { status: 'skipped', code: 'DELETE_LIMIT' });
+        return false;
+      }
+      const result = await this.mutations.execute(target, cleanup, deadline);
+      if (
+        result.status === 'succeeded' ||
+        result.errorCode === 'PRECONDITION_ALREADY_ABSENT'
+      )
+        return true;
+      this.store.end(op.id, { status: 'skipped', code: 'DEPENDENCY_FAILED' });
+      return false;
+    } catch (error) {
+      this.context.signal.throwIfAborted();
+      if (!(error instanceof OpenListError)) throw error;
+      this.store.end(op.id, {
+        status: 'skipped',
+        code: 'PRECONDITION_UNVERIFIED',
+      });
+      return false;
+    }
+  }
+  /** 按提交窗口区分源失败、init不确定性和零字节put观察。
+   * @param target 当前目标。
+   * @param op 最新持久化状态。
+   * @param error 原始失败，不把本地数据库异常当上游错误。
+   * @param timedOut 文件总期限是否已到。
+   * @returns 规范结果。
+   * @throws Error 非预期本地错误。
+   */
+  private async classify(
+    target: RunTargetRecord,
+    op: OperationRecord,
+    error: unknown,
+    timedOut: boolean,
+  ): Promise<Outcome> {
+    if (timedOut)
+      return {
+        status: op.status === 'pending' ? 'failed' : 'unknown',
+        code: 'OPENLIST_ERROR',
+        message: 'Relay total deadline exceeded',
+      };
+    if (error instanceof RelayError)
+      return {
+        status: error.unknown
+          ? 'unknown'
+          : error.code === 'SOURCE_CHANGED' && op.status === 'pending'
+            ? 'skipped'
+            : 'failed',
+        code: error.code,
+        message: error.message,
+      };
+    if (!(error instanceof OpenListError)) throw error;
+    if (op.status === 'pending')
+      return { status: 'failed', code: error.code, message: error.message };
+    if (op.expectedSourceSize === 0)
+      return observeError(this.context, target, op, error);
+    if (rejected(error))
+      return { status: 'failed', code: error.code, message: error.message };
+    if (op.multipartUploadId === null && error.upstreamCode !== null) {
+      try {
+        if (
+          (await this.context.entry(
+            target,
+            op.targetPath,
+            this.context.hard,
+          )) === null
+        )
+          return { status: 'failed', code: error.code, message: error.message };
+      } catch (cause) {
+        if (!(cause instanceof OpenListError) && !this.context.hard.aborted)
+          throw cause;
+      }
+    }
+    return { status: 'unknown', code: error.code, message: error.message };
+  }
+  /** 用收尾期限请求abort；失败仍保留原有未知或主动失败责任。
+   * @param transfer 有session的传输。
+   * @returns 有界清理结束。
+   * @throws Error 本地或数据库错误。
+   */
+  private async abort(transfer: PreparedTransfer): Promise<void> {
+    try {
+      // 取消/超时为CANCEL_GRACE，关闭为SHUTDOWN_GRACE；未停止时主动abort仍受控制API超时约束。
+      await this.relay.abort(transfer, this.context.hard);
+    } catch (error) {
+      if (!(error instanceof OpenListError)) throw error;
+      this.logger.warn('Relay abort unavailable', {
+        operationId: transfer.input.operationId,
+        errorCode: error.code,
+      });
+    }
+  }
+  /** 最终源准备失败后收尾尚未提交的伴随delete，避免悬挂pending。
+   * @param op 已收敛create。
+   * @returns 不适用。
+   * @throws Error 数据库失败。
+   */
+  private settleDeletes(op: OperationRecord): void {
+    for (const dependency of this.store.dependencies(op.id))
+      if (dependency.action === 'delete' && dependency.status === 'pending')
+        this.store.end(dependency.id, {
+          status: 'skipped',
+          code: 'DEPENDENCY_FAILED',
+        });
+  }
+  /** 新成功只解决同身份同路径且完整覆盖的旧责任。
+   * @param target 当前目标。
+   * @param op 成功create。
+   * @returns 不适用。
+   * @throws Error 数据库失败。
+   */
+  private supersede(target: RunTargetRecord, op: OperationRecord): void {
+    for (const fact of this.quarantine.quarantine.matching(
+      target.config.instance,
+      op.targetPath,
+      'create',
+    ))
+      if (
+        !fact.operation.isDir &&
+        fact.operation.targetInstanceId === op.targetInstanceId &&
+        fact.operation.targetPath === op.targetPath &&
+        !this.quarantine.quarantine.active(fact.operation)
+      )
+        this.quarantine.quarantine.resolve(
+          fact.operation.id,
+          this.context.run.id,
+          'superseded',
+        );
+  }
+}

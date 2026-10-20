@@ -61,26 +61,26 @@
 - syncEmptyDirs=true时计划创建全部未排除的source目录（含空目录）；false时只创建所建文件需要的父目录。include只筛选文件，不决定目录是否创建；命中目录的exclude剪枝并保护该子树。
 - Operation列表按(run_id, seq)返回计划顺序。
 
-M2实现边界：只接受显式dryRun=true（否则400 VALIDATION_ERROR）；Jobs CRUD保存enabled/cron但不调度，通知关联仅接受[]。Runs负责短事务接受、(createdAt,id) FIFO、GLOBAL_MAX_RUNS扫描位、独立于执行位的队列期限，以及从startedAt计算的扫描/规划timeoutSeconds（cancelled + RUN_TIMEOUT）。关闭停止派发并等待扫描退出，不写Run终态；启动queued沿用原快照和期限，scanning/planned按PROCESS_RESTART中断旧计划。完整ExecutionSettings从M2开始校验与固定。extras及空目录删除仅规划，M5执行。
+M2实现边界：只接受显式dryRun=true（否则400 VALIDATION_ERROR）；Jobs CRUD保存enabled/cron但不调度，通知关联仅接受[]。Runs负责短事务接受、(createdAt,id) FIFO、GLOBAL_MAX_RUNS扫描位、独立于执行位的队列期限，以及从startedAt计算的扫描/规划timeoutSeconds（cancelled + RUN_TIMEOUT）。关闭停止派发并等待扫描退出，不写Run终态；启动queued沿用原快照和期限，scanning/planned按PROCESS_RESTART中断旧计划。完整ExecutionSettings从M2开始校验与固定。M2时extras及空目录删除仅规划；执行随M3a/M3b合并交付。
 
-M2预览无跨Run写路径占用；该互斥必须在M3a第一笔真实写入前实现，不能推迟到M4。M3a仍负责cancel API、unknown/quarantine和真实执行；M4负责cron、完整期限/恢复和远程停止编排。
+M2预览无跨Run写路径占用；该互斥必须在M3a第一笔真实写入前实现，不能推迟到M4。M3a仍负责cancel API、unknown/quarantine和真实执行；M3a/M3b同时交付完整Run期限、SIGTERM与relay恢复；M4只负责cron及启停/next-fire/DST。
 
 ## M3a 默认relay的新建与基础恢复
 
-交付：仅新文件create（createMode=relay）、下载/上传worker与spool、multipart分片上传、0字节put、Target根创建、尝试记录、全局/实例名额、取消、submitting窗口、unknown隔离，以及unknown处理端点：POST /operations/:id/quarantine-release、POST /operations/:id/resolve（abandoned）、带unresolved过滤的GET /operations。
+交付（与M3b作为一个变更）：新建及替换create（createMode=relay）、下载/上传worker与spool、multipart分片上传、0字节put、Target根创建、尝试记录、全局/实例名额、取消、submitting窗口、unknown隔离，以及unknown处理端点：POST /operations/:id/quarantine-release、POST /operations/:id/resolve（abandoned）、带unresolved过滤的GET /operations。
 
 任务：[relay结果分类](../design/relay.md#结果分类)与[完成分类](../design/openlist-integration.md#完成分类)、spool预算与防死锁、chunk重试与status心跳、Range续传、路径互斥、upload_id持久化与重启收尾、Operation查询。
 
 验收：
 
-- 文件明显大于可用spool时仍持续推进；下载不等上传；已开始上传的文件不被预读饿死；预算不足时下载暂停而不报错，真实ENOSPC记SPOOL_FULL。
+- 文件明显大于可用spool时仍持续推进；下载不等上传；已开始上传的文件不被预读饿死；自身session临时争用只等待。持久化init后，若独占空间也容不下该文件一个frontier payload，则有界主动abort并failed SPOOL_FULL，同Run不反复重建session；真实ENOSPC/EDQUOT也记SPOOL_FULL，摘要区分实际写入失败与容量不足。
 - 最后一个chunk只在源EOF且字节数等于计划大小后发出；源过长或过短时主动abort并记failed，不提交截断文件。
 - 明确的执行前拒绝（init的400、403含file exists与IgnoredSystemFile、405、认证阻断）直接failed，不做观察；IgnoredSystemFile不重试。mkdir、0字节put得到JSON 500时只做一次refresh=true观察。init或complete响应丢失→unknown并隔离；complete成功后查不到session不判失败。
 - Target根缺失时，真实Run先以prepare mkdir创建根，再执行create。
 - TTL到期或提前释放后先refresh再写；Run和Operation历史结果不改写。
 - 真实L1/L3拓扑：同实例同storage、同实例跨storage与跨实例relay均通过；跨origin跳转不泄漏token；限速按Job聚合上传payload。
 
-此阶段不对外宣称完整incremental，changed文件替换尚未完成。
+M3a与M3b不拆分交付，同时执行Mirror文件extras、syncEmptyDirs空目录清理、取消/超时、SIGTERM与启动恢复。真实server_copy请求在插入Run之前返回400 VALIDATION_ERROR，dry-run仍支持；server_copy执行及task跟踪留在M6。
 
 ## M3b 替换
 
@@ -95,28 +95,22 @@ M2预览无跨Run写路径占用；该互斥必须在M3a第一笔真实写入前
 - remove得到JSON 500时按M3a的观察规则分类。
 - 真实L1/L3拓扑：delete→refresh→create全链路通过。
 
-## M4 调度与完整恢复编排
+由原M4、M5并入M3a/M3b的验收（随本次合并交付）：
 
-交付：动态cron、FIFO队列、无重叠、期限、恢复管理与next-fire API。
+- 某Target失败不删其extras；另一Target可成功。mirror且syncEmptyDirs=true：Target独有目录（source中不存在、非保护）在其中extras删除后自底向上删除，每个目录先refresh=true确认为空；syncEmptyDirs=false时从不删除Target目录，允许留下空目录壳。
+- queued占Job名额；读写交叉的Run不并发；恢复最终interrupted，不执行旧pending。
+- 取消与Run超时停止新派发；已派发的mkdir/remove/0字节put响应及删除确认在CANCEL_GRACE_SECONDS内收尾并按结果记录，宽限结束仍无结论才unknown并隔离。
+- SIGTERM：ready=false；停止新触发、派发和提交；中止本地扫描与relay；在关机宽限内保存已收到的结果，宽限内无结论的已派发动作保持submitting/running交给下次启动；不cancel已知OpenList task，不写Run终态。下次启动按[启动恢复](../design/scheduling-recovery.md)收尾为interrupted（stopReason=PROCESS_RESTART）；recovery_deadline_at只在首次进入recovering时写入，反复重启不延长。
 
-任务：5段表达式/IANA时区、DST行为测试、Job启停、启动先重建责任、SIGTERM优雅停止。
+## M4 Cron调度
 
-验收：
+交付：动态cron、Job启停与next-fire API；复用M3已有触发、队列、期限、占用和恢复。
 
-- queued占Job名额；错过cron不补跑；manual-only重启不自发运行；读写交叉Job不并发；恢复最终interrupted，不执行旧pending。
-- SIGTERM：ready=false；停止新触发、派发、提交和维护；中止本地扫描与relay；保存已收到的结果；不cancel已知OpenList task，不写Run终态。下次启动按[启动恢复](../design/scheduling-recovery.md)收尾为interrupted（stopReason=PROCESS_RESTART）；recovery_deadline_at只在首次进入recovering时写入，反复重启不延长。
+验收：5段表达式和IANA时区；错过cron不补跑；manual-only重启不自发运行；Europe/Berlin DST行为与固定cron库一致。启停不绕过JOB_BUSY或既有执行保护。
 
-## M5 Mirror与历史保留
+## M5 历史保留
 
-交付：创建阶段后extras删除、syncEmptyDirs目录同步和历史清理。
-
-任务：文件计数、protected后代、Run历史关联保留。
-
-验收：
-
-- 某Target失败不删其extras；另一Target可成功。
-- mirror且syncEmptyDirs=true：Target独有目录（source中不存在、非保护）在其中extras删除后自底向上删除，每个目录先refresh=true确认为空；syncEmptyDirs=false时从不删除Target目录，允许留下空目录壳。
-- unknown责任不被历史保留期清理。
+交付：按既有保留规范清理终态Run及其引用闭包；unknown责任不得因保留期删除。Mirror执行已纳入M3a/M3b，本阶段不重新实现。
 
 ## M6 server_copy
 

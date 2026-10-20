@@ -286,7 +286,7 @@ describe('M2 run lifecycle', () => {
    * @returns 完成 Promise。
    * @throws Error 断言或夹具失败。
    */
-  it('rejects trigger before recovery and never accepts false or omitted dryRun', async () => {
+  it('rejects trigger before recovery', async () => {
     f = await m2Fixture();
     const job = f.job();
     const readiness = f.app.get(Readiness);

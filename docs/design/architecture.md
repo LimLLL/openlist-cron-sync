@@ -1,6 +1,6 @@
 用途：规定 NestJS 模块职责、依赖方向及单进程运行视图。
 
-范围：目标实现的应用结构与启动/停止顺序；M0 已建立基础模块；M1 加入 OpenList、Instances、Security 的实例认证状态持久化及 Coordination 的每实例 API 配额，M2加入Jobs、Sync、Runs以及Coordination的FIFO和扫描执行位，其余模块随对应里程碑加入。
+范围：目标实现的应用结构与启动/停止顺序；M0 已建立基础模块；M1 加入 OpenList、Instances、Security 的实例认证状态持久化及 Coordination 的每实例 API 配额，M2加入Jobs、Sync、Runs；M3加入Relay、路径占用、真实执行及完整Run恢复，其余模块随对应里程碑加入。
 
 # 架构
 
@@ -14,8 +14,8 @@
 | CoordinationModule  | ready 标志与恢复闸门、执行位、全局 FIFO 队列状态、路径占用、隔离路径检查、每 Instance 的 API/task 信号量与请求速率限制、relay 下载连接/上传 session/chunk 名额、每 Job relay token bucket | Config、Database                                             |
 | OpenListModule      | envelope、token、路径、列表、挂载、task HTTP；每个管理 API 请求在客户端内取得该 Instance 的 API 并发位与速率令牌（含浏览、连接测试、登录）                                                | Config、Security、Coordination；Instance 配置由调用者传入    |
 | InstancesModule     | Instance CRUD、连接测试、目录浏览                                                                                                                                                         | Database、Security、OpenList                                 |
-| RelayModule         | 下载/上传 worker、spool、multipart 会话、计数、背压、限速、取消                                                                                                                           | Config、OpenList、Coordination                               |
-| SyncModule          | 扫描、纯 diff、保护检查、计划及依赖执行                                                                                                                                                   | Database、OpenList、Relay、Coordination                      |
+| RelayModule         | 下载/上传 worker、spool、multipart 会话、计数、背压、限速、取消；暴露准备句柄并等待持久化检查点                                                                                           | Config、OpenList、Coordination                               |
+| SyncModule          | 扫描、纯 diff、保护检查、计划、文件协调器、依赖执行与Operation结果                                                                                                                        | Database、OpenList、Relay、Coordination                      |
 | NotificationsModule | 渠道管理、HMAC、有界投递                                                                                                                                                                  | Config、Database、Security                                   |
 | RunsModule          | 接受触发、派发、取消、启动恢复、运行视图、unknown/quarantine 管理                                                                                                                         | Database、Coordination、Sync、OpenList、Notifications        |
 | SchedulingModule    | 注册/注销 cron；触发时调用 Runs 的触发服务                                                                                                                                                | Database、Runs                                               |
@@ -36,7 +36,7 @@ M1 的 `InstanceAuthState` 位于 Security，直接使用 Database 持久化认�
 
 AppModule 仅导入顶层消费模块（当前按 Runs、Jobs、Instances、System 排列），Instances 先导入 OpenList，再导入共享 Security/Database。Nest 12 的共享依赖拓扑重挂接会受首次遍历顺序影响；从最深消费链开始装配，确保 Config → Database → Security 的初始化顺序。生产初始化路径、完整 API e2e 与编译产物重启测试覆盖这一顺序，不增加根模块协调器。
 
-M2的Jobs不导入Scheduling，Sync不导入Relay，Runs不导入Notifications；未实现的模块不建占位hook。M2关闭时等待扫描与共享认证停止，再关闭数据库；不写Run终态。跨Run路径互斥在M3a真实写入前接入。
+当前Jobs不导入Scheduling，Runs不导入Notifications；不为后续里程碑建立占位hook。Sync导入Relay，文件协调器拥有删除前准备、结果分类与持久化。Relay不反向导入Sync/Runs，通过具体的submitting、session、EOF检查点等待事务提交。关闭信号区分数据工作停止与有界控制请求清理。
 
 纯 planner/filter 函数不依赖 Nest、HTTP、数据库；仓储只提供数据访问，不承载同步业务决策。使用具体 service 即可，不为了单一实现引入工厂/策略接口。
 
@@ -82,7 +82,7 @@ flowchart TD
 SIGTERM（计划内停止）不写任何 Run 终态，完整规则见[优雅停止](scheduling-recovery.md#优雅停止)：
 
 1. Coordination 置 ready=false；Scheduling 停止 cron，手动触发返回 503 NOT_READY；Runs 停止派发和新的远程提交；Maintenance 停止。
-2. Abort 本地扫描和下载；已记录 session 的 relay 在宽限内尝试 multipart abort，结果按 [relay 结果分类](relay.md#结果分类)记录，通常为 unknown 并隔离；确定尚未 init 的 relay 记 failed。
+2. Abort 本地扫描和下载；已记录 session 的 relay 在宽限内尝试 multipart abort，结果按 [relay 结果分类](relay.md#结果分类)记录，通常为 unknown 并隔离；未提交create的pending保持原状，下次启动统一skipped PLAN_INTERRUPTED。
 3. 持久化已经收到的响应和任务状态。不对已知 OpenList task 发送 cancel，也不 delete 远程任务。
 4. 在 shutdownGrace 内完成上述持久化后，关闭连接池和数据库。宽限内仍未返回的请求不在关闭期间改写，下次启动按第 3 步的正常恢复处理（例如 submitting 且无可靠响应的 Operation 记 unknown）。
 

@@ -36,3 +36,7 @@
 补充TECH：统计按逻辑动作最后attempt聚合，失败历史不改写。ORM/驱动在M0固定为drizzle-orm 0.45.1、better-sqlite3 13.0.3、drizzle-kit 0.31.8，已在Node 22.23.3上实际验证加载、PRAGMA与迁移；Node 24待M8镜像验证。
 
 补充TECH：启动密文校验由代码显式登记的加密列清单驱动，M0清单为空，校验逻辑用测试夹具（真实SQLite与AES-GCM）验证；生产数据上“主密钥错误即启动失败”的端到端验收在M1首个ENC列出现时完成。不为此新增哨兵表，避免keys.json丢失时只有管理员账号的库也无法启动。
+
+补充TECH（M3a/M3b合并）：Sync拥有文件协调器；Relay仅提供准备句柄和等待式持久化检查点。dry-run全部端点取得read占用；真实Run的source取得read、targets取得write。Run终态清除路径密码，后续Run使用自己的新快照。OpenList正常As-Task:false put不会返回task；异常task只记unknown并隔离，不存tid、不引入上传task跟踪。保护按别名身份匹配，自动resolution仍限同instance_id+target_path。缺失父目录允许通过新鲜完整祖先列表证明缺失分支。
+
+补充REQ（已确认）：session落库后，若当前独占spool预算也不足以容纳frontier实际payload，则有界主动abort并failed SPOOL_FULL；摘要区别insufficient spool capacity和ENOSPC/EDQUOT。这是容量等待规则的明确例外，自身session的临时争用仍等待，容量条件未改变时本Run不反复创建session。

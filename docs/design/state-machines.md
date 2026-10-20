@@ -107,6 +107,8 @@ queued 重启仍 queued，保留 createdAt 和 queueDeadlineAt；过期则 faile
 
 | 当前              | 条件                                                                            | 下一状态                                                                                                                                            |
 | ----------------- | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| pending           | 本地源准备失败（尚未提交create）                                                | failed，读取瞬时错误可在预算内重试                                                                                                                  |
+| pending           | create提交前确认SOURCE_CHANGED                                                  | skipped SOURCE_CHANGED；保留已成功delete，不执行过期计划                                                                                            |
 | pending           | 依赖未满足                                                                      | pending                                                                                                                                             |
 | pending           | 保护拒绝、依赖失败、旧计划失效                                                  | skipped（写error_code）                                                                                                                             |
 | pending           | 运行取消且未派发                                                                | cancelled                                                                                                                                           |
@@ -159,3 +161,5 @@ unknown 的观察解决只记录本产品比较条件满足，不能证明旧写
 ## 典型时序
 
 完整事件顺序见 [时序](sequences.md)，持久化字段见 [执行数据表](execution-tables.md)。
+
+M3补充：SOURCE_CHANGED按create的提交窗口分类，不能以该Run是否执行过mkdir/delete判断。尚未提交create时skipped，已成功delete不回滚；init可能已到达而没有可靠响应时unknown；已知session的源异常按主动abort收尾。SIGTERM时未提交的pending保持原状，由下次启动统一skipped PLAN_INTERRUPTED。

@@ -7,7 +7,7 @@
 ## 解析和优先级
 
 启动参数读取process.env；.env仅本地开发通过@nestjs/config加载。启动环境决定服务级设置及新配置对象默认值；已保存Job/Instance值优先，Run采用固定后的值。
-数字只接受十进制整数，拒绝NaN、小数、负值和单位字符串。BOOL环境只接受true/false。空字符串不是未设置；非法配置启动失败并指明字段，不输出值中的秘密。各变量由使用它的模块校验。M2 起运行快照消费本文 ExecutionSettings 固定映射中的全部变量，因此这些变量即使对应执行器尚未实现也在启动时读取并校验。映射之外尚未实现的变量（relay worker 数、保留期、通知、完整关机宽限等）仍不读取。ADMIN_USERNAME/ADMIN_PASSWORD只在数据库没有管理员时读取并校验，已有管理员后两者完全忽略。
+数字只接受十进制整数，拒绝NaN、小数、负值和单位字符串。BOOL环境只接受true/false。空字符串不是未设置；非法配置启动失败并指明字段，不输出值中的秘密。各变量由使用它的模块校验。M2 起运行快照消费本文 ExecutionSettings 固定映射中的全部变量，因此这些变量即使对应执行器尚未实现也在启动时读取并校验。M3另消费relay worker数、spool保留量和关机宽限；保留期、通知等尚未实现的进程参数仍不读取。ADMIN_USERNAME/ADMIN_PASSWORD只在数据库没有管理员时读取并校验，已有管理员后两者完全忽略。
 时间内部用UTC；毫秒/秒按本表，不隐式混用。API以camelCase字段映射数据库。
 
 ## 环境变量
@@ -56,7 +56,7 @@
 | SCAN_MAX_DEPTH                 | 128            | 1–1024；endpoint 根深度为0；限制symlink循环伤害；超深子树记SCAN_DEPTH_EXCEEDED并受保护，Run不因此失败       |
 | SCAN_MAX_DIRECTORY_ENTRIES     | 100000         | 1–1000000；超限Run failed，不截断继续                                                                       |
 | OPENLIST_MAX_JSON_BYTES        | 33554432       | 1024–268435456；含列表和管理响应；扫描列表超限Run failed                                                    |
-| MAX_OPERATIONS_PER_RUN         | 1000000        | 1–10000000；超限Run failed，不执行                                                                          |
+| MAX_OPERATIONS_PER_RUN         | 1000000        | 1–10000000；仅初始计划，超限Run failed且不执行                                                              |
 | MAX_SCAN_ISSUES_PER_RUN        | 10000          | 1–100000；超过则终止扫描，Run failed                                                                        |
 | PLAN_BATCH_SIZE                | 500            | 1–5000；短事务与吞吐折中                                                                                    |
 
@@ -139,3 +139,5 @@ Run.snapshot.settings包含下列全部字段，值取接受Run时的有效环�
 
 全部是已验证整数，无NULL。进程全局并发、登录安全参数、服务监听、日志、历史清理和通知投递使用进程当前有效配置，不为每Run复制资源池或安全策略。
 维护循环创建的REMOTE_TASK_CHANGED隔离记录不属于新的Run执行，使用进程当前有效配置的quarantineSeconds、retry*、apiTimeoutMs与taskPollMs，不读取原Run快照。
+
+M3开始消费RELAY_DOWNLOAD_WORKERS、RELAY_UPLOAD_WORKERS、SPOOL_RESERVE_BYTES与SHUTDOWN_GRACE_SECONDS，均为进程级参数，不加入ExecutionSettings。执行期新增attempt及cleanup行由重试和清理规则有界限制；MAX_OPERATIONS_PER_RUN不重新限制这些执行行。

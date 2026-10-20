@@ -248,19 +248,14 @@ describe('M2 Jobs and Runs API', () => {
       .auth(token, { type: 'bearer' })
       .expect(404);
   });
-  /** 缺失、为 false 或非法的 dryRun 被拒绝且不创建 Run；未启用的 Job 仍可手动预览，Run 查询端点可分页并校验查询参数。
+  /** 非法的 dryRun 被拒绝且不创建 Run；未启用的 Job 仍可手动预览，Run 查询端点可分页并校验查询参数。
    * @param 不适用。
    * @returns 完成 Promise。
    * @throws Error 断言或请求失败。
    */
-  it('rejects false or missing dryRun without creating a Run, accepts disabled manual preview and pages its plan', async () => {
+  it('rejects invalid dryRun without creating a Run, accepts disabled manual preview and pages its plan', async () => {
     const job = f.job();
-    for (const body of [
-      {},
-      { dryRun: false },
-      { dryRun: 'true' },
-      { dryRun: true, unknown: true },
-    ])
+    for (const body of [{ dryRun: 'true' }, { dryRun: true, unknown: true }])
       await request(base)
         .post(`/api/v1/jobs/${job.id}/runs`)
         .auth(token, { type: 'bearer' })

@@ -7,6 +7,10 @@ export interface RequestContext {
   settings?: ExecutionSettings;
   /** 调用方停止信号，不取消其他调用方共用的登录。 */
   signal?: AbortSignal;
+  /** 在认证/配额就绪后、实际提交前等待持久化；读取不传。 */
+  beforeDispatch?: () => void;
+  /** 关闭收尾允许使用独立期限，仍不允许新的文件写入。 */
+  cleanup?: boolean;
 }
 /** 独立取消共享认证的等待，认证结果仍由原 Promise 收敛。
  * @template T 共享结果类型。

@@ -1,7 +1,13 @@
 // 协调叶子模块持有就绪标志与每实例 API 配额。
+import { DatabaseModule } from '../database/database.module.js';
+import { Quarantine } from './quarantine.js';
+import { PathOccupancy } from './path-occupancy.js';
+import { RelayResources } from './relay-resources.js';
+import { ConfigurationModule } from '../configuration/configuration.module.js';
 import { ApiQuota } from './api-quota.service.js';
 import { RunQueue } from './run-queue.js';
-import { Injectable, Module } from '@nestjs/common';
+import { AppConfig } from '../configuration/app-config.js';
+import { Inject, Injectable, Module } from '@nestjs/common';
 
 /** 当前进程的就绪状态。
  * @param 不适用。
@@ -10,6 +16,14 @@ import { Injectable, Module } from '@nestjs/common';
  */
 @Injectable()
 export class Readiness {
+  /** 关闭开始后给控制请求独立的剩余宽限。 */
+  cleanupSignal?: AbortSignal;
+  /** 读取进程关闭宽限。
+   * @param config 进程配置。
+   * @returns 不适用。
+   * @throws 不适用。
+   */
+  constructor(@Inject(AppConfig) private readonly config: AppConfig) {}
   /** 仅在初始化和监听成功后为 true，关闭开始时恢复 false。 */
   ready = false;
   /** Run 启动恢复已完成。 */
@@ -25,6 +39,9 @@ export class Readiness {
    * @throws 不适用。
    */
   beginShutdown(): void {
+    this.cleanupSignal ??= AbortSignal.timeout(
+      this.config.shutdownGraceSeconds * 1000,
+    );
     this.stopping = true;
     this.ready = false;
     this.shutdown.abort();
@@ -37,7 +54,22 @@ export class Readiness {
  * @throws 不适用。
  */
 @Module({
-  providers: [Readiness, ApiQuota, RunQueue],
-  exports: [Readiness, ApiQuota, RunQueue],
+  imports: [ConfigurationModule, DatabaseModule],
+  providers: [
+    Readiness,
+    ApiQuota,
+    RunQueue,
+    PathOccupancy,
+    RelayResources,
+    Quarantine,
+  ],
+  exports: [
+    Readiness,
+    ApiQuota,
+    RunQueue,
+    PathOccupancy,
+    RelayResources,
+    Quarantine,
+  ],
 })
 export class CoordinationModule {}

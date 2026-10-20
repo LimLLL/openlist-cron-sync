@@ -1,4 +1,4 @@
-// 提供 M2 预览触发及分页查询，所有路由受全局管理员认证保护。
+// 提供执行触发、取消及分页查询，所有路由受全局管理员认证保护。
 import {
   Body,
   Controller,
@@ -52,9 +52,9 @@ export class RunsController {
    * @throws 不适用。
    */
   constructor(@Inject(RunsService) private readonly runs: RunsService) {}
-  /** 创建预览；202 不表示扫描已成功。
+  /** 创建运行；202只表示已接受，不承诺执行成功。
    * @param id Job UUID。
-   * @param body 只允许 dryRun=true。
+   * @param body 真实执行或预览参数。
    * @param _query 禁止额外查询。
    * @param response 用于 Location 头。
    * @returns 已提交的 queued RunView。
@@ -69,7 +69,8 @@ export class RunsController {
   })
   @ApiBadRequestResponse({
     type: ErrorDto,
-    description: 'VALIDATION_ERROR：M2 需要 dryRun=true 或端点配置不可运行',
+    description:
+      'VALIDATION_ERROR：server_copy真实执行属于M6，或端点配置不可运行',
   })
   @ApiConflictResponse({
     type: ErrorDto,
@@ -88,6 +89,35 @@ export class RunsController {
     const run = this.runs.trigger(id, body);
     response.setHeader('Location', `/api/v1/runs/${run.id}`);
     return run;
+  }
+  /** 取消运行，终态返回200，其他状态返回202。
+   * @param id Run UUID。
+   * @param _body 空请求体。
+   * @param _query 禁止额外查询。
+   * @param response 用于动态HTTP状态。
+   * @returns 当前RunView。
+   * @throws ApiError Run不存在。
+   */
+  @Post('runs/:id/cancel')
+  @ApiAcceptedResponse({ schema: runViewSchema })
+  @ApiOkResponse({ schema: runViewSchema })
+  cancel(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Body() _body: EmptyQueryDto,
+    @Query() _query: EmptyQueryDto,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const before = this.runs.record(id);
+    const terminal = [
+      'succeeded',
+      'partial',
+      'failed',
+      'cancelled',
+      'interrupted',
+    ].includes(before.status);
+    const result = this.runs.cancel(id);
+    response.status(terminal ? 200 : 202);
+    return result;
   }
   /** 分页查询运行历史。
    * @param query 过滤及分页。

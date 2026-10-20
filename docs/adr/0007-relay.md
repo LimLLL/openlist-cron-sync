@@ -16,7 +16,7 @@ relay 是默认创建方式，要支持任意实例关系和大文件。下载�
 
 - 下载 worker 与上传 worker 解耦，中间是本地磁盘 spool（固定 1 MiB 块）。下载写完一个块就去处理下一个块或文件，不等上传。
 - 上传使用 OpenList 分片接口，chunk 由连续块拼成，大小取 init 返回值；确认后释放块。0 字节文件走普通 put。
-- spool 默认可用全部剩余空间，只为 SQLite 保留固定余量；空间不足时下载暂停，真实写盘失败才报错。
+- spool 默认可用全部剩余空间，只为 SQLite 保留固定余量；空间不足时下载暂停。明确例外：init 返回的 session 已持久化后，若该文件一个 frontier chunk 的实际 payload 即使释放本进程所有 spool 仍无法容纳，则有界主动 abort，记 failed SPOOL_FULL（摘要 insufficient spool capacity），容量条件未改变时本 Run 不再创建 session。其它 session 的临时争用只等待；真实 ENOSPC/EDQUOT 仍报 SPOOL_FULL，并使用不同摘要。
 - 每个 (文件, Target) 各自下载；不做跨目标共享，也不做跨本服务重启的续传。
 - 最低支持 OpenList 4.2.5。
 

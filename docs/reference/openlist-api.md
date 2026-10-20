@@ -9,6 +9,7 @@
 源码核对基准：OpenList v4.2.6 系列源码（上游 main 分支 2026-09 快照，提交 5447ecb0）；行号可能随上游演进漂移。
 最低支持 OpenList 4.2.5，即分片上传接口首次发布的版本（上游提交 cca773f0）。M1 额外只读核对了本地上游 HEAD `c7c63173149e5fa6c99e67b29f7a105a9ce7f2f7`：新增 verified-upload 路径不属于本服务 M1，已核对的普通五个 multipart 端点、登录、文件读取、copy/task 和挂载规则无不兼容契约变化；这不是实际镜像集成测试记录。
 M1 集成测试记录（2026-10-19）：官方镜像 `openlistteam/openlist:latest`（digest `sha256:11b490123d57f88c84ecda46285e1921869cf511da3e5bb4062f183e7e1200b7`，OpenList v4.2.7，Commit 3b28270，linux/arm64，OrbStack），两个 Local storage 分别挂载在 /a 与 /b；`pnpm test:integration` 3/3 通过，覆盖静态 token 与非管理员 password 账号的连接测试、浏览及管理员完整挂载解析。另对该临时实例做过一次性写入核对：multipart init→chunk→status→complete、init→abort 与 0 字节 put 均按本表协议成功；尚未收到分片时快照的 `received` 为 `null`（Go nil 切片），客户端按空区间处理。
+M3a/M3b 集成测试记录（2026-10-20）：继续使用上述 v4.2.7 实例（Local /a、/b），以及 `openlistteam/openlist:v4.2.5`（digest `sha256:3b9e56330ebf4aa40192e566bbbd79567591bb13c0ac252db02c41616cd75d1d`，Local /a）。`pnpm test:integration` 共 8/8 通过（含 Phase 5 复验）：保留 M1 三个只读用例，新增 L1、L2-relay、L3 双向及 L3 限速取消五个执行用例，验证新建、替换、0 字节 put、mirror 文件 extras 和空目录清理。每种拓扑包含 10 MiB+4097 字节模式数据，并读取最终内容核对；取消用例核对 Run cancelled、Operation unknown 和 session 已停止接收。仅使用测试自有 UUID 临时目录并清理，不创建或调整容器。该记录只认证 Local 的 relay/Put/Remove；server_copy 与真实云驱动未测。
 连接测试从 /api/public/settings 的 version 字段（形如 `v4.2.6 (Commit: …) - Frontend: …`）解析版本号，无法解析或低于 4.2.5 时失败。MVP 发布以 M8 实际集成测试所用的固定官方镜像版本（tag/digest）为准，并同时覆盖 4.2.5；运行时响应字段缺失报协议错误。
 
 ## 公共行为
@@ -40,7 +41,7 @@ M1 集成测试记录（2026-10-19）：官方镜像 `openlistteam/openlist:late
 | GET /p/{globalPath}?sign=...                | 同上                                                                           | 代理内容或配置的下载代理302；可能403                                                                | 强制代理选项                    |
 
 password字段填该endpoint的路径密码（从runs.secret_snapshot_enc解密，无密码时为空字符串）。只有fs/list和fs/get接收路径密码；mkdir/copy/remove/put/multipart由/api/me权限位和meta write_users控制。子路径自己的meta密码不同时返回403，按扫描不完整处理，不当作缺失。
-任务只来自server_copy的copy。若As-Task:false的0字节put返回非预期task，其形状为 `data.task: TaskInfo`（与 copy 的 `data.tasks[]` 不同），执行器先保存tid并报告协议异常，按已知远程任务收尾，不能当无副作用失败重传。
+任务只来自server_copy的copy。若As-Task:false的0字节put返回非预期task，其形状为 `data.task: TaskInfo`（与 copy 的 `data.tasks[]` 不同），属于非符合协议的服务响应；执行器记unknown + UPSTREAM_PROTOCOL_ERROR并隔离，不保存tid、不跟踪上传task，也不按无副作用失败重传。
 multipart session按创建它的用户校验所有权，只在内存中保存，OpenList重启即消失，闲置30分钟过期；本服务不用path+size形式的status接管会话。
 绝不调用task.retry、delete运行任务、clear_*、fs/move、recursive_move、remove_empty_directory或目录copy。批量names只用单个名字以避免部分提交不知对应关系。
 

@@ -2,6 +2,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { OnApplicationShutdown, OnModuleDestroy } from '@nestjs/common';
 import { Agent, request } from 'undici';
+import type { Readable } from 'node:stream';
 import { finished } from 'node:stream/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 import { AppConfig } from '../configuration/app-config.js';
@@ -25,7 +26,7 @@ export interface HttpCall extends RequestContext {
   /** JSON 请求值；undefined 不发送 body。 */
   json?: unknown;
   /** 上传字节；不自动重放。 */
-  body?: Buffer;
+  body?: Buffer | Readable;
   /** 已验证上传头，不允许日志输出。 */
   headers?: Record<string, string>;
   /** 父任务的取消或截止信号。 */
@@ -98,7 +99,7 @@ export class OpenListTransport
     const timeout = call.transfer
       ? call.signal
       : AbortSignal.timeout(settings.apiTimeoutMs);
-    const signals = [this.shutdown.signal];
+    const signals: AbortSignal[] = call.cleanup ? [] : [this.shutdown.signal];
     if (timeout) signals.push(timeout);
     if (call.signal) signals.push(call.signal);
     const signal = AbortSignal.any(signals);
@@ -160,6 +161,8 @@ export class OpenListTransport
   ): Promise<unknown> {
     const settings = call.settings ?? this.config.execution;
     let release: (() => void) | undefined;
+    let dispatched = false;
+    let checkpoint = false;
     try {
       if (!call.transfer)
         release = await this.quota.acquire(
@@ -174,6 +177,11 @@ export class OpenListTransport
       };
       if (token !== undefined) headers.authorization = token;
       if (call.json !== undefined) headers['content-type'] = 'application/json';
+      checkpoint = true;
+      call.beforeDispatch?.();
+      checkpoint = false;
+      signal.throwIfAborted();
+      dispatched = true;
       const response = await request(instance.baseUrl + call.endpoint, {
         dispatcher: this.dispatcher(settings.connectTimeoutMs),
         idempotent: false,
@@ -242,6 +250,8 @@ export class OpenListTransport
             status,
             envelope.code,
             retryAfter,
+            envelope.data,
+            true,
           );
         return envelope.data;
       } finally {
@@ -260,7 +270,7 @@ export class OpenListTransport
         }
       }
     } catch (error) {
-      if (error instanceof OpenListError) throw error;
+      if (checkpoint || error instanceof OpenListError) throw error;
       this.logger.debug('OpenList transport unavailable', {
         instanceId: instance.id,
         ...errorTraits(error),
@@ -270,6 +280,11 @@ export class OpenListTransport
         signal.aborted
           ? 'OpenList request deadline or cancellation'
           : 'OpenList network request failed',
+        null,
+        null,
+        0,
+        undefined,
+        dispatched,
       );
     } finally {
       release?.();

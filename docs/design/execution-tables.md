@@ -14,7 +14,7 @@
 | dry_run / confirm_deletes                                | BOOL            | 接受请求时固定                                         |
 | status                                                   | ENUM RunStatus  | queued                                                 |
 | run_config_json                                          | JSON            | snapshotVersion=1，见数据模型                          |
-| secret_snapshot_enc                                      | ENC?            | 本轮路径密码，终态且无后续需要可清除                   |
+| secret_snapshot_enc                                      | ENC?            | 本轮路径密码，Run终态事务清除                          |
 | stats_json                                               | JSON            | Stats，默认各项0                                       |
 | stop_reason                                              | STR?            | USER_CANCEL / RUN_TIMEOUT / PROCESS_RESTART            |
 | error_code / error_message                               | STR?            | 脱敏；如 QUEUE_TIMEOUT、SOURCE_ROOT_UNAVAILABLE        |
@@ -108,3 +108,5 @@ FK创建时允许SQLite表间前向引用；Drizzle迁移最终必须校验外�
 CHECK约束补充：Run终态须ended_at非NULL；Operation终态须ended_at非NULL；unknown须unknown_since/unknown_until非NULL；resolution_kind非NULL须resolved_at非NULL；resolution_kind='abandoned'须resolution_note非NULL。大小、计数均≥0。跨表身份一致性在仓储事务中校验，不能以DTO校验代替FK。
 seq、attempt_no必须≥1；caused_by_operation_id仅在error_code=REMOTE_TASK_CHANGED时非NULL，且此类行必须引用原Operation，tid为NULL。reobserved_by_run_id写实际完成重新观察的Run。
 Stats和公共JSON形状见[API schemas](../reference/api-schemas.md)。枚举、数据约束与DTO均需行为测试，不能只测试SQL字符串。
+
+MAX_OPERATIONS_PER_RUN只限制初始计划。每个逻辑动作最多RETRY_MAX_ATTEMPTS次；每个额外create attempt最多引入一个retry_cleanup逻辑动作，该清理自身有同样的attempt上限且不生成其它清理。清理预算按逻辑动作累计预留，同一清理的重试不重复占额。

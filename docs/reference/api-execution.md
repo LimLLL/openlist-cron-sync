@@ -22,7 +22,7 @@
 reason要求1–1000字符，禁止只有空白。分页和错误格式继承[REST](rest-api.md)，error code取值见[固定原因码](rest-api.md#reason-codes)。没有Operation直接retry API；请求新Run重新扫描，自动有限attempt由执行器负责。
 Operation列表按(runId,seq)升序，seq是Run内的计划顺序。includeMaintenance=false时不返回维护循环挂在该Run下的REMOTE_TASK_CHANGED隔离记录；GET /operations不按此过滤。
 
-M2阶段请求必须显式提供dryRun=true；false或省略返回400 VALIDATION_ERROR且不创建Run，M3a才解除此阶段限制。M2只提供里程碑端点表列出的触发与查询，不提供cancel、隔离或真实执行。
+M3默认dryRun=false，支持真实relay、取消和unknown管理。createMode=server_copy的非dry-run请求在插入Run之前返回400 VALIDATION_ERROR（M6边界），dry-run仍允许。
 
 ## 手动执行
 

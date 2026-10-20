@@ -1,17 +1,26 @@
-// 装配 M2 扫描模块，不引入 Relay 或通知执行依赖。
+// 装配扫描、执行与Relay协作，不引入后续通知模块。
 import { Module } from '@nestjs/common';
 import { DatabaseModule } from '../database/database.module.js';
 import { SecurityModule } from '../security/security.module.js';
 import { OpenListModule } from '../openlist/openlist.module.js';
+import { RelayModule } from '../relay/relay.module.js';
+import { CoordinationModule } from '../coordination/coordination.module.js';
+import { Executor } from './executor.service.js';
 import { SyncService } from './sync.service.js';
-/** 只读扫描规划模块。
+/** 扫描规划与具体执行模块。
  * @param 不适用。
  * @returns 不适用。
  * @throws 不适用。
  */
 @Module({
-  imports: [OpenListModule, SecurityModule, DatabaseModule],
-  providers: [SyncService],
-  exports: [SyncService],
+  imports: [
+    RelayModule,
+    OpenListModule,
+    SecurityModule,
+    DatabaseModule,
+    CoordinationModule,
+  ],
+  providers: [SyncService, Executor],
+  exports: [SyncService, Executor],
 })
 export class SyncModule {}

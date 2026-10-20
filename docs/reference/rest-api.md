@@ -72,7 +72,7 @@ Error={error:{code:string,message:string,details:FieldError[]},requestId:string}
 | PRECONDITION_ALREADY_ABSENT | 待删除的原路径已不存在；属于正常跳过，不阻断依赖create                                                                                         |
 | SOURCE_CHANGED              | 执行时源条目的名称/类型/大小与计划不符                                                                                                         |
 | SIZE_MISMATCH               | relay源实际字节数、下载长度或Content-Range与计划大小不符                                                                                       |
-| SPOOL_FULL                  | 写spool时遇到真实ENOSPC/EDQUOT；该文件按主动abort收尾记failed                                                                                  |
+| SPOOL_FULL                  | 写spool遇到ENOSPC/EDQUOT，或session落库后当前独占预算仍不足以容纳frontier实际payload；摘要区分insufficient spool capacity，主动abort后failed   |
 | SPOOL_IO_ERROR              | 写或读spool时遇到其他本地I/O错误；该文件按主动abort收尾记failed                                                                                |
 | DEPENDENCY_FAILED           | 依赖动作以非成功终态结束                                                                                                                       |
 | DELETE_NOT_EFFECTIVE        | delete确认期限内原名称仍存在；依赖create跳过，从不改用overwrite                                                                                |

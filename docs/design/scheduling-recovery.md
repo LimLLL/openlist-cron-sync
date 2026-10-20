@@ -22,7 +22,7 @@ cron使用直接依赖cron的CronJob，由@nestjs/schedule的SchedulerRegistry�
 ## 资源层级
 
 1. Run执行位：含扫描及执行，恢复中的Run只保留路径占用，不占新Run执行位。
-2. 路径占用：source只读、targets写；read/read可并行，write/write和write/read的相等/祖先后代关系互斥。
+2. 路径占用：真实Run的source只读、targets写；dry-run全部endpoint只读；read/read可并行，write/write和write/read的相等/祖先后代关系互斥。
 3. 每Instance API并发和请求速率；其中至少一个API位优先服务认证/轮询/取消，maxApiConcurrency=1时控制请求先于新提交。
 4. 每Instance outstanding task额度（仅server_copy）从提交预留到终态释放，不等于正在运行线程数。
 5. relay名额：源Instance下载连接与目标Instance上传session在文件开始前按instance id排序获取，chunk请求另受全局与每实例chunk并发约束，见[Relay](relay.md#资源)；失败/取消释放已取得名额。
@@ -40,7 +40,7 @@ cron使用直接依赖cron的CronJob，由@nestjs/schedule的SchedulerRegistry�
 ## 取消与超时
 
 POST cancel对非终态返回202、写cancelRequestedAt；重复请求不重复远程cancel。终态返回200现有Run。queued Run直接cancelled，不执行远程操作。
-scanning/planned/executing进入cancelling：立即停止派发；pending→cancelled；本地扫描Abort；relay停止发送并对已记录session发一次有界abort；对已知tid发cancel并轮询到终态或cancelGrace到期。
+scanning/planned/executing进入cancelling：立即停止派发；pending→cancelled；本地扫描Abort；relay停止发送并对已记录session发一次有界abort；对已知tid发cancel并轮询到终态或cancelGrace到期。已派发的mkdir/remove/0字节put继续等待响应，已收到remove成功的delete继续确认读，二者都在cancelGrace内按[完成分类](openlist-integration.md#完成分类)记录结果。
 宽限结束仍无终态的动作unknown并隔离；已知成功保留成功，不回滚。Run cancelled；终态通知策略见[通知](observability-notifications.md)。
 recovering Run收到cancel：只写cancelRequestedAt，对仍未终态的已知tid最多发一次cancel（与恢复期限到期时的cancel合计也只发一次）；Run终态仍为interrupted+PROCESS_RESTART，不变为cancelled。
 timeoutSeconds从startedAt计，不包含queue等待。RUN_TIMEOUT与USER_CANCEL都走相同收尾，stopReason区别。
@@ -51,9 +51,9 @@ timeoutSeconds从startedAt计，不包含queue等待。RUN_TIMEOUT与USER_CANCEL
 SIGTERM（计划内停止）不写任何Run终态，按以下顺序处理：
 
 1. ready=false；停止新触发、派发、新的OpenList提交和维护循环。
-2. Abort本地扫描和下载。已记录upload_id的relay在宽限内尝试multipart abort，结果按[relay结果分类](relay.md#结果分类)记录，通常为unknown并隔离；确定尚未init的relay记failed。
-3. 在SHUTDOWN_GRACE_SECONDS内持久化已经收到的响应与task结果。不对已知OpenList task发cancel，也不delete远程任务。宽限内仍无响应的请求保持submitting，由下次启动按崩溃窗口处理。
-4. 关闭HTTP连接池和数据库后退出。
+2. Abort本地扫描和下载。已记录upload_id的relay在宽限内尝试multipart abort，结果按[relay结果分类](relay.md#结果分类)记录，通常为unknown并隔离；尚未提交的relay保持pending，重启时按PLAN_INTERRUPTED跳过。
+3. 在SHUTDOWN_GRACE_SECONDS内持久化已经收到的响应与task结果。不对已知OpenList task发cancel，也不delete远程任务。宽限内仍无响应的请求保持submitting，正在确认的delete保持running，由下次启动按崩溃窗口及确认读处理。
+4. 关闭HTTP连接池和数据库后退出。宽限到期时在途远端动作已中止；关闭流程另给本地持久化与资源释放固定5秒余量，仍未结束则以错误退出，不在晚回调存在时关闭数据库。
 
 下次启动按[启动恢复](#启动恢复)处理：queued重新入队；scanning/planned→interrupted；executing/cancelling/recovering→recovering→interrupted（stopReason=PROCESS_RESTART）。因此计划内重启与强杀得到相同的Run终态，不取决于停止耗时。进程被强杀时没有第2–3步，submitting窗口同样由恢复识别。
 
@@ -61,16 +61,17 @@ SIGTERM（计划内停止）不写任何Run终态，按以下顺序处理：
 
 启动恢复由RunsModule执行：先在CoordinationModule中重建全部未决路径占用与隔离，再置ready、恢复queued、注册cron和启动维护；已知task的跟踪在后台有界进行。
 
-| 旧状态                                 | 行为                                                                                                                                                                                         |
-| -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| queued                                 | 保留配置、createdAt与queueDeadlineAt重新入队；已过期则failed，error_code=QUEUE_TIMEOUT                                                                                                       |
-| scanning/planned                       | interrupted（stopReason=PROCESS_RESTART）；pending→skipped，error_code=PLAN_INTERRUPTED；不执行旧计划                                                                                        |
-| executing/cancelling/recovering        | recovering；同一事务将剩余pending标skipped（error_code=PLAN_INTERRUPTED）；recovery_deadline_at仅在首次进入recovering时写入，后续重启沿用；保留路径占用，已知task恢复info跟踪                |
-| submitting且无可靠响应                 | unknown，不通过名字猜task                                                                                                                                                                    |
-| running且无tid（delete已收到成功响应） | 在恢复期限内只做refresh=true确认读：原名消失→succeeded；仍存在且已有结束证据→按DELETE_NOT_EFFECTIVE规则；无法确认→unknown                                                                    |
-| relay（本服务进程已退出）              | 有upload_id：恢复期限内按upload_id查status并尝试abort，没有可靠完成证据则unknown（completed后session即被移除，查不到不代表失败）；已写submitting但无upload_id：unknown；确定尚未init：failed |
+| 旧状态                                 | 行为                                                                                                                                                                                                                |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| queued                                 | 保留配置、createdAt与queueDeadlineAt重新入队；已过期则failed，error_code=QUEUE_TIMEOUT                                                                                                                              |
+| scanning/planned                       | interrupted（stopReason=PROCESS_RESTART）；pending→skipped，error_code=PLAN_INTERRUPTED；不执行旧计划                                                                                                               |
+| executing/cancelling/recovering        | recovering；同一事务将剩余pending标skipped（error_code=PLAN_INTERRUPTED）；recovery_deadline_at仅在首次进入recovering时写入，后续重启沿用；保留路径占用，已知task恢复info跟踪                                       |
+| submitting且无可靠响应                 | unknown，不通过名字猜task                                                                                                                                                                                           |
+| running且无tid（delete已收到成功响应） | 在恢复期限内只做refresh=true确认读：原名消失→succeeded；仍存在且已有结束证据→按DELETE_NOT_EFFECTIVE规则；无法确认→unknown                                                                                           |
+| relay（本服务进程已退出）              | 有upload_id：恢复期限内按upload_id查status并尝试abort，没有可靠完成证据则unknown（completed后session即被移除，查不到不代表失败）；已写submitting但无upload_id：unknown；尚未提交的pending：skipped PLAN_INTERRUPTED |
 
 启动时先重建未决责任，再清空spool。恢复不派发旧pending，不续传relay，也不继续旧multipart session；确认读只读取，不算派发。到recovery_deadline_at，未取得终态的已知task最多请求cancel一次；仍未明确终止则unknown并按[Unknown隔离](#unknown隔离)处理，记录原tid。
+relay已持久化multipart_state=completed且source_stream_completed_at非NULL时，直接采用该完成证据收敛为succeeded；不能因之后status返回404而丢失证据。仅在内存收到过响应不满足此条件。
 恢复完成Run统一interrupted（stopReason=PROCESS_RESTART），即使已知task全部成功；具体Operation结果仍保留。
 下一次cron或人工Run重新扫描；manual-only Job不自动产生新Run。通知delivery的重启处理见[投递](observability-notifications.md#投递)。
 
@@ -123,3 +124,5 @@ token模式的PATCH无法当场确认账号，因此每次/api/me成功（连接
 ## 时序来源
 
 见[时序说明](sequences.md)。期限为风险策略，不是远端取消证明；[AWS超时与重试说明](https://aws.amazon.com/builders-library/timeouts-retries-and-backoff-with-jitter/)用于解释限制，不引入外部幂等服务。
+
+本轮路径密码快照保留到Run终态事务（含恢复后的interrupted），该事务清除secret_snapshot_enc。后续再观察由新Run使用自己的密码快照；旧unknown仅保留路径和身份责任。缺失父目录可由账号命名空间内最近已有祖先的refresh=true完整非可疑列表证明缺失分支；读取错误不能当作缺失。隔离不阻止作为其他Job的source读取，因此本服务自身迟到写入仍可能被新Run读到，目标独占不能消除此风险。

@@ -81,6 +81,7 @@ export class OpenListClient {
    * @param directory 账号目录。
    * @param name 原始名称。
    * @param password 路径密码。
+   * @param context 调用方固定设置、停止信号及提交前持久化检查点。
    * @returns 合法条目；raw_url 不透出。
    * @throws OpenListError 请求失败；ApiError 路径非法。
    */
@@ -89,10 +90,12 @@ export class OpenListClient {
     directory: string,
     name: string,
     password = '',
+    context: RequestContext = {},
   ): Promise<FileEntry> {
     const path = childPath(directory, name);
     return fileEntry(
       await this.auth.call(instance, {
+        ...context,
         endpoint: '/api/fs/get',
         method: 'POST',
         read: true,
@@ -103,11 +106,17 @@ export class OpenListClient {
   /** 创建目录，只返回协议成功事实。
    * @param instance 实例。
    * @param path 账号目录。
+   * @param context 调用方固定设置、停止信号及提交前持久化检查点。
    * @returns 不适用。
    * @throws OpenListError 上游失败；ApiError 路径非法。
    */
-  async mkdir(instance: InstanceRecord, path: string): Promise<void> {
+  async mkdir(
+    instance: InstanceRecord,
+    path: string,
+    context: RequestContext = {},
+  ): Promise<void> {
     await this.auth.call(instance, {
+      ...context,
       endpoint: '/api/fs/mkdir',
       method: 'POST',
       control: false,
@@ -118,6 +127,7 @@ export class OpenListClient {
    * @param instance 实例。
    * @param directory 账号目录。
    * @param name 原始名称。
+   * @param context 调用方固定设置、停止信号及提交前持久化检查点。
    * @returns 不适用。
    * @throws OpenListError 非法名称或上游失败。
    */
@@ -125,9 +135,11 @@ export class OpenListClient {
     instance: InstanceRecord,
     directory: string,
     name: string,
+    context: RequestContext = {},
   ): Promise<void> {
     childPath(directory, name);
     await this.auth.call(instance, {
+      ...context,
       endpoint: '/api/fs/remove',
       method: 'POST',
       control: false,

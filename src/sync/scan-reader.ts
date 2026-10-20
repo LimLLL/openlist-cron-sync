@@ -1,8 +1,10 @@
 // 读取当前目录并映射挂载、协议和根存在性事实，不把上游错误当缺失。
+import { Logger } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { instances } from '../database/schema.js';
 import type { InstanceRecord } from '../database/schema.js';
+import type { FileList } from '../openlist/protocol.js';
 import type { OpenListClient } from '../openlist/client.service.js';
 import { OpenListError } from '../openlist/errors.js';
 import { childPath, globalPath } from '../openlist/paths.js';
@@ -12,6 +14,7 @@ import type { Entry } from './planner.js';
 import type { PathSecrets } from '../jobs/job-types.js';
 import type { PlanWriter, TargetState } from './plan-writer.js';
 import { PlanError } from './stats.js';
+import type { QuarantineObserver } from './quarantine-observer.js';
 import { ApiError } from '../common/errors.js';
 
 /** 一个完整响应的目录事实。 */
@@ -33,6 +36,7 @@ export interface DirectoryView {
  * @throws 不适用。
  */
 export class ScanReader {
+  private readonly logger = new Logger(ScanReader.name);
   private readonly mounts = new Map<string, Storage[] | null>();
   /** 保存只读客户端和快照。
    * @param db 数据库。
@@ -40,6 +44,7 @@ export class ScanReader {
    * @param writer 计划及诊断。
    * @param secrets 路径密码，仅内存。
    * @param signal Run 停止信号。
+   * @param quarantine 当前Run的分页隔离检查与强制观察能力。
    * @returns 不适用。
    * @throws 不适用。
    */
@@ -49,6 +54,7 @@ export class ScanReader {
     private readonly writer: PlanWriter,
     private readonly secrets: PathSecrets,
     private readonly signal: AbortSignal,
+    readonly quarantine: QuarantineObserver,
   ) {}
   /** 加载每个管理员实例的完整挂载映射一次（客户端允许一次不一致重读）。
    * @param 不适用。
@@ -140,13 +146,41 @@ export class ScanReader {
     const password = target
       ? this.secrets.targetPasswords[target.row.targetId]
       : this.secrets.sourcePassword;
-    const list = await this.client.list(
-      this.instance(endpoint.instanceId),
-      path,
-      password ?? '',
-      refresh ?? endpoint.refresh,
-      { signal: this.signal, settings: this.writer.run.config.settings },
-    );
+    const forced = target && this.quarantine.refresh(target.row, path);
+    const context = {
+      signal: this.signal,
+      settings: this.writer.run.config.settings,
+    };
+    let list: FileList;
+    try {
+      list = await this.client.list(
+        this.instance(endpoint.instanceId),
+        path,
+        password ?? '',
+        forced ? true : (refresh ?? endpoint.refresh),
+        context,
+      );
+    } catch (error) {
+      this.signal.throwIfAborted();
+      if (
+        !forced ||
+        (refresh ?? endpoint.refresh) ||
+        !(error instanceof OpenListError)
+      )
+        throw error;
+      // 普通缓存扫描仍可服务不受影响的兄弟；隔离动作在allows中必须重新刷新成功，不能使用此回退视图获准写入。
+      this.logger.warn('Required quarantine refresh unavailable', {
+        runId: this.writer.run.id,
+        errorCode: error.code,
+      });
+      list = await this.client.list(
+        this.instance(endpoint.instanceId),
+        path,
+        password ?? '',
+        false,
+        context,
+      );
+    }
     this.signal.throwIfAborted();
     const mounts = this.mounts.get(endpoint.instanceId);
     const resolution = mounts
@@ -168,6 +202,9 @@ export class ScanReader {
       resolution !== undefined &&
       resolution.storage === null &&
       (resolution.candidates.length > 0 || !resolution.suspect);
+    // 已有空目录可能没有任何后续候选；仍需在比较前观察其旧mkdir责任。
+    if (target && forced && mounts !== null && !suspect && !unavailableMount)
+      await this.quarantine.allows(target.row, path, 'mkdir');
     // 一次写入最终保护范围；先写局部问题再写整树问题会被相同路径/码去重。
     if (suspect || unavailableMount)
       this.writer.issue(target, path, 'SUSPECT_VIEW', unavailableMount);

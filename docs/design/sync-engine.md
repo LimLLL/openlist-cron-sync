@@ -101,3 +101,11 @@ create重试发现部分目标文件：先刷新并确认原远程动作已结�
 Stats定义见[API schemas](../reference/api-schemas.md)。planned计数在planned后固定；实际动作和重试bytes分别累计，不能用成功HTTP数推算文件数。
 unchanged是扫描事实，不逐个持久化Operation。扫描错误保留scan_issues，不能只剩总计。
 同大小数据错误、上游成功后实际失败和迟到操作是已接受限制；见[需求](requirements.md#已接受风险)。
+
+## M3执行细化
+
+M3a/M3b作为一个变更实现relay、替换、Mirror和Run生命周期。真实server_copy在触发事务之前拒绝，dry-run仍可预览。执行器查询当前pending集合，按依赖选择准备动作；不能只向前扫描seq，因为重试可能使更早的下游重新就绪。替换和retry_cleanup的delete只能由文件协调器在源首块准备后调用，不能独立派发。父mkdir失败会阻断子操作；新根mkdir成功后的刷新失败保留mkdir成功，并记TARGET_ROOT_UNAVAILABLE。
+
+每个Target的创建阶段包含延迟重试和retry_cleanup。最后attempt收敛后重算extras_blocked，再执行文件extras；目录extras按计划后序逐个刷新为空再删除。目录成功不计入deletedAsExtra等文件计数，其结果从Operations查询。PRECONDITION_ALREADY_ABSENT是正常收敛；只有这类跳过而无异常时Run仍可succeeded。
+
+重试不修改旧终态，retryOf始终指向根。重连仅替换同一逻辑依赖顶点的attempt，不引入反向逻辑边；因此无环性不依赖重试行seq小于下游。一次额外create attempt最多建立一个cleanup根，cleanup只重试自身，不递归建立cleanup。初始R预算不回收，cleanup根累计使用budget−R余量，其重试不重复计额。

@@ -16,5 +16,5 @@
 承担[未决责任](data-model.md#responsibility)的记录所在的整组 Run 不清理；此外仍被组外后续 Run/Operation 引用的组也跳过。
 清理仅选择整条引用闭包均无责任且全部 Run 超期的组。单事务先清除组内 nullable 反向引用（operations.retry_of/caused_by_operation_id/resolved_by_run_id/reobserved_by_run_id），删除 delivery、operation_dependencies、scan_issues、operations、run_targets、runs。组外引用存在则整组跳过。外键 RESTRICT 失败回滚并记录，不关闭 foreign_keys 硬删。
 同一次关联链只要仍有责任就保留；长期 unknown 会使实际历史超过30天，system/info 显示数量和最老时间。
-关联 Run 的通知投递随 Run 清理；test 投递保留30天。终态后立即清除投递的 URL 与 secret 副本。确认无需远程责任后清除 Run 路径密码副本。
+关联 Run 的通知投递随 Run 清理；test 投递保留30天。终态后立即清除投递的 URL 与 secret 副本。Run终态事务清除其路径密码副本；后续重新观察使用新Run自己的快照。
 不自动 VACUUM 大型数据库，不添加磁盘对账服务。磁盘满或 SQL 写失败停止新远程写入并 fail-fast。relay 的 spool 不属于历史记录，规则见 [Relay](relay.md#spool)。

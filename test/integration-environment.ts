@@ -30,6 +30,14 @@ export interface IntegrationEnvironment {
   password: string;
   /** 两种账号均可见的账号相对 Local 目录。 */
   localPath: string;
+  /** 同实例第二个Local存储的账号路径。 */
+  secondLocalPath: string;
+  /** 已由维护者准备的4.2.5实例地址。 */
+  peerBaseUrl: string;
+  /** 对端管理员裸token，禁止记录。 */
+  peerAdminToken: string;
+  /** 对端Local存储账号路径。 */
+  peerLocalPath: string;
 }
 export const INTEGRATION_VARIABLES = [
   'OPENLIST_IT_BASE_URL',
@@ -37,6 +45,10 @@ export const INTEGRATION_VARIABLES = [
   'OPENLIST_IT_USERNAME',
   'OPENLIST_IT_PASSWORD',
   'OPENLIST_IT_LOCAL_PATH',
+  'OPENLIST_IT_SECOND_LOCAL_PATH',
+  'OPENLIST_IT_PEER_BASE_URL',
+  'OPENLIST_IT_PEER_ADMIN_TOKEN',
+  'OPENLIST_IT_PEER_LOCAL_PATH',
 ] as const;
 /** 集中读取所有必需变量，缺少任何一个立即失败。
  * @param environment 环境来源。
@@ -58,8 +70,29 @@ export function integrationEnvironment(
     throw new Error(
       `Missing integration environment variables: ${missing.join(', ')}`,
     );
-  const baseUrl = required(environment, 'OPENLIST_IT_BASE_URL');
-  const localPath = required(environment, 'OPENLIST_IT_LOCAL_PATH');
+  return {
+    baseUrl: validatedUrl(environment, 'OPENLIST_IT_BASE_URL'),
+    localPath: validatedPath(environment, 'OPENLIST_IT_LOCAL_PATH'),
+    secondLocalPath: validatedPath(
+      environment,
+      'OPENLIST_IT_SECOND_LOCAL_PATH',
+    ),
+    peerBaseUrl: validatedUrl(environment, 'OPENLIST_IT_PEER_BASE_URL'),
+    peerAdminToken: required(environment, 'OPENLIST_IT_PEER_ADMIN_TOKEN'),
+    peerLocalPath: validatedPath(environment, 'OPENLIST_IT_PEER_LOCAL_PATH'),
+    adminToken: required(environment, 'OPENLIST_IT_ADMIN_TOKEN'),
+    username: required(environment, 'OPENLIST_IT_USERNAME'),
+    password: required(environment, 'OPENLIST_IT_PASSWORD'),
+  };
+}
+/** 校验两个真实实例地址，不把可能含凭据的原始URL写入错误。
+ * @param environment 集成环境。
+ * @param name 地址变量名。
+ * @returns 已验证地址。
+ * @throws Error 地址协议、凭据或字符非法。
+ */
+function validatedUrl(environment: NodeJS.ProcessEnv, name: string): string {
+  const baseUrl = required(environment, name);
   try {
     const url = new URL(baseUrl);
     if (
@@ -70,22 +103,26 @@ export function integrationEnvironment(
     )
       throw new Error('Invalid URL');
   } catch {
-    throw new Error('Invalid integration environment: OPENLIST_IT_BASE_URL');
+    throw new Error(`Invalid integration environment: ${name}`);
   }
+  return baseUrl;
+}
+/** 校验Local存储路径，禁止分享命名空间和点段逃逸。
+ * @param environment 集成环境。
+ * @param name 存储路径变量名。
+ * @returns 已验证绝对路径。
+ * @throws Error 路径非法。
+ */
+function validatedPath(environment: NodeJS.ProcessEnv, name: string): string {
+  const localPath = required(environment, name);
   if (
     !localPath.startsWith('/') ||
     localPath.startsWith('/@s') ||
     localPath.includes('\\') ||
     localPath.split('/').some(isDot)
   )
-    throw new Error('Invalid integration environment: OPENLIST_IT_LOCAL_PATH');
-  return {
-    baseUrl,
-    localPath,
-    adminToken: required(environment, 'OPENLIST_IT_ADMIN_TOKEN'),
-    username: required(environment, 'OPENLIST_IT_USERNAME'),
-    password: required(environment, 'OPENLIST_IT_PASSWORD'),
-  };
+    throw new Error(`Invalid integration environment: ${name}`);
+  return localPath;
 }
 /** 读取经集中验证的值。
  * @param environment 环境。

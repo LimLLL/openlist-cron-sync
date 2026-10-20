@@ -1,6 +1,6 @@
-// 定义预览触发与分页查询，M2 明确只接受 dryRun=true。
-import { ApiProperty, ApiPropertyOptional, PickType } from '@nestjs/swagger';
-import { IsBoolean, IsDefined, IsIn, IsUUID } from 'class-validator';
+// 定义真实relay触发、dry-run与分页查询，默认真实执行。
+import { ApiPropertyOptional, PickType } from '@nestjs/swagger';
+import { IsBoolean, IsIn, IsUUID } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { InstanceQueryDto, Optional } from '../instances/input.dto.js';
 import { OPERATION_STATUSES, RUN_STATUSES } from './run-types.js';
@@ -26,21 +26,21 @@ function booleanQuery(input: { value: unknown }): unknown {
       ? false
       : input.value;
 }
-/** M2 触发契约，省略或 false 返回 400 且不创建 Run。
+/** 执行触发契约；server_copy真实执行在M6开放。
  * @param 不适用。
  * @returns 不适用。
  * @throws 不适用。
  */
 export class TriggerRunDto {
-  /** M2 必填 true；M3a 才开放真实执行。 */
-  @ApiProperty({
+  /** 默认真实执行；true只扫描规划。 */
+  @ApiPropertyOptional({
     type: Boolean,
-    enum: [true],
-    description: 'M2 只接受 true；省略或 false 返回 400 VALIDATION_ERROR',
+    default: false,
+    description: 'true只预览；false真实relay执行，server_copy真实执行在M6开放',
   })
-  @IsDefined()
-  @IsIn([true])
-  dryRun: true;
+  @Optional()
+  @IsBoolean()
+  dryRun = false;
   /** 仅跳过数量/比例阈值，不能覆盖扫描保护。 */
   @ApiPropertyOptional({
     default: false,

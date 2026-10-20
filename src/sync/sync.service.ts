@@ -1,4 +1,4 @@
-// 编排扫描与后置安全检查，仅形成本地 dry-run 结果。
+// 编排扫描和后置安全检查，预览收尾或向执行阶段交付完整计划。
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { and, asc, count, eq, gt, inArray, placeholder } from 'drizzle-orm';
 import { setImmediate } from 'node:timers/promises';
@@ -16,9 +16,10 @@ import { PlanWriter } from './plan-writer.js';
 import { ScanReader } from './scan-reader.js';
 import { Scanner } from './scanner.js';
 import { deletionSafety } from './safety.js';
+import { Executor } from './executor.service.js';
 import { objectInput } from '../jobs/validation.js';
 
-/** M2 同步服务，没有远程执行依赖或执行分支。
+/** 完整计划与安全边界，真实文件写入由Executor执行。
  * @param 不适用。
  * @returns 不适用。
  * @throws 不适用。
@@ -28,8 +29,9 @@ export class SyncService {
   private readonly logger = new Logger(SyncService.name);
   /** 保存扫描依赖。
    * @param database 数据库。
-   * @param client 只读协议客户端。
+   * @param client 扫描协议客户端。
    * @param keys 路径密码解密。
+   * @param executor 真实执行和隔离观察依赖。
    * @returns 不适用。
    * @throws 不适用。
    */
@@ -37,6 +39,7 @@ export class SyncService {
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(OpenListClient) private readonly client: OpenListClient,
     @Inject(KeysService) private readonly keys: KeysService,
+    @Inject(Executor) private readonly executor: Executor,
   ) {}
   /** 执行一次扫描、固定完整计划，再完成安全计算和预览终态。
    * @param run 已取得执行位的 Run。
@@ -71,13 +74,15 @@ export class SyncService {
        */
       (a, b) => a.row.config.target.position - b.row.config.target.position,
     );
-    const writer = new PlanWriter(db, run, targets, signal);
+    const observer = this.executor.observer(run, signal);
+    const writer = new PlanWriter(db, run, targets, signal, observer);
     const reader = new ScanReader(
       db,
       this.client,
       writer,
       this.secrets(run),
       signal,
+      observer,
     );
     await new Scanner(reader, writer, signal).scan();
     signal.throwIfAborted();
@@ -156,6 +161,16 @@ export class SyncService {
           .get()?.n ?? 0;
     }
     signal.throwIfAborted();
+    const executable =
+      db
+        .select({ id: operations.id })
+        .from(operations)
+        .where(
+          and(eq(operations.runId, run.id), eq(operations.status, 'pending')),
+        )
+        .limit(1)
+        .get() !== undefined;
+    const terminal = run.dryRun || !executable;
     db.transaction(
       /** 在一个事务内写入安全检查产生的诊断与目标状态，并保存 Run 预览终态、清除秘密快照。
        * @param 不适用。
@@ -166,20 +181,22 @@ export class SyncService {
         writer.flush();
         db.update(runs)
           .set({
-            status: targets.some(
-              /** 检查目标是否存在阻断原因。
-               * @param target 目标扫描状态。
-               * @returns 是否有阻断原因，有则 Run 为 partial。
-               * @throws 不适用。
-               */
-              (target) => target.row.blockReasons.length > 0,
-            )
-              ? 'partial'
-              : 'succeeded',
+            status: !terminal
+              ? 'executing'
+              : targets.some(
+                    /** 检查目标是否存在阻断原因。
+                     * @param target 目标扫描状态。
+                     * @returns 是否有阻断原因，有则 Run 为 partial。
+                     * @throws 不适用。
+                     */
+                    (target) => target.row.blockReasons.length > 0,
+                  )
+                ? 'partial'
+                : 'succeeded',
             stats: writer.stats(),
-            endedAt: Date.now(),
+            endedAt: terminal ? Date.now() : null,
             updatedAt: Date.now(),
-            secretSnapshotEnc: null,
+            secretSnapshotEnc: terminal ? null : run.secretSnapshotEnc,
           })
           .where(eq(runs.id, run.id))
           .run();
