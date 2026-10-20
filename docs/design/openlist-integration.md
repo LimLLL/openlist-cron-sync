@@ -28,9 +28,9 @@ token模式使用管理员静态token，Authorization直接传token，不加Bear
 
 ### M1 实现边界
 
-认证阻断由 Security 的 `InstanceAuthState` 持久化，所有 OpenList 调用共享 `OpenListAuth`，不依赖 Instances controller。JWT 只在进程内；重启后重新登录仍先检查持久阻断。`authBlockReason` 的认证值为 `LOGIN_401`、`LOGIN_402`、`LOGIN_429`、`TOKEN_401`、`GUEST`、`MISSING_SECRET`；未来责任冲突使用 `ACCOUNT_CHANGED`。登录网络错误不写入凭据阻断。成功登录后先验证 `/api/me` 再发布会话。
+认证阻断由 Security 的 `InstanceAuthState` 持久化，所有 OpenList 调用共享 `OpenListAuth`，不依赖 Instances controller。JWT 只在进程内；重启后重新登录仍先检查持久阻断。`authBlockReason` 的认证值为 `LOGIN_401`、`LOGIN_402`、`LOGIN_429`、`TOKEN_401`、`GUEST`、`MISSING_SECRET`；M2起责任冲突使用 `ACCOUNT_CHANGED`。登录网络错误不写入凭据阻断。成功登录后先验证 `/api/me` 再发布会话。
 
-M1 尚无 jobs/runs/operations，身份比较后允许覆盖；PATCH 不访问上游，DELETE 归档并清空 `secret_enc`。M2 接入活动 Job 引用检查，M3a 接入真实未决责任查询：分别在 Instances 的 PATCH/DELETE 和 Security 身份保存前的比较点执行 `ENDPOINT_IN_USE` / `ACCOUNT_CHANGED` 规则。不提供永远返回 false 的责任占位函数。
+M1 尚无 jobs/runs/operations，身份比较后允许覆盖。M2 已接入非归档Job引用检查和真实未决责任查询（三项谓词完整）：Instances PATCH/DELETE执行ENDPOINT_IN_USE，Security在同一事务核对责任和保存身份，冲突持久化ACCOUNT_CHANGED且保留旧身份。limits/downloadMode有非终态Run引用时不可改；同身份凭据可修复。PATCH仍不访问上游，不提供恒false占位函数。
 
 M1 客户端只返回协议事实；不执行 observe-after-500、unknown/quarantine、任务状态推进或 relay。`putEmpty` 若意外收到 `data.task`，返回该任务事实，供 M3a 登记 tid 并报告协议异常，不丢失已知远端任务。chunk/complete 必须由调用方传入截止信号，不使用控制 API 的短超时、不占 API 并发位；init/status/abort 仍占用实例 API 配额，其中 init 是新提交，不享有控制请求的优先位置。人工重试（retryAuth=true）只越过持久阻断尝试一次，阻断在该次尝试成功前保持不变，网络失败不会解除。
 
@@ -108,7 +108,7 @@ relay以完整字节及complete结果为准，见[relay结果分类](relay.md#�
 
 source/target scan refresh默认分别关闭；删除前、删除确认、变更报错后的观察和隔离解除后的读取强制refresh=true，不受scan开关影响。权限不允许即阻断相关动作。
 管理员每Run读取完整storage/list（per_page=100，page递增直到覆盖total）；发现total变化或重复id时重取一次，仍不一致则本轮边界不可信，该Instance的视图按[挂载边界](deletion.md#挂载边界)的suspect规则处理。只提取id,mount_path,driver,disabled,status；立即丢弃addition等秘密。
-尚未覆盖total却返回空页、必要字段缺失、无效total或累计数量超过total同样视为分页不一致；整表重读最多一次后记MOUNT_BOUNDARY_UNKNOWN，不无限翻页或使用部分映射。全部请求受当前Run期限及响应大小限制。M1 的一次完整映射读取（含一次重读）共同受 OPENLIST_API_TIMEOUT_MS 约束。
+尚未覆盖total却返回空页、必要字段缺失、无效total或累计数量超过total同样视为分页不一致；整表重读最多一次后记MOUNT_BOUNDARY_UNKNOWN，不无限翻页或使用部分映射。全部请求受当前Run期限及响应大小限制。M2运行读取使用固定ExecutionSettings；普通浏览仍用进程配置。调用方可中止认证等待而不取消其他调用方共享的登录，发起共享登录的调用方提供该次认证的固定参数；关机等待已开始的认证结束后才关闭数据库。M1 的一次完整映射读取（含一次重读）共同受 OPENLIST_API_TIMEOUT_MS 约束。
 有效mount按OpenList算法计算：mount_path在最后一次出现`.balance`处截断（strings.LastIndex语义，不是后缀判断：`/a.balance/b`得`/a`，`/x.balancesheet`得`/x`），再在候选storage中按路径段边界做最长匹配；同一有效mount有多个候选时不猜。测试包含`/a.balance1`与`/a.balance/b`。读取失败不降级到普通账号路径。
 mount_details可因设置、超时、驱动能力和中间虚拟目录而缺失，仅用于提示风险。元数据变更和底层别名不在本服务完整证明范围内。
 

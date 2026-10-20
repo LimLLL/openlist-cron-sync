@@ -26,6 +26,12 @@ effectiveSourceEntryCount=通过文件过滤且大小已知、未受保护的文
 allowEmptySource只允许成功完整但有效集合为空，不能覆盖读取失败、权限错误或可疑视图。conflict不当作有效空源授权。
 各码的记录方式与影响范围以[原因码分类](state-machines.md#code-classification)为准。
 
+## 扫描阻断的计划表示
+
+比较时已知的过滤、碰撞、类型冲突、未知大小及保护子树不生成变更Operation；局部可疑范围只不生成replace与delete，其中已列出的源文件仍按新建规划（见[可疑视图](#可疑视图)）。其余已识别的delete候选照常分批持久化，不能因为较早发现一个全局阻断就省略后续候选。
+全部扫描后，source子树不完整、Target不完整/根不可用、EMPTY_SOURCE、实例级MOUNT_BOUNDARY_UNKNOWN、PLAN_INVALID使相应Target全部delete及依赖create标skipped DELETE_BLOCKED。仅extras被扫描问题阻断时，对该Target的extra删除候选使用同一码；其他合法replace不因此阻断。具体原因保留在blockReasons和scan_issues，DELETE_BLOCKED不另写scan_issue。
+planned计数与D/R保留全部已识别候选，不随skipped减少；实例级挂载不可信等全局保护不通过清零D/R表达，局部可疑或已保护条目仍不计入D。结果不依赖遍历顺序。DELETE_LIMIT仍表示数值阈值拒绝，不借用DEPENDENCY_FAILED或PLAN_INTERRUPTED表示扫描保护。
+
 ## 文件阈值
 
 **受管理目标文件**：来自完整、非可疑视图、大小已知的目标非目录条目，不受保护，并且满足以下之一：
@@ -39,7 +45,7 @@ allowEmptySource只允许成功完整但有效集合为空，不能覆盖读取�
 - `R` = plannedReplaceCount + plannedExtraCount；每个计划删除的路径都必须属于D的集合，每个路径最多计一次，因此恒有R≤D。
 - 数量超限：`R > maxDeleteCount`。
 - 比例超限：`100 × R > maxDeletePercent × D`，用安全整数/BigInt临时运算避免浮点舍入。
-- D=0且R=0：比例0。若出现R>D（只能是实现缺陷），该Target全部删除及依赖create skipped PLAN_INVALID，Run partial，并按缺陷记录错误日志；不可人工覆盖。
+- D=0且R=0：比例0。若出现R>D（只能是实现缺陷），记录scan_issue PLAN_INVALID，该Target全部删除及依赖create skipped DELETE_BLOCKED，Run partial，并按缺陷记录错误日志；不可人工覆盖。
 - 等于上限允许。例：D=10、R=5、percent=50允许；R=6拒绝。
 - limits.enabled=false：不检查count/percent。单字段NULL只禁用该项，enabled=true时至少一项非NULL。
 - confirmDeletes=true只对本次Run的所有Target跳过count/percent，不修改Job保存值。
@@ -59,7 +65,7 @@ delete确认刷新后原名称仍存在：有界等待后failed DELETE_NOT_EFFEC
 ## 挂载边界
 
 管理员读取完整storage/list，规范化账号basePath后的全局路径，用最长路径段匹配得到storage id。有效挂载路径按OpenList规则在mount_path中最后一次出现“.balance”处截断（不是只看后缀）；同一有效挂载有多个候选时，视为不能证明唯一storage，禁止涉及的删除。
-禁用存储不作为可写候选；其挂载边界仍当保护范围，不能退回父storage操作。失败/未初始化候选同样不作为可写storage。
+禁用存储不作为可写候选；其挂载边界仍当保护范围，不能退回父storage操作。失败/未初始化候选同样不作为可写storage。已判为protect_subtree的范围不再下探，不能因其中另有可用挂载而重新开放；独立旁支仍按自己的完整视图比较。
 范围包含嵌套挂载时，只保护该范围及危险祖先；可证明独立的其他文件允许处理。
 
 ## 可疑视图

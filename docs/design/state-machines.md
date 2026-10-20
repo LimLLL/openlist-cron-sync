@@ -84,6 +84,7 @@ queued 重启仍 queued，保留 createdAt 和 queueDeadlineAt；过期则 faile
 | UNKNOWN_SIZE（source 文件）               | scan_issue                  | 同名目标保护                                                                   | 是（所有 Target）        | 是       |
 | TARGET_UNKNOWN_SIZE（Target 单侧文件）    | scan_issue（警告）          | 保护，不是 extra，不计入阈值分母                                               | 否                       | 否       |
 | TARGET_UNKNOWN_SIZE（与 source 文件同名） | scan_issue                  | 保护，不替换                                                                   | 是（该 Target）          | 是       |
+| DELETE_BLOCKED                            | skipped Operation           | 扫描保护阻断的Target删除及依赖create；具体原因见blockReasons/issues            | 是                       | 是       |
 | DELETE_LIMIT                              | skipped Operation           | 该 Target 全部 delete 及依赖 create                                            | 是                       | 是       |
 | PREVIOUS_OUTCOME_UNKNOWN                  | skipped Operation           | 隔离路径                                                                       | 是                       | 是       |
 | SOURCE_CHANGED / PRECONDITION_CHANGED     | skipped Operation           | 当前文件                                                                       | 是                       | 是       |

@@ -2,7 +2,7 @@
 
 基于 [OpenList](https://github.com/OpenListTeam/OpenList) API 的自托管定时同步服务：按计划把一个 OpenList 目录中的文件同步到一个或多个目标目录，目标可以和源在同一个 OpenList 实例上，也可以在另一个实例上。
 
-> **开发中**：目前完成了服务底座（启动、管理员登录、健康检查、API 文档）和 OpenList 实例管理（添加实例、连接测试、浏览目录），同步功能还不能使用。进度见[开发进度](#开发进度)。
+> **开发中**：目前完成了服务底座、OpenList 实例管理以及 Job 配置、扫描规划和 dry-run 预览。真实文件同步与 cron 调度尚未开放。进度见[开发进度](#开发进度)。
 
 ## 功能
 
@@ -28,7 +28,7 @@
 | ------- | ------------------------------------------------------------ | ------ |
 | M0      | 基础设施：配置、数据库、管理员认证、密钥、健康检查、API 文档 | 已完成 |
 | M1      | OpenList 客户端与实例管理                                    | 已完成 |
-| M2      | 扫描、规划与 dry-run 预览                                    | 计划中 |
+| M2      | 扫描、规划与 dry-run 预览                                    | 已实现 |
 | M3a/M3b | 跨实例传输：新建与替换文件                                   | 计划中 |
 | M4      | 定时调度与重启恢复                                           | 计划中 |
 | M5      | mirror 模式与历史记录保留                                    | 计划中 |
@@ -68,7 +68,7 @@ Docker 镜像会在正式发布时提供。
 
 ## 配置
 
-服务通过环境变量配置。以 `NODE_ENV=development` 启动时，还会读取项目根目录下的 `.env` 文件。当前版本用到的变量如下：
+服务通过环境变量配置。以 `NODE_ENV=development` 启动时，还会读取项目根目录下的 `.env` 文件。常用变量如下；M2另读取全局运行/排队容量及[完整ExecutionSettings固定映射](docs/reference/configuration.md#executionsettings固定映射)，即使对应执行器尚未开放，这些映射字段也会在启动时校验：
 
 | 变量                             | 默认值           | 说明                                                      |
 | -------------------------------- | ---------------- | --------------------------------------------------------- |
@@ -125,6 +125,8 @@ Docker 镜像会在正式发布时提供。
 | `POST /instances/:id/test`                                             | 连接测试：核对账号、版本（至少 4.2.5）与分片上传是否启用，不写入任何文件 |
 | `POST /instances/:id/browse`                                           | 浏览实例中的目录                                                         |
 
+M2还提供`/jobs` CRUD、`POST /jobs/:id/runs`（必须显式提交`{"dryRun":true}`）、`GET /runs`、`GET /runs/:id`及其`operations`/`issues`分页查询。预览包含替换、mirror extras和目录删除候选及阻断原因，不写远程文件；后续真实运行需要重新扫描。Job可保存五段cron和enabled，但本阶段不注册调度；取消与真实执行随M3a开放。
+
 连续登录失败会被限流：默认 15 分钟内失败 5 次后，接口返回 429 并带上 `Retry-After` 响应头。完整接口规范见 [REST API](docs/reference/rest-api.md)。
 
 ## 开发
@@ -140,10 +142,10 @@ pnpm test:e2e                              # 端到端测试
 pnpm test:integration                      # 真实 OpenList 集成测试，需要 OPENLIST_IT_* 环境变量
 pnpm build                                 # 构建
 node test/compiled-smoke.mjs               # 构建产物冒烟测试，需先 build
-pnpm run db:generate                       # 修改数据库 schema 后生成迁移
+pnpm run db:generate                       # 修改数据库 schema 后生成迁移（自动先 build）
 ```
 
-数据库迁移由 drizzle-kit 生成到 `drizzle/` 目录，服务启动时会自动应用，生成的文件不要手工修改。部署时需要一起带上 `dist/`、生产依赖和整个 `drizzle/` 目录。
+表定义分在多个文件中，NodeNext 要求它们以 `.js` 相对引用；drizzle-kit 0.31 直接加载 TS 源文件时无法解析这类引用（[上游 issue #2705](https://github.com/drizzle-team/drizzle-orm/issues/2705)），因此 `drizzle.config.ts` 读取编译后的 `dist/database/schema.js`，`db:generate` 脚本先执行 `nest build` 保证产物最新。数据库迁移由 drizzle-kit 生成到 `drizzle/` 目录，服务启动时会自动应用，生成的文件不要手工修改。部署时需要一起带上 `dist/`、生产依赖和整个 `drizzle/` 目录。
 
 开发约定和测试策略见[开发约定](docs/development/conventions.md)与[测试策略](docs/development/testing.md)。
 

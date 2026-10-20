@@ -40,7 +40,7 @@ Body≤10MiB；formatVersion非1返回400 IMPORT_VERSION_UNSUPPORTED。所有对
 
 创建缺secret的对象可以浏览配置，但不能执行依赖它的Job；后续通过普通PATCH补secret、连接测试并显式启用。
 不把hasSecret=false解释为删除已有secret。API不接受******作为保留指令，提交该字面值视为无效secret。
-update的targets数组整体替换语义与JobPatch相同；删除旧target只能归档，不能损坏旧历史。
+update的targets数组整体替换语义与JobPatch相同；已有target id必须是对应未归档Job的当前成员（archived_at为NULL本身不足以证明可更新）；删除旧target只能将其移出成员集合（写archived_at），不能损坏旧历史。
 
 ## ImportResult
 

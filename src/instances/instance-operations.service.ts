@@ -156,7 +156,14 @@ export class InstanceOperations {
         page: input.page,
         pageSize: input.pageSize,
         write: list.write,
-        warnings: [...warnings, ...list.warnings],
+        warnings: [...warnings, ...list.warnings].map(
+          /** 将内部警告投影为公开警告，丢弃内部诊断事实。
+           * @param warning 账号、挂载或列表警告。
+           * @returns 仅含 code 与 message 的警告。
+           * @throws 不适用。
+           */
+          ({ code, message }) => ({ code, message }),
+        ),
       };
     } catch (error) {
       if (!(error instanceof OpenListError)) throw error;
@@ -166,7 +173,8 @@ export class InstanceOperations {
       });
       throw new ApiError(
         502,
-        error.code === 'UPSTREAM_PROTOCOL_ERROR' ||
+        error.code === 'UPSTREAM_JSON_TOO_LARGE' ||
+          error.code === 'UPSTREAM_PROTOCOL_ERROR' ||
           error.code === 'INVALID_SIZE'
           ? 'UPSTREAM_PROTOCOL_ERROR'
           : 'OPENLIST_ERROR',

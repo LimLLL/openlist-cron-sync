@@ -8,6 +8,11 @@ import type { InstanceRecord, InstanceChanges } from '../database/schema.js';
 import { KeysService } from '../security/keys.service.js';
 import { ApiError } from '../common/errors.js';
 import { OpenListClient } from '../openlist/client.service.js';
+import {
+  activeJobReference,
+  activeRunReference,
+  hasResponsibility,
+} from '../database/responsibility.js';
 import { normalizeBaseUrl } from '../openlist/paths.js';
 import type {
   AuthInputDto,
@@ -129,59 +134,120 @@ export class InstancesService {
    * @throws ApiError 空补丁或非法配置；Error 数据库失败。
    */
   patch(id: string, input: InstancePatchDto): InstanceView {
-    this.record(id);
-    if (Object.keys(input).length === 0)
-      throw new ApiError(
-        400,
-        'VALIDATION_ERROR',
-        'Patch must contain at least one field',
-      );
-    const changes: InstanceChanges = { ...input.limits, updatedAt: Date.now() };
-    if (input.name !== undefined) changes.name = input.name;
-    if (input.downloadMode !== undefined)
-      changes.downloadMode = input.downloadMode;
-    if (input.baseUrl !== undefined)
-      changes.baseUrl = normalizeBaseUrl(input.baseUrl);
-    if (input.auth !== undefined)
-      Object.assign(changes, this.credentials(id, input.auth));
-    if (input.auth !== undefined || input.baseUrl !== undefined)
-      Object.assign(changes, {
-        authState: 'untested',
-        authBlockReason: null,
-        authBlockedUntil: null,
-        lastErrorCode: null,
-        lastErrorMessage: null,
-        lastTestAt: null,
-        openlistVersion: null,
-        multipartEnabled: null,
-      });
-    this.database.db
-      .update(instances)
-      .set(changes)
-      .where(eq(instances.id, id))
-      .run();
-    if (input.auth !== undefined || input.baseUrl !== undefined)
-      this.client.auth.forget(id);
-    this.logger.log('Instance updated', {
-      instanceId: id,
-      decision: input.auth ? 'credentials_replaced' : 'configuration_updated',
-    });
-    return this.get(id);
+    return this.database.db.transaction(
+      /** 在一个事务内检查补丁与未决责任，再写入配置并清除旧认证事实。
+       * @param 不适用。
+       * @returns 更新后的公开视图。
+       * @throws ApiError 实例不存在、空补丁、地址或凭据非法、存在未决责任；Error 加密或数据库失败。
+       */
+      () => {
+        const current = this.record(id);
+        if (Object.keys(input).length === 0)
+          throw new ApiError(
+            400,
+            'VALIDATION_ERROR',
+            'Patch must contain at least one field',
+          );
+        const identityChanged =
+          (input.auth !== undefined && input.auth.mode !== current.authMode) ||
+          (input.baseUrl !== undefined &&
+            normalizeBaseUrl(input.baseUrl) !== current.baseUrl) ||
+          (input.auth?.mode === 'password' &&
+            input.auth.username !==
+              (current.username ?? current.accountUsername));
+        const limitsChanged =
+          (input.downloadMode !== undefined &&
+            input.downloadMode !== current.downloadMode) ||
+          Object.entries(input.limits ?? {}).some(
+            /** 判断单个补丁限额是否改变当前值。
+             * @param entry 限额字段名与补丁值。
+             * @returns 该字段是否被提供且不同于当前记录。
+             * @throws 不适用。
+             */
+            ([key, value]) =>
+              value !== undefined &&
+              current[key as keyof InstanceRecord] !== value,
+          );
+        if (
+          (identityChanged && hasResponsibility(this.database.db, id)) ||
+          (limitsChanged && activeRunReference(this.database.db, id))
+        )
+          throw new ApiError(
+            409,
+            'ENDPOINT_IN_USE',
+            'Instance has outstanding responsibility',
+          );
+        const changes: InstanceChanges = {
+          ...input.limits,
+          updatedAt: Date.now(),
+        };
+        if (input.name !== undefined) changes.name = input.name;
+        if (input.downloadMode !== undefined)
+          changes.downloadMode = input.downloadMode;
+        if (input.baseUrl !== undefined)
+          changes.baseUrl = normalizeBaseUrl(input.baseUrl);
+        if (input.auth !== undefined)
+          Object.assign(changes, this.credentials(id, input.auth));
+        if (input.auth !== undefined || input.baseUrl !== undefined)
+          Object.assign(changes, {
+            authState: 'untested',
+            authBlockReason: null,
+            authBlockedUntil: null,
+            lastErrorCode: null,
+            lastErrorMessage: null,
+            lastTestAt: null,
+            openlistVersion: null,
+            multipartEnabled: null,
+          });
+        this.database.db
+          .update(instances)
+          .set(changes)
+          .where(eq(instances.id, id))
+          .run();
+        if (input.auth !== undefined || input.baseUrl !== undefined)
+          this.client.auth.forget(id);
+        this.logger.log('Instance updated', {
+          instanceId: id,
+          decision: input.auth
+            ? 'credentials_replaced'
+            : 'configuration_updated',
+        });
+        return this.get(id);
+      },
+    );
   }
-  /** 逻辑归档并清除当前凭据；M1 没有 Job 或未决责任表。
+  /** 无活动配置或未决责任时逻辑归档并清除当前凭据。
    * @param id UUID。
    * @returns 不适用。
    * @throws ApiError 不存在；Error 数据库失败。
    */
   archive(id: string): void {
-    this.record(id);
-    this.database.db
-      .update(instances)
-      .set({ archivedAt: Date.now(), updatedAt: Date.now(), secretEnc: null })
-      .where(eq(instances.id, id))
-      .run();
-    this.client.auth.forget(id);
-    this.logger.log('Instance archived', { instanceId: id });
+    this.database.db.transaction(
+      /** 在一个事务内确认实例无活动 Job 引用或未决责任，再归档并清除凭据。
+       * @param 不适用。
+       * @returns 不适用。
+       * @throws ApiError 实例不存在或仍被引用；Error 数据库失败。
+       */
+      () => {
+        this.record(id);
+        if (
+          activeJobReference(this.database.db, id) ||
+          hasResponsibility(this.database.db, id)
+        )
+          throw new ApiError(409, 'ENDPOINT_IN_USE', 'Instance is referenced');
+        this.database.db
+          .update(instances)
+          .set({
+            archivedAt: Date.now(),
+            updatedAt: Date.now(),
+            secretEnc: null,
+          })
+          .where(eq(instances.id, id))
+          .run();
+        this.client.auth.forget(id);
+        this.logger.log('Instance archived', { instanceId: id });
+      },
+    );
   }
   /** 加密凭据并拒绝 token 头注入及掩码。
    * @param id 最终实例 UUID。

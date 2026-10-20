@@ -46,7 +46,7 @@ export class SystemModule implements OnApplicationBootstrap, OnModuleDestroy {
    * @throws 不适用。
    */
   private readonly listening = (): void => {
-    this.readiness.ready = true;
+    this.readiness.ready = this.readiness.recovered && !this.readiness.stopping;
   };
 
   /** 所有 onModuleInit 成功后安装监听回调。
@@ -66,7 +66,7 @@ export class SystemModule implements OnApplicationBootstrap, OnModuleDestroy {
    * @throws 不适用。
    */
   onModuleDestroy(): void {
-    this.readiness.ready = false;
+    this.readiness.beginShutdown();
     this.server?.off('listening', this.listening);
   }
 }

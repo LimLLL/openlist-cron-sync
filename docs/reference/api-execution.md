@@ -22,10 +22,12 @@
 reason要求1–1000字符，禁止只有空白。分页和错误格式继承[REST](rest-api.md)，error code取值见[固定原因码](rest-api.md#reason-codes)。没有Operation直接retry API；请求新Run重新扫描，自动有限attempt由执行器负责。
 Operation列表按(runId,seq)升序，seq是Run内的计划顺序。includeMaintenance=false时不返回维护循环挂在该Run下的REMOTE_TASK_CHANGED隔离记录；GET /operations不按此过滤。
 
+M2阶段请求必须显式提供dryRun=true；false或省略返回400 VALIDATION_ERROR且不创建Run，M3a才解除此阶段限制。M2只提供里程碑端点表列出的触发与查询，不提供cancel、隔离或真实执行。
+
 ## 手动执行
 
-disabled Job可手动执行；归档、缺secret、路径身份未确定拒绝。JOB_BUSY覆盖queued及恢复状态；入队不等待扫描，因此202不承诺执行成功。
-confirmDeletes只在该Run有效，不修改Job保存值。它只跳过每个Target的数量/比例阈值检查（maxCount/maxPercent，见[文件阈值](../design/deletion.md#文件阈值)），此时该Target的deleteBudgetCount为null（不限）。它不覆盖其他任何删除保护：
+disabled Job可手动执行；归档、缺secret、路径身份未确定拒绝。手动Run（含dry-run）和启用Job都检查已测试的版本及能力：不支持的OpenList版本拒绝，multipart禁用的实例不能作为relay Target；disabled配置可先引用未测试实例保存。JOB_BUSY覆盖queued及恢复状态；入队不等待扫描，因此202不承诺执行成功。
+confirmDeletes只在该Run有效，不修改Job保存值。它只跳过每个Target的数量/比例阈值检查（maxCount/maxPercent，见[文件阈值](../design/deletion.md#文件阈值)），没有扫描全目标删除阻断时该Target的deleteBudgetCount为null（数量/比例不限）；有此类阻断时仍为0。它不覆盖其他任何删除保护：
 
 - 扫描完整性与suspect视图、挂载边界；
 - 空源保护（allowEmptySource）；

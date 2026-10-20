@@ -28,27 +28,27 @@ BrowseResult={path:string,items:{name:string,size:Size|null,isDir:boolean,modifi
 
 ## Endpoint、Job、Target
 
-EndpointInput={instanceId:Id,path:string,password?:string|null,refresh?:boolean}；create缺password表示无密码，patch省略保留、null清除。EndpointView={instanceId,path,hasPassword:boolean,refresh:boolean}。
+EndpointInput={instanceId:Id,path:string,password?:string|null,refresh?:boolean}；create缺password表示无密码，patch省略保留、null清除；空字符串返回400（OpenList中空密码即无密码，须用null清除）。EndpointView={instanceId,path,hasPassword:boolean,refresh:boolean}。
 Filters={include?:string[],exclude?:string[],minSizeBytes?:Size|null,maxSizeBytes?:Size|null}。省略字段使用默认；完整View返回全部字段。
 DeleteLimits={enabled?:boolean,maxCount?:integer|null,maxPercent?:integer|null}。
 TargetInput=EndpointInput+{id?:Id,mode?:'incremental'|'mirror',deleteLimits?:DeleteLimits}。
 JobCreate={name:string,source:EndpointInput,targets:TargetInput[],createMode?:'relay'|'server_copy',enabled?:boolean,cron?:string|null,timezone?:string,filters?:Filters,allowEmptySource?:boolean,syncEmptyDirs?:boolean,relayBandwidthLimit?:integer,timeoutSeconds?:integer,notificationChannelIds?:Id[]}。
 JobPatch顶层字段任选且至少一项；source为EndpointInput各字段均可省略的补丁，filters按字段合并，合并后验证完整对象。targets数组决定完整目标集合：已有target用{id,...可选字段补丁}按字段合并，deleteLimits也按字段合并；新target不带id且必须提供instanceId/path。JobCreate的targets禁止指定id。外Job或归档target id拒绝。删除target归档旧行，不能重用id。
 JobView=Entity+{name,source:EndpointView,targets:(EndpointView+{id,position,mode,deleteLimits:完整值})[],createMode,enabled,cron,timezone,filters:完整值,allowEmptySource,syncEmptyDirs,relayBandwidthLimit,timeoutSeconds,notificationChannelIds:Id[],archivedAt:Time|null}。
-enabled=true要求所有实例/渠道secret齐全，endpoint身份已测试；不能通过enabled开启无法解析的路径。manual run也检查必要secret，但允许Job.enabled=false。
+M2的notificationChannelIds仅接受省略或[]，JobView固定返回[]。enabled只保存和校验，不注册cron。enabled=true要求所有实例/渠道secret齐全，endpoint身份已测试；不能通过enabled开启无法解析的路径。manual run也检查必要secret，但允许Job.enabled=false。
 
 ## Stats
 
 所有字段非负安全整数：sourceFiles、sourceDirectories、targetFiles、unchangedFiles、filteredFiles、protectedFiles、plannedCreates、plannedReplacements、plannedExtraDeletes、plannedDirectoryDeletes、succeededCreates、deletedForReplace、deletedAsExtra、failedOperations、unknownOperations、skippedOperations、cancelledOperations、retryAttempts、plannedBytes、downloadedBytes、transferredBytes、actualDeletedBytes。
-Run Stats对Target相关字段求和；sourceFiles/sourceDirectories只统计一次。filteredFiles统计源文件一次，各Target内部计数在target.stats中；unchangedFiles可跨目标相加。计划文件大小为逻辑bytes；downloadedBytes为relay下载字节（含续传），transferredBytes为relay上传字节（含chunk重传）；server_copy两者均为0，不伪造网络bytes。
-plannedCreates包含new与replace所需的逻辑create数；plannedReplacements为其中替换子集。成功create/删除按逻辑目标路径计一次，重试不重复计文件；failed/unknown/skipped/cancelledOperations按每个必要逻辑动作的最后attempt计数，retryAttempts单列额外attempt总数。历史Run终态后计数固定。dry-run实际计数为0。
+Run Stats对Target相关字段求和；sourceFiles/sourceDirectories来自一次共享源扫描，各Target展示该共享计数，Run不重复累加。filteredFiles统计源文件一次，各Target内部计数在target.stats中；unchangedFiles可跨目标相加。计划文件大小为逻辑bytes；downloadedBytes为relay下载字节（含续传），transferredBytes为relay上传字节（含chunk重传）；server_copy两者均为0，不伪造网络bytes。
+plannedCreates包含new与replace所需的逻辑create数；plannedReplacements为其中替换子集。成功create/删除按逻辑目标路径计一次，重试不重复计文件；failed/unknown/skipped/cancelledOperations按每个必要逻辑动作的最后attempt计数，retryAttempts单列额外attempt总数。历史Run终态后计数固定。dry-run的执行结果计数（succeededCreates、deletedForReplace、deletedAsExtra、failedOperations、unknownOperations、cancelledOperations、retryAttempts）与downloadedBytes/transferredBytes/actualDeletedBytes均为0；skippedOperations反映计划中的skipped行，包括DELETE_BLOCKED、DELETE_LIMIT与PLAN_INTERRUPTED。
 
 ## Run与Operation
 
 RunView={id,jobId,trigger:'manual'|'cron',scheduledAt:Time|null,dryRun:boolean,confirmDeletes:boolean,status:RunStatus,stats:Stats,stopReason:string|null,error:{code,message}|null,createdAt,updatedAt,startedAt:Time|null,scanCompletedAt:Time|null,endedAt:Time|null,deadlineAt:Time|null,queueDeadlineAt:Time,cancelRequestedAt:Time|null,recoveryDeadlineAt:Time|null}。
 RunDetail=RunView+{config:不含秘密的固定Job/Instance配置,targets:RunTargetView[],issueCount:integer}；operations/issues另分页。
 RunTargetView={id,targetId,config:固定Target公共配置,stats,sourceComplete,targetComplete,suspect,deleteBlocked,extrasBlocked,blockReasons:string[],observedTargetFileCount,plannedReplaceCount,plannedExtraCount,deleteBudgetCount:integer|null}。
-deleteBudgetCount是保护检查时固定的本Target删除预算（计算见[文件阈值](../design/deletion.md#文件阈值)）；null表示不限，即deleteLimits.enabled=false或本Run confirmDeletes=true。
+deleteBudgetCount是保护检查时固定的本Target删除预算（计算见[文件阈值](../design/deletion.md#文件阈值)）；扫描全目标删除阻断时为0；否则null表示数量/比例不限，即deleteLimits.enabled=false或本Run confirmDeletes=true。null不是删除许可，仍受局部保护及extrasBlocked等条件约束。
 OperationView={id,runId,runTargetId,seq:integer,action,method,reason,status:OperationStatus,sourceInstanceId:Id|null,sourcePath:string|null,targetInstanceId:Id,targetPath:string,isDir:boolean,expectedSourceSize:Size|null,expectedTargetSize:Size|null,affectedFileCount:integer,affectedBytes:Size,retryOf:Id|null,causedByOperationId:Id|null,attemptNo:integer,task:{id,state:integer|null}|null,multipart:{uploadId:string,chunkSize:integer,state:string|null,attempt:integer|null,sourceStreamCompletedAt:Time|null}|null,bytesDownloaded:Size,bytesTransferred:Size,error:{code,message}|null,createdAt,updatedAt,submittedAt:Time|null,endedAt:Time|null,unknownSince:Time|null,unknownUntil:Time|null,quarantineReleasedAt:Time|null,quarantineReleaseReason:string|null,reobservedAt:Time|null,resolution:{kind:'observed'|'superseded'|'abandoned',note:string|null,resolvedAt:Time,runId:Id|null}|null}。
 action/method/reason枚举与SQL相同，见[执行表](../design/execution-tables.md)。task只在server_copy时非null，只公开本服务创建的id，不含任务原始名称；multipart只在relay收到有效init响应后非null，state与attempt为最近一次观察到的OpenList原始值。
 causedByOperationId只在error.code=REMOTE_TASK_CHANGED的维护Operation上非null，指向原Operation。reobservedAt是首个完成受影响父目录refresh=true读取的非dry-run Run写入的时间。resolution.note在kind=abandoned时为管理员reason，其他kind为null；幂等重复请求不覆盖已存note。

@@ -27,21 +27,21 @@
 
 ## run_targets
 
-| 字段                                        | 类型                          | 约束/含义                                    |
-| ------------------------------------------- | ----------------------------- | -------------------------------------------- |
-| id / run_id / target_id                     | ID / FK runs / FK job_targets | UNIQUE(run_id,target_id)                     |
-| target_snapshot_json                        | JSON                          | Target配置及Instance身份的本轮副本           |
-| stats_json                                  | JSON                          | Stats                                        |
-| source_complete / target_complete           | BOOL                          | 0；扫描结束后确定                            |
-| suspect / delete_blocked / extras_blocked   | BOOL                          | 0；按下文分别维护扫描保护与执行阶段判定      |
-| block_reasons_json                          | JSON                          | []，公开errorCode集合                        |
-| observed_target_file_count                  | INT                           | 0，阈值分母D                                 |
-| planned_replace_count / planned_extra_count | INT                           | 0，分子R的组成                               |
-| delete_budget_count                         | INT?                          | 删除预算；NULL表示不限（阈值禁用或本轮覆盖） |
+| 字段                                        | 类型                          | 约束/含义                                               |
+| ------------------------------------------- | ----------------------------- | ------------------------------------------------------- |
+| id / run_id / target_id                     | ID / FK runs / FK job_targets | UNIQUE(run_id,target_id)                                |
+| target_snapshot_json                        | JSON                          | Target配置及Instance身份的本轮副本                      |
+| stats_json                                  | JSON                          | Stats                                                   |
+| source_complete / target_complete           | BOOL                          | 0；扫描结束后确定                                       |
+| suspect / delete_blocked / extras_blocked   | BOOL                          | 0；按下文分别维护扫描保护与执行阶段判定                 |
+| block_reasons_json                          | JSON                          | []，公开errorCode集合                                   |
+| observed_target_file_count                  | INT                           | 0，阈值分母D                                            |
+| planned_replace_count / planned_extra_count | INT                           | 0，分子R的组成                                          |
+| delete_budget_count                         | INT?                          | 有效删除预算；扫描全目标阻断为0，NULL仅表示数值阈值不限 |
 
 索引(run_id)。没有额外Target状态枚举，公开summary按Run聚合规则计算。
 suspect与扫描产生的delete_blocked在本Run内只从0变1；delete_blocked表示该Target全部删除禁止，局部保护以scan_issues.path/protect_subtree表示，不能因此置位该全局标志。suspect仅表示存在可疑范围，不能据此扩大为全部路径禁止。extras_blocked在创建阶段结束、重试预算收敛后，按scan_issues的原因码分类与各逻辑动作最后attempt重算；不能因一次可重试失败永久置1。block_reasons_json只保留当前有效阻断码，不纳入纯提示/警告；失败历史仍保存在原Operation中。
-删除预算在保护检查通过后固定：limits启用且未被confirmDeletes覆盖时，budget=min(maxCount, ⌊maxPercent×D/100⌋)（为NULL的一项视为无穷大）；只有R≤budget时该Target的删除才能执行。已计划的R预先占用预算；计划外的retry_cleanup只能使用budget−R的余量，超出时该清理及其依赖create在提交前skipped（DELETE_LIMIT）。阈值公式见[删除保护](deletion.md#文件阈值)。
+扫描全目标删除阻断（含PLAN_INVALID）时delete_budget_count=0，优先于阈值禁用或confirmDeletes；候选R仍保留。其余情况删除预算在保护检查后固定：limits启用且未被confirmDeletes覆盖时，budget=min(maxCount, ⌊maxPercent×D/100⌋)（为NULL的一项视为无穷大）；只有R≤budget时该Target的删除才能执行。已计划的R预先占用预算；计划外的retry_cleanup只能使用budget−R的余量，超出时该清理及其依赖create在提交前skipped（DELETE_LIMIT）。阈值公式见[删除保护](deletion.md#文件阈值)。NULL只表示数量/比例不限，不是删除许可；局部保护、extras_blocked与其他安全条件始终有效。
 
 ## operations
 

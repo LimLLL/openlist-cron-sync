@@ -92,6 +92,12 @@ MVP兼容记录中只有Local相关操作在实际通过后可标integration-tes
 21. warning与重试收敛：仅Target单侧的碰撞/未知大小/非法名称保护规定范围，但不使Run降级、不阻断范围外extras；一次failed后安全重试成功不残留extras_blocked。有关联source的碰撞仍阻断该Target。
 22. 连接测试：版本低于4.2.5或无法解析→OPENLIST_VERSION_UNSUPPORTED；multipart_enabled=false→MULTIPART_DISABLED；连接测试从不调用multipart init。错误摘要中的Webhook path/query不得泄露。
 
+## M2 预览验收
+
+纯单元覆盖过滤/glob、名称碰撞、两模式diff、精确阈值和聚合溢出；F1覆盖源根与子树失败、目标根证明、Target独有树、深度/原始条目/响应字节/操作/问题上限、晚发现阻断与目录后序，以及保护挂载子树不重新开放、无storage候选和独立确认的有效空目录。API e2e覆盖Job合并/归档/稳定ID、版本能力与身份责任、所有M2路由、OpenAPI、分页seq及秘密不泄露。
+挂载回归同时验证source/Target不可用范围内的嵌套挂载不会使protectSubtree诊断丢失；可疑祖先允许已列出的新文件，但不替换或删除。后置阻断以不同批次大小验证依赖create跨批次跳过且不影响其他Target；路径密码空字符串返回400，拒绝的补丁保留旧值，null才清除。
+生命周期用门闩和可控业务期限覆盖无执行位的排队过期、扫描超时、并发触发唯一接受、旧scanning/planned中断、关机晚响应、queued重启沿用原快照。dry-run断言远程端点只读、无下载或文件写入、执行结果计数为0且计划skipped单独计数。M2不新增真实OpenList int-spec；已有只读集成入口保留，维护者可补充手动预览smoke，不把F1结果标为驱动集成认证。
+
 ## API e2e与命令
 
 supertest验证真实Nest路由、Guard、ValidationPipe、DTO metadata、错误体、HTTP状态、分页及OpenAPI字段，不只调用service方法。至少覆盖：

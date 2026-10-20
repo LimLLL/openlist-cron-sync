@@ -154,3 +154,7 @@ export type InstanceRecord = typeof instances.$inferSelect;
 
 /** 实例可更新字段；字段含义继承实例表，省略表示保留。 */
 export type InstanceChanges = Partial<typeof instances.$inferInsert>;
+
+export { jobs, jobTargets } from './job-schema.js';
+export { runs, runTargets, scanIssues } from './run-schema.js';
+export { operations, operationDependencies } from './operation-schema.js';

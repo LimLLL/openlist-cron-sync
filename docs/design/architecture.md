@@ -1,6 +1,6 @@
 用途：规定 NestJS 模块职责、依赖方向及单进程运行视图。
 
-范围：目标实现的应用结构与启动/停止顺序；M0 已建立基础模块；M1 加入 OpenList、Instances、Security 的实例认证状态持久化及 Coordination 的每实例 API 配额，其余模块随对应里程碑加入。
+范围：目标实现的应用结构与启动/停止顺序；M0 已建立基础模块；M1 加入 OpenList、Instances、Security 的实例认证状态持久化及 Coordination 的每实例 API 配额，M2加入Jobs、Sync、Runs以及Coordination的FIFO和扫描执行位，其余模块随对应里程碑加入。
 
 # 架构
 
@@ -34,7 +34,9 @@
 
 M1 的 `InstanceAuthState` 位于 Security，直接使用 Database 持久化认证事实；OpenListAuth 对所有调用方统一执行阻断检查、单次登录和身份核对。实例连接配置仍由调用方提供，OpenList 不导入 Instances 或 Database。凭据更新/归档后旧在途响应不能覆盖新配置；比较使用已有地址、认证方式、用户名和密文字段，不增加指纹、版本列或持久化锁。
 
-AppModule 仅导入顶层消费模块（当前按 Instances、System 排列），Instances 先导入 OpenList，再导入共享 Security/Database。Nest 12 的共享依赖拓扑重挂接会受首次遍历顺序影响；从最深消费链开始装配，确保 Config → Database → Security 的初始化顺序。生产初始化路径、完整 API e2e 与编译产物重启测试覆盖这一顺序，不增加根模块协调器。
+AppModule 仅导入顶层消费模块（当前按 Runs、Jobs、Instances、System 排列），Instances 先导入 OpenList，再导入共享 Security/Database。Nest 12 的共享依赖拓扑重挂接会受首次遍历顺序影响；从最深消费链开始装配，确保 Config → Database → Security 的初始化顺序。生产初始化路径、完整 API e2e 与编译产物重启测试覆盖这一顺序，不增加根模块协调器。
+
+M2的Jobs不导入Scheduling，Sync不导入Relay，Runs不导入Notifications；未实现的模块不建占位hook。M2关闭时等待扫描与共享认证停止，再关闭数据库；不写Run终态。跨Run路径互斥在M3a真实写入前接入。
 
 纯 planner/filter 函数不依赖 Nest、HTTP、数据库；仓储只提供数据访问，不承载同步业务决策。使用具体 service 即可，不为了单一实现引入工厂/策略接口。
 

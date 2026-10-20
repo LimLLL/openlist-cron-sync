@@ -14,6 +14,8 @@ import {
   validPassword,
 } from './validation.js';
 import type { Environment } from './validation.js';
+import { executionSettings } from './execution-settings.js';
+import type { ExecutionSettings } from './execution-settings.js';
 
 /** 首次管理员输入；username 为名称，password 未设置时生成随机值。 */
 export interface BootstrapCredentials {
@@ -30,6 +32,12 @@ export interface BootstrapCredentials {
  */
 @Injectable()
 export class AppConfig implements OnModuleInit {
+  /** M2 起完整读取的运行快照参数。 */
+  readonly execution: ExecutionSettings;
+  /** 进程扫描执行位。 */
+  readonly globalMaxRuns: number;
+  /** 进程等待队列容量。 */
+  readonly maxQueuedRuns: number;
   readonly host: string;
   readonly port: number;
   dataDir: string;
@@ -66,6 +74,9 @@ export class AppConfig implements OnModuleInit {
   constructor(@Inject(ConfigService) config: ConfigService) {
     this.environment = config.getOrThrow<Environment>('environment');
     const env = this.environment;
+    this.execution = executionSettings(env);
+    this.globalMaxRuns = integerSetting(env, 'GLOBAL_MAX_RUNS', 2, 1, 16);
+    this.maxQueuedRuns = integerSetting(env, 'MAX_QUEUED_RUNS', 100, 1, 10000);
     if (
       !['development', 'test', 'production'].includes(
         env.NODE_ENV ?? 'production',
@@ -104,44 +115,13 @@ export class AppConfig implements OnModuleInit {
       86400,
     );
     this.loginMaxFailures = integerSetting(env, 'LOGIN_MAX_FAILURES', 5, 1, 20);
-    this.openlistConnectTimeoutMs = integerSetting(
-      env,
-      'OPENLIST_CONNECT_TIMEOUT_MS',
-      10000,
-      1000,
-      120000,
-    );
-    this.openlistApiTimeoutMs = integerSetting(
-      env,
-      'OPENLIST_API_TIMEOUT_MS',
-      30000,
-      1000,
-      300000,
-    );
-    this.retryMaxAttempts = integerSetting(env, 'RETRY_MAX_ATTEMPTS', 3, 1, 10);
-    this.retryBaseMs = integerSetting(env, 'RETRY_BASE_MS', 1000, 100, 60000);
-    this.retryMaxMs = integerSetting(
-      env,
-      'RETRY_MAX_MS',
-      30000,
-      this.retryBaseMs,
-      300000,
-    );
-    if (this.retryMaxMs < this.retryBaseMs) invalidConfig('RETRY_MAX_MS');
-    this.openlistAuthCooldownSeconds = integerSetting(
-      env,
-      'OPENLIST_AUTH_COOLDOWN_SECONDS',
-      600,
-      600,
-      86400,
-    );
-    this.openlistMaxJsonBytes = integerSetting(
-      env,
-      'OPENLIST_MAX_JSON_BYTES',
-      33554432,
-      1024,
-      268435456,
-    );
+    this.openlistConnectTimeoutMs = this.execution.connectTimeoutMs;
+    this.openlistApiTimeoutMs = this.execution.apiTimeoutMs;
+    this.retryMaxAttempts = this.execution.retryMaxAttempts;
+    this.retryBaseMs = this.execution.retryBaseMs;
+    this.retryMaxMs = this.execution.retryMaxMs;
+    this.openlistAuthCooldownSeconds = this.execution.authCooldownSeconds;
+    this.openlistMaxJsonBytes = this.execution.maxJsonBytes;
     this.loginWindowSeconds = integerSetting(
       env,
       'LOGIN_WINDOW_SECONDS',

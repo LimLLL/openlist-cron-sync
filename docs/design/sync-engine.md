@@ -20,13 +20,13 @@ server_copy的Job含跨Instance Target时配置校验直接拒绝，提示改用
 
 1. 检查Instance认证、endpoint根、路径重叠与已知挂载边界。取run_config固定值。
 2. source根目录读取失败则Run failed（SOURCE_ROOT_UNAVAILABLE）。Target根目录按下方“Target根目录”规则处理，不使Run失败。
-3. source按目录单次遍历；每目录先列source，再依次列各Target对应目录。持有当前目录原始名称集合、受保护集合及递归栈，不持有全树。
+3. source按目录单次遍历；每目录先列source，再依次列各Target对应目录。持有当前目录原始名称集合、受保护集合及递归帧中的待访问兄弟，不物化全树。
 4. 应用[过滤与冲突](filters-paths.md)。按Target生成具体mkdir/create/delete，分批写SQLite（seq按计划顺序递增）。
 5. Target缺失目录沿该分支省略后续列表；仍生成父mkdir依赖。已存在父目录时，其list失败不能当成缺失；只有成功且非可疑的父列表中缺名，才建立缺失快速路径。
 6. Target独有目录需要递归枚举，才能计算文件阈值和保护后代；未知目录不可整体删除。
 7. 记录每Target扫描总数、分子/分母及scan_issues。所有计划写完后同事务标记scanCompletedAt、planned。
 
-OpenList先取得全目录再分页；per_page=0减少不一致翻页，仍受单目录响应/条目上限。扫描期超限终止计划，不执行部分计划；超过SCAN_MAX_DEPTH的子树按读取不完整处理。O(当前最大目录条目数＋深度＋批量操作数)为目标内存范围，不声称端到端流式列举。
+OpenList先取得全目录再分页；per_page=0减少不一致翻页，仍受单目录响应/条目上限。扫描期超限终止计划，不执行部分计划；超过SCAN_MAX_DEPTH的子树按读取不完整处理。M2的DFS递归帧保留尚未访问的兄弟目录及各Target状态，内存上界为O(Target数×活动递归路径各层保留的列表数据大小之和＋批量记录大小＋实例挂载映射大小)，而不是O(单个最大目录＋深度)。扫描立即丢弃下载sign，只保留规划事实；目录原始响应另受JSON字节上限限制；不声称端到端流式列举，不建立跨Run目录索引。
 
 ### Target根目录
 
@@ -35,6 +35,8 @@ OpenList先取得全目录再分页；per_page=0减少不一致翻页，仍受�
 | 根目录列表成功                                                                                      | 正常比较                                                                                             |
 | 根目录列表失败（非权限错误），其父目录（账号命名空间内，refresh=false）列表完整、非可疑且根名不存在 | 根目录缺失：dry-run计划prepare mkdir和全部create并报告TARGET_ROOT_WILL_BE_CREATED；实跑先执行该mkdir |
 | 父目录列表失败/可疑、权限错误，或父列表仍有根名（文件或目录）                                       | 该Target记TARGET_ROOT_UNAVAILABLE：本轮无新建无删除，Run partial                                     |
+
+根缺失时，仅在有待创建文件/目录时才计划根prepare mkdir并报告TARGET_ROOT_WILL_BE_CREATED。syncEmptyDirs=true把根自身作为需要创建的目录；false且没有待create文件时不生成根mkdir或提示。此规则不把endpoint根计入effectiveSourceEntryCount。
 
 账号根“/”按已有根处理：其列表失败时没有可向上查询的账号内父目录，记TARGET_ROOT_UNAVAILABLE，不递归向账号base_path之外探测。OpenList mkdir对已存在目录幂等。
 实跑的prepare mkdir成功后，refresh=true列出新根，确认完整且非可疑才开放该Target的子操作；失败则记录TARGET_ROOT_UNAVAILABLE并跳过所有依赖动作。新根本轮不产生删除。dry-run不执行这次创建后的读取。

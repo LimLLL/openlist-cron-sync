@@ -1,5 +1,5 @@
 // 维护显式 ENC 清单并逐行读取生产密文。
-import { instances } from './schema.js';
+import { instances, jobs, jobTargets, runs } from './schema.js';
 import { and, asc, gt, isNotNull, getTableName } from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import type { SQLiteColumn, SQLiteTable } from 'drizzle-orm/sqlite-core';
@@ -29,6 +29,9 @@ export interface EncryptedValue {
 export const ENCRYPTED_COLUMNS = Symbol('ENCRYPTED_COLUMNS');
 export const encryptedColumns: readonly EncryptedColumn[] = [
   { table: instances, id: instances.id, value: instances.secretEnc },
+  { table: jobs, id: jobs.id, value: jobs.sourcePasswordEnc },
+  { table: jobTargets, id: jobTargets.id, value: jobTargets.passwordEnc },
+  { table: runs, id: runs.id, value: runs.secretSnapshotEnc },
 ];
 
 /** 流式扫描全部非 NULL 密文，不把整库数据载入内存。

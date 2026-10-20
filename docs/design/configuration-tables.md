@@ -47,7 +47,7 @@
 索引：(archived_at,created_at,id)。base_url不设唯一：不同账号可访问同实例，规范化地址相同的Instance按“accountBasePath+path”的全局路径参与路径重叠、占用与隔离比较，见[调度与恢复](scheduling-recovery.md#资源层级)。
 每次/api/me成功时比较account_username与account_base_path：实例没有[未决责任](data-model.md#responsibility)时以新值覆盖；有未决责任且任一值不同时不覆盖旧值，置auth_blocked（ACCOUNT_CHANGED），规则见[OpenList集成](openlist-integration.md#认证与实例身份)。
 
-M1 已实现本表，并将 `secret_enc` 登记到生产 ENC 清单；AAD 为 `instances:<id>:secret_enc:v1`。尚无责任表时身份更新允许覆盖，DELETE 只归档并清空该列；未来检查接入点见[认证实现边界](openlist-integration.md#m1-实现边界)。
+M1 已实现本表，并将 `secret_enc` 登记到生产 ENC 清单；AAD 为 `instances:<id>:secret_enc:v1`。M2起身份更新和DELETE执行真实责任检查，DELETE另检查非归档Job引用，通过后归档并清空该列；实现边界见[认证实现边界](openlist-integration.md#m1-实现边界)。
 
 ## jobs
 
@@ -82,16 +82,17 @@ M1 已实现本表，并将 `secret_enc` 登记到生产 ENC 清单；AAD 为 `i
 | job_id                  | ID FK jobs      | RESTRICT                              |
 | instance_id             | ID FK instances | RESTRICT                              |
 | path / password_enc     | STR / ENC?      | 目标根及路径密码                      |
-| position                | INT             | 从0开始；同Job活动目标唯一            |
+| position                | INT             | 从0开始；同Job成员唯一                |
 | mode                    | ENUM            | incremental / mirror；默认incremental |
 | refresh                 | BOOL            | 0                                     |
 | delete_limits_enabled   | BOOL            | 1                                     |
 | max_delete_count        | INT?            | 1000；NULL禁用数量一项                |
 | max_delete_percent      | INTEGER?        | 50，整数0–100；NULL禁用比例一项       |
-| archived_at             | TS?             | 旧配置归档，不用于新Run               |
+| archived_at             | TS?             | 被配置更新移出成员集合的时间          |
 | created_at / updated_at | TS              | 通用                                  |
 
-CHECK(delete_limits_enabled=0 OR max_delete_count IS NOT NULL OR max_delete_percent IS NOT NULL)。部分UNIQUE(job_id,position) WHERE archived_at IS NULL；索引(instance_id,archived_at)。路径唯一/包含在应用事务中检查。
+CHECK(delete_limits_enabled=0 OR max_delete_count IS NOT NULL OR max_delete_percent IS NOT NULL)。部分UNIQUE(job_id,position) WHERE archived_at IS NULL（同Job成员position唯一）；索引(instance_id,archived_at)。路径唯一/包含在应用事务中检查。
+成员关系：Target属于其Job且archived_at为NULL。archived_at只记录被PATCH或导入update移出目标集合，Job归档时不写入；归档Job的JobView.targets即其最终成员集合。archived_at为NULL只说明是成员，能否运行、导出、修改或构成活动引用还要求父Job未归档；移出的id不再复用。
 
 ## notification_channels
 
@@ -114,5 +115,5 @@ CHECK(delete_limits_enabled=0 OR max_delete_count IS NOT NULL OR max_delete_perc
 ## 归档与凭据删除
 
 Instance被活动Job引用时DELETE返回409；存在引用它的[未决责任](data-model.md#responsibility)时也409。否则归档并清空secret_enc，历史只留地址和名称。
-Job DELETE要求无非终态Run，将Job及targets归档、停止cron，但保留未决unknown与远程任务清理所需的路径与凭据引用。
+Job DELETE要求无非终态Run，只归档Job本身并停止cron：最终成员集合原样保留，随父Job一起失效，不另写Target的archived_at；保留未决unknown与远程任务清理所需的路径与凭据引用。
 Channel DELETE逻辑归档并清空当前url_enc与secret_enc；已有delivery使用自己的短期加密副本直至终态清除。

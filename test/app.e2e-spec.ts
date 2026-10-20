@@ -186,7 +186,7 @@ describe('M0 HTTP', () => {
   it('keeps application environments independent', async () => {
     app = await startApplication(
       environmentFor(directory.path, {
-        GLOBAL_MAX_RUNS: 'invalid',
+        RELAY_DOWNLOAD_WORKERS: 'invalid',
         SHUTDOWN_GRACE_SECONDS: 'invalid',
       }),
     );

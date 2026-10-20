@@ -5,13 +5,15 @@ import { Agent, request } from 'undici';
 import { finished } from 'node:stream/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 import { AppConfig } from '../configuration/app-config.js';
+import { Readiness } from '../coordination/coordination.module.js';
 import { ApiQuota } from '../coordination/api-quota.service.js';
 import type { ApiLimits } from '../coordination/api-quota.service.js';
 import { errorTraits } from '../common/errors.js';
+import type { RequestContext } from './request-context.js';
 import { OpenListError, object, protocol } from './errors.js';
 
 /** 单次协议调用参数。 */
-export interface HttpCall {
+export interface HttpCall extends RequestContext {
   /** 固定端点，查询参数必须单独编码；不记录到日志。 */
   endpoint: string;
   /** 固定 HTTP 方法。 */
@@ -45,23 +47,35 @@ export interface HttpInstance extends ApiLimits {
 export class OpenListTransport
   implements OnApplicationShutdown, OnModuleDestroy
 {
-  private readonly agent: Agent;
+  private readonly agents = new Map<number, Agent>();
   private readonly shutdown = new AbortController();
   private readonly logger = new Logger(OpenListTransport.name);
   /** 创建不带 redirect/retry interceptor 的连接池。
    * @param config 已验证配置。
    * @param quota 共享实例配额。
+   * @param readiness 进程就绪状态；模块销毁时先广播关闭。
    * @returns 不适用。
    * @throws 不适用。
    */
   constructor(
     @Inject(AppConfig) private readonly config: AppConfig,
     @Inject(ApiQuota) private readonly quota: ApiQuota,
+    @Inject(Readiness) private readonly readiness: Readiness,
   ) {
-    this.agent = new Agent({
-      connectTimeout: config.openlistConnectTimeoutMs,
-      pipelining: 1,
-    });
+    this.dispatcher(config.openlistConnectTimeoutMs);
+  }
+  /** 按实际建连期限共享连接池，旧 queued 快照不采用新进程期限。
+   * @param connectTimeout 建连毫秒。
+   * @returns 对应期限的连接池。
+   * @throws 不适用。
+   */
+  private dispatcher(connectTimeout: number): Agent {
+    let agent = this.agents.get(connectTimeout);
+    if (!agent) {
+      agent = new Agent({ connectTimeout, pipelining: 1 });
+      this.agents.set(connectTimeout, agent);
+    }
+    return agent;
   }
   /** 执行请求与有界读取退避，认证恢复由上层处理。
    * @param instance 实例地址和配额。
@@ -75,19 +89,20 @@ export class OpenListTransport
     call: HttpCall,
     token?: string,
   ): Promise<unknown> {
+    const settings = call.settings ?? this.config.execution;
     if (call.transfer && !call.signal)
       throw new Error('Transfer requests require a deadline signal');
     const deadlineAt = call.transfer
       ? Infinity
-      : Date.now() + this.config.openlistApiTimeoutMs;
+      : Date.now() + settings.apiTimeoutMs;
     const timeout = call.transfer
       ? call.signal
-      : AbortSignal.timeout(this.config.openlistApiTimeoutMs);
+      : AbortSignal.timeout(settings.apiTimeoutMs);
     const signals = [this.shutdown.signal];
     if (timeout) signals.push(timeout);
     if (call.signal) signals.push(call.signal);
     const signal = AbortSignal.any(signals);
-    const attempts = call.read ? this.config.retryMaxAttempts : 1;
+    const attempts = call.read ? settings.retryMaxAttempts : 1;
     for (let attempt = 1; ; attempt++) {
       try {
         return await this.once(instance, call, token, signal);
@@ -109,8 +124,8 @@ export class OpenListTransport
           throw error;
         }
         const backoff = Math.min(
-          this.config.retryMaxMs,
-          this.config.retryBaseMs * 2 ** (attempt - 1) * (0.5 + Math.random()),
+          settings.retryMaxMs,
+          settings.retryBaseMs * 2 ** (attempt - 1) * (0.5 + Math.random()),
         );
         const waitMs = Math.max(backoff, error.retryAfterMs);
         // 超出请求期限时直接结束，避免巨大 Retry-After 溢出 Node 定时器并提前重试。
@@ -143,6 +158,7 @@ export class OpenListTransport
     token: string | undefined,
     signal: AbortSignal,
   ): Promise<unknown> {
+    const settings = call.settings ?? this.config.execution;
     let release: (() => void) | undefined;
     try {
       if (!call.transfer)
@@ -159,14 +175,14 @@ export class OpenListTransport
       if (token !== undefined) headers.authorization = token;
       if (call.json !== undefined) headers['content-type'] = 'application/json';
       const response = await request(instance.baseUrl + call.endpoint, {
-        dispatcher: this.agent,
+        dispatcher: this.dispatcher(settings.connectTimeoutMs),
         idempotent: false,
         method: call.method,
         headers,
         body: call.json === undefined ? call.body : JSON.stringify(call.json),
         signal,
-        headersTimeout: call.transfer ? 0 : this.config.openlistApiTimeoutMs,
-        bodyTimeout: call.transfer ? 0 : this.config.openlistApiTimeoutMs,
+        headersTimeout: call.transfer ? 0 : settings.apiTimeoutMs,
+        bodyTimeout: call.transfer ? 0 : settings.apiTimeoutMs,
       });
       try {
         const status = response.statusCode;
@@ -197,9 +213,9 @@ export class OpenListTransport
           const chunk: unknown = part;
           if (!Buffer.isBuffer(chunk)) protocol('body chunk');
           size += chunk.length;
-          if (size > this.config.openlistMaxJsonBytes)
+          if (size > settings.maxJsonBytes)
             throw new OpenListError(
-              'UPSTREAM_PROTOCOL_ERROR',
+              'UPSTREAM_JSON_TOO_LARGE',
               'OpenList JSON exceeds byte limit',
               status,
             );
@@ -265,6 +281,7 @@ export class OpenListTransport
    * @throws 不适用。
    */
   onModuleDestroy(): void {
+    this.readiness.beginShutdown();
     this.shutdown.abort();
   }
   /** 应用退出时销毁连接池与在途请求。
@@ -273,7 +290,17 @@ export class OpenListTransport
    * @throws Error 关闭失败。
    */
   async onApplicationShutdown(): Promise<void> {
-    await this.agent.destroy();
+    await Promise.all(
+      [...this.agents.values()].map(
+        /** 销毁一个建连期限对应的连接池及其在途请求。
+         * @param agent 已创建的连接池。
+         * @returns 关闭完成的 Promise。
+         * @throws 不适用；关闭失败由返回的 Promise 拒绝。
+         */
+        (agent) => agent.destroy(),
+      ),
+    );
+    this.agents.clear();
   }
 }
 /** 解析 Retry-After 的秒数或 HTTP 日期。

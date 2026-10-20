@@ -60,9 +60,9 @@ describe('M1 configuration', /** 注册本组 M1 行为验收用例。
     const config = new AppConfig(
       new ConfigService({
         environment: environmentFor('/tmp/m1-config', {
-          OPENLIST_TASK_POLL_MS: 'invalid',
-          RELAY_TOTAL_TIMEOUT_SECONDS: 'invalid',
-          SCAN_MAX_DIRECTORY_ENTRIES: 'invalid',
+          RELAY_DOWNLOAD_WORKERS: 'invalid',
+          RUN_RETENTION_DAYS: 'invalid',
+          NOTIFICATION_TIMEOUT_SECONDS: 'invalid',
         }),
       }),
     );

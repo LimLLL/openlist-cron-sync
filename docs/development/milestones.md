@@ -56,10 +56,14 @@
 
 - dry-run无远程文件写入；filtered不能成为extra；替换与extra共同计数；不以整目录绕过保护。
 - source根读取失败：Run failed，无执行。
-- Target根缺失（父目录可列出且其中没有该名称）：dry-run计划全部create并报告TARGET_ROOT_WILL_BE_CREATED。父目录列表失败、权限错误或同名项是文件：该Target记SCAN_INCOMPLETE（TARGET_ROOT_UNAVAILABLE），无create和删除，Run partial。规则见[同步引擎](../design/sync-engine.md)。
+- Target根缺失（父目录可列出且其中没有该名称）：dry-run计划所需create；有待创建内容或syncEmptyDirs=true时才计划根mkdir并报告TARGET_ROOT_WILL_BE_CREATED。父目录列表失败、权限错误或同名项是文件：该Target记SCAN_INCOMPLETE（TARGET_ROOT_UNAVAILABLE），无create和删除，Run partial。规则见[同步引擎](../design/sync-engine.md)。
 - 目录条目数、列表响应字节数、Run操作数或扫描问题数超过上限（SCAN_MAX_DIRECTORY_ENTRIES、OPENLIST_MAX_JSON_BYTES、MAX_OPERATIONS_PER_RUN、MAX_SCAN_ISSUES_PER_RUN）：Run failed且无执行，不截断后继续。超过SCAN_MAX_DEPTH：该子树记scan_issue并保护，不使Run失败。
 - syncEmptyDirs=true时计划创建全部未排除的source目录（含空目录）；false时只创建所建文件需要的父目录。include只筛选文件，不决定目录是否创建；命中目录的exclude剪枝并保护该子树。
 - Operation列表按(run_id, seq)返回计划顺序。
+
+M2实现边界：只接受显式dryRun=true（否则400 VALIDATION_ERROR）；Jobs CRUD保存enabled/cron但不调度，通知关联仅接受[]。Runs负责短事务接受、(createdAt,id) FIFO、GLOBAL_MAX_RUNS扫描位、独立于执行位的队列期限，以及从startedAt计算的扫描/规划timeoutSeconds（cancelled + RUN_TIMEOUT）。关闭停止派发并等待扫描退出，不写Run终态；启动queued沿用原快照和期限，scanning/planned按PROCESS_RESTART中断旧计划。完整ExecutionSettings从M2开始校验与固定。extras及空目录删除仅规划，M5执行。
+
+M2预览无跨Run写路径占用；该互斥必须在M3a第一笔真实写入前实现，不能推迟到M4。M3a仍负责cancel API、unknown/quarantine和真实执行；M4负责cron、完整期限/恢复和远程停止编排。
 
 ## M3a 默认relay的新建与基础恢复
 

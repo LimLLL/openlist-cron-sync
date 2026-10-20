@@ -48,7 +48,7 @@ Error={error:{code:string,message:string,details:FieldError[]},requestId:string}
 | SOURCE_ROOT_UNAVAILABLE     | source根目录无法读取；Run failed，不执行任何计划动作                                                                                                                                                                  |
 | SUSPECT_VIEW                | 视图可疑（检测到嵌套挂载，或目录是挂载点的祖先）；该范围删除禁止，判定见[可疑视图](../design/deletion.md#可疑视图)；连接测试/浏览也用作账号缺少权限位0（CanSeeHides，列表可能漏掉隐藏条目）或目录含嵌套挂载提示的警告 |
 | SCAN_DEPTH_EXCEEDED         | 目录深度超过SCAN_MAX_DEPTH；该子树不再下探并受保护（protectSubtree=true），Run不因此失败                                                                                                                              |
-| TARGET_ROOT_WILL_BE_CREATED | Target根不存在（其父目录可列出且无此名）；dry-run报告此码并规划全部create，实跑先以prepare mkdir创建根                                                                                                                |
+| TARGET_ROOT_WILL_BE_CREATED | Target根不存在（其父目录可列出且无此名）且需要创建内容或目录结构；dry-run报告此码并规划create，实跑先以prepare mkdir创建根                                                                                            |
 | TARGET_ROOT_UNAVAILABLE     | Target根无法列出且不能证明缺失（父目录列表失败、权限错误或同名为文件）；该Target按SCAN_INCOMPLETE处理，不create、不删除                                                                                               |
 | MOUNT_BOUNDARY_UNKNOWN      | 管理员模式下storage列表不可读或重读后仍不一致；该Instance所有目录按可疑视图处理，相关删除禁止；连接测试/浏览也用作非管理员不能核实完整挂载或不存在唯一可用挂载的警告                                                  |
 | INVALID_NAME                | 条目名含`/`、`\`、NUL，或为`.`、`..`；保护其父目录                                                                                                                                                                    |
@@ -58,8 +58,9 @@ Error={error:{code:string,message:string,details:FieldError[]},requestId:string}
 | TYPE_CONFLICT               | 同一相对路径在源与目标的文件/目录类型不同；所有模式都不自动删除阻挡对象                                                                                                                                               |
 | NAME_COLLISION              | NFC/大小写折叠后名称相同（source内部、source与Target之间或Target内部）                                                                                                                                                |
 | EMPTY_SOURCE                | 有效源集合为空且allowEmptySource=false；删除禁止                                                                                                                                                                      |
+| DELETE_BLOCKED              | 扫描保护阻断的Target删除及依赖create；具体原因在RunTarget.blockReasons及scan_issues；不改变planned计数                                                                                                                |
 | DELETE_LIMIT                | 超过数量/比例阈值，或retry_cleanup超出剩余预算；相关delete及其依赖create跳过                                                                                                                                          |
-| PLAN_INVALID                | 计划内部断言失败（例如R>D）；按实现缺陷记录日志，该Target的删除及依赖create跳过                                                                                                                                       |
+| PLAN_INVALID                | 计划内部断言失败（例如R>D）；按实现缺陷记录日志，只记录scan_issue；该Target的删除及依赖create以DELETE_BLOCKED跳过                                                                                                     |
 | PREVIOUS_OUTCOME_UNKNOWN    | 路径受未决unknown保护：隔离仍active，或到期/释放后的重新观察读取失败                                                                                                                                                  |
 
 ### 执行
@@ -80,6 +81,7 @@ Error={error:{code:string,message:string,details:FieldError[]},requestId:string}
 | AUTH_BLOCKED                | Instance处于auth_blocked，相关请求立即失败                                                                                                     |
 | OPENLIST_ERROR              | 未被专用原因码覆盖的上游失败；响应错误码或网络事实只进入脱敏摘要，不按message猜测业务状态                                                      |
 | UPSTREAM_REDIRECT           | 管理API、multipart或put收到重定向；不跟随，也不重放上传body                                                                                    |
+| UPSTREAM_JSON_TOO_LARGE     | 上游JSON响应实际字节超限的客户端事实；扫描映射Run RESOURCE_LIMIT，浏览HTTP仍为502 UPSTREAM_PROTOCOL_ERROR                                      |
 | UPSTREAM_PROTOCOL_ERROR     | OpenList响应结构未知或不符合协议                                                                                                               |
 
 ### Run、实例、通知与启动
@@ -88,7 +90,7 @@ Error={error:{code:string,message:string,details:FieldError[]},requestId:string}
 | ---------------------------- | -------------------------------------- | --------------------------------------------------------------------------------------------- |
 | QUEUE_TIMEOUT                | Run.error（stopReason=NULL）           | 到queueDeadlineAt仍未开始                                                                     |
 | RESOURCE_LIMIT               | Run.error                              | 扫描/规划期资源上限超限或聚合超过安全整数；Run failed，不执行计划                             |
-| PLAN_INTERRUPTED             | Operation.error                        | 进程重启使旧计划中的pending不再执行                                                           |
+| PLAN_INTERRUPTED             | Operation.error                        | 进程重启或扫描失败使旧计划中的pending不再执行                                                 |
 | INTERNAL_ERROR               | Run.error                              | 本地不可恢复实现错误                                                                          |
 | RUN_TIMEOUT                  | Run.stopReason                         | 超过Job timeoutSeconds，Run cancelled                                                         |
 | USER_CANCEL                  | Run.stopReason                         | 管理员取消，Run cancelled                                                                     |
@@ -134,7 +136,7 @@ Error={error:{code:string,message:string,details:FieldError[]},requestId:string}
 | POST /instances/:id/test   | TestRequest                    | 200 TestResult；只读测试不上传探测文件               |
 | POST /instances/:id/browse | BrowseRequest                  | 200 BrowseResult；上游失败502                        |
 
-M1 的身份比较后允许覆盖，DELETE 归档并清空凭据；下述 Job 引用及未决责任 409 检查随 M2/M3a 表落地接入，当前不伪造责任判断。
+M2 已接入非归档Job引用和完整未决责任谓词：DELETE有引用时409，PATCH身份变化有责任时409，limits/downloadMode在非终态Run引用时409；name和同身份凭据修复仍允许。
 
 浏览使用POST避免路径密码进URL。分页为本服务切分OpenList列表，不保证云端游标一致性。
 PATCH本身不调用OpenList。地址、账号（password模式的username）或base_path变化在存在[未决责任](../design/data-model.md#responsibility)时返回409 ENDPOINT_IN_USE；同地址同账号的凭据修复允许。

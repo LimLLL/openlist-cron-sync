@@ -4,6 +4,8 @@ import { and, eq, isNull } from 'drizzle-orm';
 import { DatabaseService } from '../database/database.service.js';
 import { instances } from '../database/schema.js';
 import type { InstanceRecord, InstanceChanges } from '../database/schema.js';
+import { hasResponsibility } from '../database/responsibility.js';
+import type { Account } from '../openlist/auth.service.js';
 import { ApiError } from '../common/errors.js';
 
 /** 认证身份的持久化入口，不持有 JWT，也不调用 OpenList。
@@ -53,6 +55,42 @@ export class InstanceAuthState {
       .set({ ...changes, updatedAt: Date.now() })
       .where(eq(instances.id, expected.id))
       .run();
+  }
+
+  /** 在同一事务内核对账号身份和引用责任，冲突时保留旧身份。
+   * @param expected 请求使用的配置。
+   * @param account 上游核实的身份。
+   * @returns 是否接受身份；false 已持久化 ACCOUNT_CHANGED。
+   * @throws ApiError 配置过期；Error 数据库失败。
+   */
+  identify(expected: InstanceRecord, account: Account): boolean {
+    return this.database.db.transaction(
+      /** 在一个事务内比对身份；身份变化且有未决责任时写入 ACCOUNT_CHANGED 阻断，否则保存新身份并恢复 ready。
+       * @param 不适用。
+       * @returns 是否接受该身份。
+       * @throws ApiError 实例归档或连接配置已变更；Error 数据库失败。
+       */
+      () => {
+        const current = this.current(expected);
+        const changed =
+          current.accountUsername !== account.username ||
+          current.accountBasePath !== account.basePath;
+        if (changed && hasResponsibility(this.database.db, expected.id)) {
+          this.block(expected, 'ACCOUNT_CHANGED', null);
+          return false;
+        }
+        this.save(expected, {
+          accountUsername: account.username,
+          accountBasePath: account.basePath,
+          accountRole: account.role,
+          accountPermissions: account.permissions,
+          authState: 'ready',
+          authBlockReason: null,
+          authBlockedUntil: null,
+        });
+        return true;
+      },
+    );
   }
 
   /** 写入持久阻断；冷却期限只在真实登录被限流时设置。

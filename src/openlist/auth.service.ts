@@ -1,5 +1,7 @@
 // 共享内存 token 与 single-flight 登录；持久阻断由安全模块管理。
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
+import type { BeforeApplicationShutdown } from '@nestjs/common';
+import { errorTraits } from '../common/errors.js';
 import { createHash } from 'node:crypto';
 import { AppConfig } from '../configuration/app-config.js';
 import { KeysService } from '../security/keys.service.js';
@@ -12,6 +14,8 @@ import { ApiError } from '../common/errors.js';
 import { OpenListTransport } from './transport.service.js';
 import type { HttpCall } from './transport.service.js';
 import { OpenListError, object, string, integer, protocol } from './errors.js';
+import { waitForAuthentication } from './request-context.js';
+import type { RequestContext } from './request-context.js';
 import { normalizeGlobalPath } from './paths.js';
 
 /** 已核对的账号身份。 */
@@ -45,7 +49,9 @@ interface Session {
  * @throws 不适用。
  */
 @Injectable()
-export class OpenListAuth {
+export class OpenListAuth implements BeforeApplicationShutdown {
+  private readonly flights = new Set<Promise<void>>();
+  private readonly logger = new Logger(OpenListAuth.name);
   private readonly sessions = new Map<string, Session>();
   /** 保存已授权的依赖。
    * @param transport 单请求传输。
@@ -62,6 +68,19 @@ export class OpenListAuth {
     @Inject(AppConfig) private readonly config: AppConfig,
   ) {}
 
+  /** 数据库关闭前等待共享认证完成，调用方取消不使认证变成悬空工作。
+   * @param 不适用。
+   * @returns 全部已开始认证停止。
+   * @throws 不适用；停止时的网络失败记录安全摘要。
+   */
+  async beforeApplicationShutdown(): Promise<void> {
+    for (const result of await Promise.allSettled(this.flights))
+      if (result.status === 'rejected')
+        this.logger.debug(
+          'Authentication stopped during shutdown',
+          errorTraits(result.reason),
+        );
+  }
   /** 准备一次显式人工恢复；429 冷却期间拒绝且不触网。
    * 持久阻断保持不变，直到随后的人工尝试成功，网络失败不会解除阻断。
    * @param instance 调用配置。
@@ -90,7 +109,11 @@ export class OpenListAuth {
    * @throws OpenListError 认证阻断或上游失败；Error 持久化失败。
    */
   async call(instance: InstanceRecord, call: HttpCall): Promise<unknown> {
-    const session = await this.ready(instance);
+    call.signal?.throwIfAborted();
+    const session = await waitForAuthentication(
+      this.ready(instance, false, call),
+      call.signal,
+    );
     const token = session.token;
     try {
       return await this.transport.call(instance, call, token?.value);
@@ -109,7 +132,10 @@ export class OpenListAuth {
         throw error;
       }
       // 上游只在认证中间件或处理器入口的身份检查返回 401，请求尚未执行，重放一次是安全的。
-      await this.refresh(session, token);
+      await waitForAuthentication(
+        this.refresh(session, token, false, call),
+        call.signal,
+      );
       return this.transport.call(
         instance,
         { ...call, read: false },
@@ -121,6 +147,7 @@ export class OpenListAuth {
    * @param instance 调用配置。
    * @param force 是否强制刷新身份。
    * @param manual 是否为 retryManually 之后的单次人工尝试，可越过持久阻断。
+   * @param context 调用方的中止信号与 Run 固定参数；省略时使用进程配置。
    * @returns 已核对账号。
    * @throws OpenListError 认证或协议失败。
    */
@@ -128,14 +155,20 @@ export class OpenListAuth {
     instance: InstanceRecord,
     force = false,
     manual = false,
+    context: RequestContext = {},
   ): Promise<Account> {
     const existing = this.sessions.get(instance.id);
     const hadAccount =
       existing?.account !== undefined &&
       sameConnection(existing.instance, instance);
-    const session = await this.ready(instance, manual);
+    context.signal?.throwIfAborted();
+    const session = await waitForAuthentication(
+      this.ready(instance, manual, context),
+      context.signal,
+    );
     if (force && hadAccount) {
       const data = await this.call(instance, {
+        ...context,
         endpoint: '/api/me',
         method: 'GET',
         read: true,
@@ -159,12 +192,14 @@ export class OpenListAuth {
   /** 本地检查持久阻断并取得经过 /me 核对的会话。
    * @param instance 调用配置。
    * @param manual 是否为单次人工尝试。
+   * @param context 需要登录时传给共享登录的调用方上下文，仅使用其 Run 固定参数。
    * @returns 可用会话。
    * @throws OpenListError 阻断或认证失败。
    */
   private async ready(
     instance: InstanceRecord,
     manual = false,
+    context: RequestContext = {},
   ): Promise<Session> {
     this.assertAllowed(instance, manual);
     let session = this.sessions.get(instance.id);
@@ -172,7 +207,8 @@ export class OpenListAuth {
       session = { instance };
       this.sessions.set(instance.id, session);
     }
-    if (!session.account) await this.refresh(session, session.token, manual);
+    if (!session.account)
+      await this.refresh(session, session.token, manual, context);
     return session;
   }
   /** 检查阻断，不在冷却期内访问任何上游端点。
@@ -205,6 +241,7 @@ export class OpenListAuth {
    * @param session 同连接会话。
    * @param stale 请求使用的 token 发布对象；相同 JWT 字节也可能属于不同登录。
    * @param manual 是否为单次人工尝试。
+   * @param context 发起登录的调用方上下文，仅使用其 Run 固定参数。
    * @returns 恢复完成。
    * @throws OpenListError 登录或身份验证失败。
    */
@@ -212,6 +249,7 @@ export class OpenListAuth {
     session: Session,
     stale: Session['token'],
     manual = false,
+    context: RequestContext = {},
   ): Promise<void> {
     this.assertAllowed(session.instance, manual);
     const current = this.sessions.get(session.instance.id);
@@ -221,7 +259,7 @@ export class OpenListAuth {
       current !== session &&
       sameConnection(current.instance, session.instance)
     ) {
-      await this.refresh(current, stale, manual);
+      await this.refresh(current, stale, manual, context);
       session.token = current.token;
       session.account = current.account;
       return;
@@ -229,20 +267,26 @@ export class OpenListAuth {
     if (session.token !== stale && session.account) return;
     if (session.flight) return session.flight;
     session.account = undefined;
-    const flight = this.loginAndIdentify(session);
+    const flight = this.loginAndIdentify(session, context);
     session.flight = flight;
+    this.flights.add(flight);
     try {
       await flight;
     } finally {
+      this.flights.delete(flight);
       if (session.flight === flight) session.flight = undefined;
     }
   }
   /** 单次登录并核对身份，不对登录请求自动重试。
    * @param session 当前会话。
+   * @param context 发起登录的调用方上下文；仅取 settings 决定请求参数与 429 冷却时长，不传递调用方信号。
    * @returns 身份确认完成。
    * @throws OpenListError 登录失败；Error 解密或数据库失败。
    */
-  private async loginAndIdentify(session: Session): Promise<void> {
+  private async loginAndIdentify(
+    session: Session,
+    context: RequestContext,
+  ): Promise<void> {
     const instance = session.instance;
     const secretEnc = instance.secretEnc;
     if (!secretEnc)
@@ -260,6 +304,7 @@ export class OpenListAuth {
       try {
         const data = object(
           await this.transport.call(instance, {
+            settings: context.settings,
             endpoint: '/api/auth/login/hash',
             method: 'POST',
             json: {
@@ -280,7 +325,10 @@ export class OpenListAuth {
             instance,
             `LOGIN_${status}`,
             status === 429
-              ? Date.now() + this.config.openlistAuthCooldownSeconds * 1000
+              ? Date.now() +
+                  (context.settings ?? this.config.execution)
+                    .authCooldownSeconds *
+                    1000
               : null,
           );
           throw new OpenListError(
@@ -297,7 +345,12 @@ export class OpenListAuth {
     try {
       const data = await this.transport.call(
         instance,
-        { endpoint: '/api/me', method: 'GET', read: true },
+        {
+          endpoint: '/api/me',
+          method: 'GET',
+          read: true,
+          settings: context.settings,
+        },
         token,
       );
       session.account = this.acceptAccount(instance, data);
@@ -320,7 +373,7 @@ export class OpenListAuth {
       throw error;
     }
   }
-  /** 校验每个 /me 成功响应并保存身份；M1 无未决责任表。
+  /** 校验每个 /me 成功响应并按责任谓词保存身份。
    * @param instance 请求配置。
    * @param input 上游 data。
    * @returns 已验证身份。
@@ -355,16 +408,11 @@ export class OpenListAuth {
         200,
       );
     }
-    // 尚无未决责任表，身份直接覆盖；ACCOUNT_CHANGED 的接入点见 openlist-integration.md 的 M1 实现边界。
-    this.states.save(instance, {
-      accountUsername: account.username,
-      accountBasePath: account.basePath,
-      accountRole: account.role,
-      accountPermissions: account.permissions,
-      authState: 'ready',
-      authBlockReason: null,
-      authBlockedUntil: null,
-    });
+    if (!this.states.identify(instance, account))
+      throw new OpenListError(
+        'AUTH_BLOCKED',
+        'OpenList account identity changed',
+      );
     return account;
   }
 }

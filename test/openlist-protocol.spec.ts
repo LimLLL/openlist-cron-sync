@@ -128,7 +128,7 @@ describe('M1 protocol boundaries', /** 注册本组 M1 行为验收用例。
         call.url === '/api/fs/list' ? { body: ' '.repeat(2048) } : undefined;
     await expect(
       fixture.client.list(fixture.record(), '/'),
-    ).rejects.toMatchObject({ code: 'UPSTREAM_PROTOCOL_ERROR' });
+    ).rejects.toMatchObject({ code: 'UPSTREAM_JSON_TOO_LARGE' });
     fixture.server.responder =
       /** 根据请求端点返回本场景的可控上游响应。
        * @param call 捕获的真实 HTTP 请求。

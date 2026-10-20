@@ -63,7 +63,7 @@ describe('M0 configuration', () => {
       new ConfigService({
         environment: environmentFor('/tmp/m0', {
           ADMIN_PASSWORD: '',
-          GLOBAL_MAX_RUNS: 'bad',
+          RELAY_UPLOAD_WORKERS: 'bad',
           SHUTDOWN_GRACE_SECONDS: 'bad',
         }),
       }),

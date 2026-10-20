@@ -9,6 +9,7 @@ import type { FileEntry, FileList, PublicSettings } from './protocol.js';
 import { normalizePath, childPath } from './paths.js';
 import { OpenListError } from './errors.js';
 import { storagePage } from './mounts.js';
+import type { RequestContext } from './request-context.js';
 import type { Storage } from './mounts.js';
 
 /** 文件和能力协议客户端。
@@ -51,6 +52,7 @@ export class OpenListClient {
    * @param path 账号路径。
    * @param password 路径密码。
    * @param refresh 是否强制刷新。
+   * @param context 调用方的中止信号与 Run 固定参数（含单目录条目上限）；省略时使用进程配置。
    * @returns 列表与非法名称警告。
    * @throws OpenListError 上游失败；ApiError 路径非法。
    */
@@ -59,16 +61,19 @@ export class OpenListClient {
     path: string,
     password = '',
     refresh = false,
+    context: RequestContext = {},
   ): Promise<FileList> {
     const normalized = normalizePath(path);
     return fileList(
       await this.auth.call(instance, {
+        ...context,
         endpoint: '/api/fs/list',
         method: 'POST',
         read: true,
         json: { path: normalized, password, refresh, page: 1, per_page: 0 },
       }),
       normalized,
+      context.settings?.scanMaxDirectoryEntries,
     );
   }
   /** 读取单文件诊断；不把缓存结果当新鲜度证明。
@@ -131,17 +136,26 @@ export class OpenListClient {
   }
   /** 完整读取管理员存储表；不一致只重读一次，绝不降级。
    * @param instance 实例。
+   * @param context 调用方的中止信号与 Run 固定参数；省略时使用进程配置。
    * @returns 完整且字段筛选后的存储集合。
    * @throws OpenListError 不可读或分页不一致。
    */
-  async storages(instance: InstanceRecord): Promise<Storage[]> {
-    const account = await this.auth.account(instance);
+  async storages(
+    instance: InstanceRecord,
+    context: RequestContext = {},
+  ): Promise<Storage[]> {
+    const account = await this.auth.account(instance, false, false, context);
     if (account.role !== 2)
       throw new OpenListError(
         'MOUNT_BOUNDARY_UNKNOWN',
         'Admin account required for mount map',
       );
-    const signal = AbortSignal.timeout(this.config.openlistApiTimeoutMs);
+    const timeout = AbortSignal.timeout(
+      (context.settings ?? this.config.execution).apiTimeoutMs,
+    );
+    const signal = context.signal
+      ? AbortSignal.any([context.signal, timeout])
+      : timeout;
     for (let pass = 0; pass < 2; pass++) {
       try {
         const rows: Storage[] = [];
@@ -154,6 +168,7 @@ export class OpenListClient {
               method: 'GET',
               read: true,
               signal,
+              settings: context.settings,
             }),
           );
           if (total !== undefined && result.total !== total) break;
@@ -173,7 +188,9 @@ export class OpenListClient {
           if (rows.length === total) return rows;
         }
       } catch (error) {
+        context.signal?.throwIfAborted();
         if (!(error instanceof OpenListError)) throw error;
+        if (error.code === 'UPSTREAM_JSON_TOO_LARGE') throw error;
         if (error.code !== 'UPSTREAM_PROTOCOL_ERROR') {
           this.logger.warn('OpenList mount map unavailable', {
             instanceId: instance.id,

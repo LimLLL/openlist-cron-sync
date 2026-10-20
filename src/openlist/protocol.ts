@@ -16,6 +16,8 @@ export interface Warning {
   code: string;
   /** 服务生成的摘要。 */
   message: string;
+  /** 内部列表诊断事实；浏览投影只返回 code/message。 */
+  fact?: 'share_excluded';
 }
 /** 可供内部读取使用的合法文件条目。 */
 export interface FileEntry {
@@ -36,6 +38,8 @@ export interface FileEntry {
 export interface FileList {
   /** 合法条目；非法名称已移除。 */
   items: FileEntry[];
+  /** 固定排除的根分享条目；仅供扫描碰撞检测，禁止访问。 */
+  protectedEntries: FileEntry[];
   /** 上游报告总数。 */
   total: number;
   /** 当前目录写入提示。 */
@@ -90,17 +94,28 @@ export function fileEntry(input: unknown): FileEntry {
 /** 解析完整目录，仅 code200 的 content:null 视为空。
  * @param input 成功 envelope 的 data。
  * @param path 已规范化账号路径。
+ * @param maxEntries 单目录条目上限；省略时不限制。
  * @returns 合法条目及警告。
- * @throws OpenListError 协议或大小异常。
+ * @throws OpenListError 协议或大小异常，或条目数超过上限。
  */
-export function fileList(input: unknown, path: string): FileList {
+export function fileList(
+  input: unknown,
+  path: string,
+  maxEntries?: number,
+): FileList {
   const data = object(input);
   const content: unknown = data.content === null ? [] : data.content;
   if (!Array.isArray(content)) protocol('list content');
+  if (maxEntries !== undefined && content.length > maxEntries)
+    throw new OpenListError(
+      'RESOURCE_LIMIT',
+      'OpenList directory exceeds entry limit',
+    );
   const total = integer(data.total);
   if (total !== content.length) protocol('list total');
   const result: FileList = {
     items: [],
+    protectedEntries: [],
     total,
     write: boolean(data.write),
     warnings: [],
@@ -109,9 +124,11 @@ export function fileList(input: unknown, path: string): FileList {
     try {
       const parsed = fileEntry(entry);
       if (path === '/' && parsed.name.startsWith('@s')) {
+        result.protectedEntries.push(parsed);
         result.warnings.push({
           code: 'INVALID_NAME',
           message: 'Share namespace entry excluded',
+          fact: 'share_excluded',
         });
         continue;
       }
