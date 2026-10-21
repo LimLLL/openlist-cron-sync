@@ -56,7 +56,7 @@ function Coverage({ label, complete }: { label: string; complete: boolean }) {
  * @throws 不适用。
  */
 export function RunTargets({ targets }: { targets: RunTargetView[] }) {
-  const { t } = useTranslation('runs');
+  const { t } = useTranslation(['runs', 'common']);
   const errorText = useErrorText();
   return (
     <ol className="border-t border-hairline">
@@ -80,6 +80,9 @@ export function RunTargets({ targets }: { targets: RunTargetView[] }) {
                       {t(`detail.targets.mode.${label.mode}`)}
                     </Badge>
                   )}
+                  <Badge plain variant="info">
+                    {t(`common:operationMethod.${label.createMode}`)}
+                  </Badge>
                   {target.suspect && <Badge variant="warning">{t('detail.targets.suspect')}</Badge>}
                   {blocked && <Badge variant="danger">{t('detail.targets.blocked')}</Badge>}
                 </div>

@@ -1,7 +1,13 @@
 // 验证 Job 表单请求语义，重点覆盖 PATCH 的空阈值和数值边界。
 import { describe, expect, it } from 'vitest';
-import { buildJobInput, emptyTarget } from './job-form-model';
+import {
+  buildJobInput,
+  emptyTarget,
+  targetsFromJob,
+  targetCreateModeState,
+} from './job-form-model';
 import type { JobFormValues } from './job-form-model';
+import { mixedJobFixture } from './job-test-fixture';
 
 /** 创建合法的独立表单夹具。
  * @returns 可修改的测试输入。
@@ -10,7 +16,6 @@ import type { JobFormValues } from './job-form-model';
 function fixture(): JobFormValues {
   return {
     name: 'Sync',
-    createMode: 'relay',
     sourceInstanceId: '11111111-1111-4111-8111-111111111111',
     sourcePath: '/source',
     sourcePassword: '',
@@ -37,6 +42,58 @@ function fixture(): JobFormValues {
 }
 
 describe('job form payload', () => {
+  /** 目标默认、编辑回填及序列化均使用同一新形状。
+   * @param 不适用。
+   * @returns 不适用。
+   * @throws Error 断言失败。
+   */
+  it('hydrates and serializes mixed Target modes without a Job-level field', () => {
+    const values = fixture();
+    values.targets = targetsFromJob(mixedJobFixture());
+    expect(emptyTarget().createMode).toBe('relay');
+    const body = buildJobInput(values);
+    expect(body).not.toHaveProperty('createMode');
+    expect(body.targets.map((target) => target.createMode)).toEqual([
+      'server_copy',
+      'relay',
+    ]);
+  });
+  /** 派生错误随目标本身移动，源或目标改变时不静默修正创建方式。
+   * @param 不适用。
+   * @returns 不适用。
+   * @throws Error 断言失败。
+   */
+  it('keeps invalid selections and recomputes errors after source edits, reorder and removal', () => {
+    const job = mixedJobFixture();
+    const targets = targetsFromJob(job);
+    const other = targets[1].instanceId;
+    expect(targetCreateModeState(other, targets[0])).toEqual({
+      unavailable: true,
+      invalid: true,
+    });
+    targets.reverse();
+    expect(
+      targets.map((target) => targetCreateModeState(other, target).invalid),
+    ).toEqual([false, true]);
+    targets.splice(0, 1);
+    expect(targetCreateModeState(other, targets[0]).invalid).toBe(true);
+    expect(targets[0].createMode).toBe('server_copy');
+    expect(
+      targetCreateModeState(job.source.instanceId, targets[0]).invalid,
+    ).toBe(false);
+    targets[0].instanceId = other;
+    expect(
+      targetCreateModeState(job.source.instanceId, targets[0]).invalid,
+    ).toBe(true);
+    expect(targetCreateModeState('', targets[0])).toEqual({
+      unavailable: false,
+      invalid: false,
+    });
+    targets[0].instanceId = '';
+    expect(
+      targetCreateModeState(job.source.instanceId, targets[0]).invalid,
+    ).toBe(false);
+  });
   it('clears a threshold with null while preserving target identity and passwords', () => {
     const values = fixture();
     values.targets[0].maxCount = '';
@@ -76,9 +133,9 @@ describe('job form payload', () => {
   });
   it('rejects cross-instance server copy and reversed file size limits', () => {
     const values = fixture();
-    values.createMode = 'server_copy';
+    values.targets[0].createMode = 'server_copy';
     expect(() => buildJobInput(values)).toThrow('source instance');
-    values.createMode = 'relay';
+    values.targets[0].createMode = 'relay';
     values.minSizeBytes = '20';
     values.maxSizeBytes = '10';
     expect(() => buildJobInput(values)).toThrow('Minimum size');

@@ -6,14 +6,14 @@
 
 ## 创建方式
 
-Job.createMode决定新建文件的方式，对该Job的全部Target生效，写入运行配置快照。
+Target.createMode决定该目标新建文件的方式；默认relay，逐目标写入Run接受时的固定配置快照。同一Run允许混合relay和server_copy，规划器从Run Target快照生成各create Operation的method，执行与恢复按Operation分派。
 
-| createMode    | 新建文件                                                                                                   | 适用范围                             |
-| ------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------ |
-| relay（默认） | 本服务从源下载、经本地spool用目标OpenList的分片上传写入，见[Relay](relay.md)                               | 任意实例关系，包括同实例同storage    |
-| server_copy   | 调用OpenList `/api/fs/copy`（overwrite=false），同storage由驱动复制，跨storage由OpenList自己的传输任务执行 | 所有Target必须与source在同一Instance |
+| createMode    | 新建文件                                                                                                   | 适用范围                                |
+| ------------- | ---------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| relay（默认） | 本服务从源下载、经本地spool用目标OpenList的分片上传写入，见[Relay](relay.md)                               | 任意实例关系，包括同实例同storage       |
+| server_copy   | 调用OpenList `/api/fs/copy`（overwrite=false），同storage由驱动复制，跨storage由OpenList自己的传输任务执行 | 该Target必须与source使用同一Instance ID |
 
-server_copy的Job含跨Instance Target时配置校验直接拒绝，提示改用relay；不按Target静默切换，也没有跨实例的隐式fallback。OpenList后台任务只会出现在server_copy中，其跟踪、取消、清理与恢复见[OpenList集成](openlist-integration.md#任务跟踪)；“OpenList报告成功即成功”的政策见[ADR 0005](../adr/0005-openlist-success.md)。
+某个server_copy Target与source的Instance ID不同时，完整合并配置的校验直接拒绝并定位到该Target的createMode字段；相同URL的不同Instance ID也不满足条件。不静默切换，也没有跨实例的隐式fallback。relay只对该Target检查multipart能力，检查时机仍为启用Job及接受Run（包括dry-run）。OpenList后台任务只会出现在server_copy中，其跟踪、取消、清理与恢复见[OpenList集成](openlist-integration.md#任务跟踪)；“OpenList报告成功即成功”的政策见[ADR 0005](../adr/0005-openlist-success.md)。
 两种方式的删除一律是单名称`/api/fs/remove`。
 
 ## 阶段一：Scan + Plan

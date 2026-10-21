@@ -132,7 +132,7 @@ Docker 镜像会在正式发布时提供。
 
 Job保存五段cron（IANA时区，默认UTC）后，`POST /jobs/:id/enable`启用定时、`POST /jobs/:id/disable`停用；两者运行期间也可调用，不影响已开始的运行，停用后仍可手动运行。`GET /jobs/:id/next-fire-times?count=5`返回接下来的触发时间（UTC，附Job时区），很稀疏的表达式可能少于count。迟到的定时只补跑一次，服务停机期间错过的不补跑。
 
-`POST /api/v1/jobs/:id/runs`默认`dryRun=false`；预览须显式传`true`。真实执行按Job的`createMode`新建文件：`relay`（默认）由本服务下载再分片上传；`server_copy`调用OpenList服务端复制并逐个跟踪其后台任务，要求所有目标与源在同一实例。`POST /runs/:id/cancel`取消运行；`GET /operations`支持`unresolved`过滤；`POST /operations/:id/quarantine-release`提前释放隔离，`POST /operations/:id/resolve`以abandoned结束责任。释放/放弃不证明远端旧请求已停止。
+`POST /api/v1/jobs/:id/runs`默认`dryRun=false`；预览须显式传`true`。真实执行按各Target的`createMode`新建文件：`relay`（默认）由本服务下载再分片上传；`server_copy`调用OpenList服务端复制并逐个跟踪其后台任务，要求选择server_copy的目标与源使用同一Instance ID。`POST /runs/:id/cancel`取消运行；`GET /operations`支持`unresolved`过滤；`POST /operations/:id/quarantine-release`提前释放隔离，`POST /operations/:id/resolve`以abandoned结束责任。释放/放弃不证明远端旧请求已停止。
 
 连续登录失败会被限流：默认 15 分钟内失败 5 次后，接口返回 429 并带上 `Retry-After` 响应头。完整接口规范见 [REST API](docs/reference/rest-api.md)。
 
@@ -157,7 +157,7 @@ node test/compiled-smoke.mjs               # 构建产物冒烟测试，需先 b
 pnpm run db:generate                       # 修改数据库 schema 后生成迁移（自动先 build）
 ```
 
-表定义分在多个文件中，NodeNext 要求它们以 `.js` 相对引用；drizzle-kit 0.31 直接加载 TS 源文件时无法解析这类引用（[上游 issue #2705](https://github.com/drizzle-team/drizzle-orm/issues/2705)），因此 `drizzle.config.ts` 读取编译后的 `dist/database/schema.js`，`db:generate` 脚本先执行 `nest build` 保证产物最新。数据库迁移由 drizzle-kit 生成到 `drizzle/` 目录，服务启动时会自动应用，生成的文件不要手工修改。部署时需要一起带上 `dist/`、`web/dist/`、生产依赖和整个 `drizzle/` 目录。
+表定义分在多个文件中，NodeNext 要求它们以 `.js` 相对引用；drizzle-kit 0.31 直接加载 TS 源文件时无法解析这类引用（[上游 issue #2705](https://github.com/drizzle-team/drizzle-orm/issues/2705)），因此 `drizzle.config.ts` 读取编译后的 `dist/database/schema.js`，`db:generate` 脚本先执行 `nest build` 保证产物最新。数据库迁移由 drizzle-kit 生成到 `drizzle/` 目录，服务启动时会自动应用，结构 SQL 与元数据由工具生成；需要保留既有数据的重构在新的前向迁移中补充数据转换与校验，已应用的迁移及其元数据不可修改。部署时需要一起带上 `dist/`、`web/dist/`、生产依赖和整个 `drizzle/` 目录。
 
 `test:e2e` 自动构建前端后验证 API 和 SPA 托管。仅运行后端开发服务时不要求已有前端产物；Vite 单独提供页面。生产通过 `@nestjs/serve-static` 在根路径提供 SPA，`/api` 和缺失资源不进入 HTML 回退。浏览器环境变量是公开构建内容，不得放入管理员密码或实例凭据。
 

@@ -48,9 +48,6 @@ export const jobs = sqliteTable(
     syncEmptyDirs: integer('sync_empty_dirs', { mode: 'boolean' })
       .notNull()
       .default(false),
-    createMode: text('create_mode', { enum: ['relay', 'server_copy'] })
-      .notNull()
-      .default('relay'),
     relayBandwidthLimit: integer('relay_bandwidth_limit').notNull().default(0),
     timeoutSeconds: integer('timeout_seconds').notNull().default(86400),
     archivedAt: integer('archived_at'),
@@ -70,7 +67,6 @@ export const jobs = sqliteTable(
       'jobs_booleans',
       sql`${t.enabled} IN (0,1) AND ${t.sourceRefresh} IN (0,1) AND ${t.allowEmptySource} IN (0,1) AND ${t.syncEmptyDirs} IN (0,1)`,
     ),
-    check('jobs_mode', sql`${t.createMode} IN ('relay','server_copy')`),
     check(
       'jobs_globs',
       sql`json_valid(${t.includeGlobs}) AND json_valid(${t.excludeGlobs})`,
@@ -122,6 +118,9 @@ export const jobTargets = sqliteTable(
     mode: text('mode', { enum: ['incremental', 'mirror'] })
       .notNull()
       .default('incremental'),
+    createMode: text('create_mode', { enum: ['relay', 'server_copy'] })
+      .notNull()
+      .default('relay'),
     refresh: integer('refresh', { mode: 'boolean' }).notNull().default(false),
     deleteLimitsEnabled: integer('delete_limits_enabled', { mode: 'boolean' })
       .notNull()
@@ -146,6 +145,10 @@ export const jobTargets = sqliteTable(
     index('job_targets_instance_archive').on(t.instanceId, t.archivedAt),
     check('job_targets_position_nonnegative', sql`${t.position} >= 0`),
     check('job_targets_mode', sql`${t.mode} IN ('incremental','mirror')`),
+    check(
+      'job_targets_create_mode',
+      sql`${t.createMode} IN ('relay','server_copy')`,
+    ),
     check(
       'job_targets_booleans',
       sql`${t.refresh} IN (0,1) AND ${t.deleteLimitsEnabled} IN (0,1)`,

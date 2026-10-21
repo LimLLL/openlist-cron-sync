@@ -53,11 +53,25 @@ export class DatabaseService implements OnModuleInit, OnApplicationShutdown {
           throw new Error('PRAGMA mismatch');
       }
       this.database = drizzle(this.connection);
+      // SQLite 不允许在事务内切换 foreign_keys；Drizzle 负责整个迁移事务。
+      // 重建父表的迁移在提交前自行断言外键完整性，普通启动也检查现存数据。
+      this.connection.pragma('foreign_keys = OFF');
+      if (this.connection.pragma('foreign_keys', { simple: true }) !== 0)
+        throw new Error('Cannot disable foreign keys for migration');
       migrate(this.database, {
         migrationsFolder: fileURLToPath(
           new URL('../../drizzle/', import.meta.url),
         ),
       });
+      this.connection.pragma('foreign_keys = ON');
+      if (this.connection.pragma('foreign_keys', { simple: true }) !== 1)
+        throw new Error('Cannot restore foreign key enforcement');
+      if (
+        this.connection
+          .prepare('SELECT 1 FROM pragma_foreign_key_check LIMIT 1')
+          .get()
+      )
+        throw new Error('Foreign key integrity check failed');
       this.logger.log('Database initialized', {
         decision: 'migrations_applied',
       });

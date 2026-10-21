@@ -48,7 +48,7 @@
 
 ## M2 扫描、规划、预览
 
-交付：每目标模式、Job createMode及其配置校验（server_copy要求所有Target与source同Instance）、Job过滤、碰撞/类型冲突、mkdir/create/delete计划、安全预算及dry-run API。
+交付：每目标同步模式与createMode及其配置校验（server_copy要求该Target与source使用同一Instance ID）、Job过滤、碰撞/类型冲突、mkdir/create/delete计划、安全预算及dry-run API。
 
 任务：逐目录扫描与SQLite批量写计划（Operation按Run内计划顺序编号seq）；source错误映射；Target根检查；Target独有树枚举；完整计划后执行门槛。
 

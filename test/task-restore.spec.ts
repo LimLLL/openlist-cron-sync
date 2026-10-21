@@ -14,7 +14,7 @@ import { TaskResources } from '../src/coordination/task-resources.js';
 it('restores paged task responsibility once and excludes released occupancy', async () => {
   const f = await copyFixture();
   try {
-    const run = await preview(f, f.job({ createMode: 'server_copy' }));
+    const run = await preview(f, f.copyJob());
     const database = f.app.get(DatabaseService);
     const db = database.db;
     const original = db

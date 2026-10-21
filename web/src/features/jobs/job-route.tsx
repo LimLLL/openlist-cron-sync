@@ -103,9 +103,6 @@ export function JobRoute({ job }: { job: JobView }) {
             {job.source.path}
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
-            <Badge plain variant="info">
-              {t(`createMode.${job.createMode}`)}
-            </Badge>
             {job.source.refresh && <Badge plain>{t('detail.refresh')}</Badge>}
           </div>
         </div>
@@ -130,9 +127,12 @@ export function JobRoute({ job }: { job: JobView }) {
                   {target.path}
                 </span>
               </span>
-              <Badge plain variant={target.mode === 'mirror' ? 'warning' : 'default'}>
-                {t(`mode.${target.mode}`)}
-              </Badge>
+              <span className="flex shrink-0 gap-1">
+                <Badge plain variant={target.mode === 'mirror' ? 'warning' : 'default'}>
+                  {t(`mode.${target.mode}`)}
+                </Badge>
+                <Badge plain variant="info">{t(`createMode.${target.createMode}`)}</Badge>
+              </span>
             </li>
           ))}
         </ol>

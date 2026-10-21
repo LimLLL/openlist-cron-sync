@@ -1,6 +1,7 @@
 // 任务详情的编辑式分节：定时、目标与删除阈值、过滤规则、高级设置、时间线。
 import { useTranslation } from 'react-i18next';
 import { EditorialSection } from '../../components/ui/editorial-section';
+import { Badge } from '../../components/ui/badge';
 import { SpecGrid } from '../../components/ui/spec-grid';
 import { ErrorState } from '../../components/states';
 import { formatBytes, formatDuration, formatRelative, formatTimeFull } from '../../lib/format';
@@ -89,6 +90,12 @@ export function TargetsSection({ job, index }: { job: JobView; index: string }) 
                 {target.path}
               </span>
             </div>
+            <div className="mb-4 flex flex-wrap gap-2">
+              <Badge plain variant={target.mode === 'mirror' ? 'warning' : 'default'}>
+                {t(`mode.${target.mode}`)}
+              </Badge>
+              <Badge plain variant="info">{t(`createMode.${target.createMode}`)}</Badge>
+            </div>
             <SpecGrid
               columns={3}
               className="grid-cols-2"
@@ -104,7 +111,6 @@ export function TargetsSection({ job, index }: { job: JobView; index: string }) 
                   value: target.deleteLimits.maxPercent !== null ? `${target.deleteLimits.maxPercent}%` : t('detail.unlimited'),
                   mono: target.deleteLimits.maxPercent !== null,
                 },
-                { label: t('form.mode'), value: t(`mode.${target.mode}`) },
                 { label: t('detail.refresh'), value: target.refresh ? t('detail.yes') : t('detail.no') },
                 { label: t('detail.password'), value: target.hasPassword ? t('detail.passwordSet') : t('detail.passwordNone') },
               ]}
@@ -176,7 +182,6 @@ export function AdvancedSection({ job, index }: { job: JobView; index: string })
         columns={3}
         className="grid-cols-2"
         items={[
-          { label: t('detail.createMode'), value: t(`createMode.${job.createMode}`) },
           { label: t('detail.allowEmptySource'), value: yesNo(job.allowEmptySource) },
           { label: t('detail.syncEmptyDirs'), value: yesNo(job.syncEmptyDirs) },
           {

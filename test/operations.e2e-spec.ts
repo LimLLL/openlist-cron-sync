@@ -42,7 +42,7 @@ describe('M3 operations and execution API', () => {
    * @throws Error 断言失败。
    */
   it('defaults to real execution and accepts server_copy', async () => {
-    const copy = f.job({ createMode: 'server_copy' });
+    const copy = f.copyJob();
     const copied = await request(base)
       .post(`/api/v1/jobs/${copy.id}/runs`)
       .auth(token, { type: 'bearer' })

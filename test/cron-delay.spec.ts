@@ -48,8 +48,7 @@ describe('cron delayed timer delivery', () => {
             return handle;
           },
         );
-        const job = f.job({
-          createMode: 'server_copy',
+        const job = f.copyJob({
           enabled: true,
           cron: '* * * * *',
         });

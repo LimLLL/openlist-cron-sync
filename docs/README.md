@@ -81,7 +81,7 @@ OpenList 行为依据 OpenList v4.2.6 系列源码（上游 main 分支 2026-09 
 | [0003-delete-create.md](adr/0003-delete-create.md)                 | 记录先删除再创建的替换的取舍与后果                          |
 | [0004-quarantine-expiry.md](adr/0004-quarantine-expiry.md)         | 记录未知结果的限时路径隔离的取舍与后果                      |
 | [0005-openlist-success.md](adr/0005-openlist-success.md)           | 记录server_copy模式统一采用OpenList复制成功语义的取舍与后果 |
-| [0006-create-mode.md](adr/0006-create-mode.md)                     | 记录每个 Job 可选两种创建方式的取舍与后果                   |
+| [0006-create-mode.md](adr/0006-create-mode.md)                     | 记录每个 Target 独立选择创建方式的取舍与后果                |
 | [0007-relay.md](adr/0007-relay.md)                                 | 记录分片流水线 relay 的取舍与后果                           |
 | [0008-license-cla.md](adr/0008-license-cla.md)                     | 记录AGPL-3.0与CLA的取舍与后果                               |
 | [0009-drop-move.md](adr/0009-drop-move.md)                         | 记录MVP移除源端move的取舍与后果                             |

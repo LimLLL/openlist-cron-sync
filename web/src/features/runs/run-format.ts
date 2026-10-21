@@ -39,9 +39,11 @@ export interface TargetLabel {
   path: string | null;
   /** 同步模式；未知值为 null。 */
   mode: 'incremental' | 'mirror' | null;
+  /** 接受 Run 时固定的文件创建方式。 */
+  createMode: RunTargetView['config']['target']['createMode'];
 }
 
-/** 从运行目标快照中提取实例名、路径与模式。
+/** 从运行目标快照中提取实例名、路径、同步模式与创建方式。
  * @param target 运行目标。
  * @returns 展示信息。
  * @throws 不适用。
@@ -53,6 +55,7 @@ export function targetLabel(target: RunTargetView): TargetLabel {
     instanceName: typeof instance.name === 'string' ? instance.name : null,
     path: typeof config.path === 'string' ? config.path : null,
     mode,
+    createMode: config.createMode,
   };
 }
 

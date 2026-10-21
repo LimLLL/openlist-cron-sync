@@ -4,7 +4,7 @@
 
 # Relay（下载上传）
 
-relay 是 Job 的默认创建方式（见[创建方式](sync-engine.md#创建方式)）。它从源实例下载文件，再用目标 OpenList 的分片上传接口写入目标，对源与目标是否同一实例、同一 storage 没有要求。同实例同 storage 也照常下载再上传，不借用 OpenList copy。
+relay 是每个 Target 的默认创建方式（见[创建方式](sync-engine.md#创建方式)）。它从源实例下载文件，再用目标 OpenList 的分片上传接口写入目标，对源与目标是否同一实例、同一 storage 没有要求。同实例同 storage 也照常下载再上传，不借用 OpenList copy。
 
 ## 总体结构
 

@@ -15,6 +15,7 @@ import {
   JobFormError,
   jobValidationText,
   targetsFromJob,
+  targetCreateModeState,
 } from './job-form-model';
 import type { JobFormValues } from './job-form-model';
 import { AdvancedFields, BasicsFields, FilterFields, ScheduleFields, SourceFields } from './job-form-sections';
@@ -32,7 +33,6 @@ const FORM_ID = 'job-form';
 function initialValues(existing?: JobView): JobFormValues {
   return {
     name: existing?.name ?? '',
-    createMode: existing?.createMode ?? 'relay',
     sourceInstanceId: existing?.source.instanceId ?? '',
     sourcePath: existing?.source.path ?? '/',
     sourcePassword: '',
@@ -88,6 +88,9 @@ export function JobForm({ existing }: { existing?: JobView }) {
   const mutation = isEdit ? patch : create;
   const [values, setValues] = useState<JobFormValues>(() => initialValues(existing));
   const [validationError, setValidationError] = useState<Error | null>(null);
+  const invalidTargetMode = values.targets.some(
+    (target) => targetCreateModeState(values.sourceInstanceId, target).invalid,
+  );
   const backTo = isEdit ? `/jobs/${existing.id}` : '/jobs';
 
   const update: UpdateField = (field, value) => setValues((previous) => ({ ...previous, [field]: value }));
@@ -99,7 +102,7 @@ export function JobForm({ existing }: { existing?: JobView }) {
    */
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    if (mutation.isPending || !instances.data) return;
+    if (mutation.isPending || !instances.data || invalidTargetMode) return;
     try {
       const body = buildJobInput(values);
       setValidationError(null);
@@ -118,7 +121,7 @@ export function JobForm({ existing }: { existing?: JobView }) {
     validationError instanceof JobFormError
       ? new Error(jobValidationText(validationError.key, validationError.params, t))
       : validationError;
-  const submitDisabled = mutation.isPending || !instances.data;
+  const submitDisabled = mutation.isPending || !instances.data || invalidTargetMode;
 
   return (
     <section>
@@ -161,6 +164,7 @@ export function JobForm({ existing }: { existing?: JobView }) {
         <BasicsFields values={values} update={update} />
         <SourceFields values={values} update={update} instances={instanceList} isEdit={isEdit} />
         <TargetsFields
+          sourceInstanceId={values.sourceInstanceId}
           targets={values.targets}
           instances={instanceList}
           onChange={(targets) => update('targets', targets)}

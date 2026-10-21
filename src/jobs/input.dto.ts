@@ -13,8 +13,6 @@ export class JobInputDto {
   @Allow() source?: unknown;
   /** 完整目标集合或省略保留。 */
   @Allow() targets?: unknown;
-  /** relay/server_copy。 */
-  @Allow() createMode?: unknown;
   /** 启用cron，不影响手动触发。 */
   @Allow() enabled?: unknown;
   /** 五段 cron 或 null。 */
@@ -27,7 +25,7 @@ export class JobInputDto {
   @Allow() allowEmptySource?: unknown;
   /** 目录结构同步。 */
   @Allow() syncEmptyDirs?: unknown;
-  /** 上传 bytes/s。 */
+  /** 此 Job 所有 relay Target 的聚合上传 bytes/s。 */
   @Allow() relayBandwidthLimit?: unknown;
   /** 扫描及规划总秒数。 */
   @Allow() timeoutSeconds?: unknown;

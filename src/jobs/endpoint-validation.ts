@@ -69,18 +69,23 @@ export function validateEndpoints(
       );
     records.set(row.id, row);
   }
-  for (const target of job.targets) {
+  for (const [index, target] of job.targets.entries()) {
     const row = records.get(target.instanceId);
     if (
       requireReady &&
-      job.createMode === 'relay' &&
+      target.createMode === 'relay' &&
       row?.multipartEnabled !== true
     )
       throw new ApiError(
         400,
         'VALIDATION_ERROR',
         'Relay target requires multipart support',
-        [{ field: 'targets', reason: 'MULTIPART_DISABLED' }],
+        [
+          {
+            field: `targets[${index}].instanceId`,
+            reason: 'MULTIPART_DISABLED',
+          },
+        ],
       );
   }
   for (let i = 0; i < endpoints.length; i++)

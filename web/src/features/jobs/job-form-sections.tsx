@@ -5,7 +5,6 @@ import { useTranslation } from 'react-i18next';
 import { EditorialSection } from '../../components/ui/editorial-section';
 import { InputField } from '../../components/ui/input-field';
 import { SelectField } from '../../components/ui/select-field';
-import { Segmented } from '../../components/ui/segmented';
 import { Button } from '../../components/ui/button';
 import { cn } from '../../lib/utils';
 import { SwitchRow } from './job-ui';
@@ -25,7 +24,7 @@ interface SectionProps {
   update: UpdateField;
 }
 
-/** 渲染基本信息分节：名称与创建方式。
+/** 渲染基本信息分节：任务名称。
  * @param props 表单值与更新函数。
  * @returns 分节。
  * @throws 不适用。
@@ -44,19 +43,6 @@ export function BasicsFields({ values, update }: SectionProps) {
           maxLength={100}
           placeholder={t('form.namePlaceholder')}
         />
-        <div className="space-y-2">
-          <p className="field-label">{t('form.createMode')}</p>
-          <Segmented
-            label={t('form.createMode')}
-            value={values.createMode}
-            onChange={(mode) => update('createMode', mode)}
-            options={[
-              { value: 'relay', label: t('createMode.relay') },
-              { value: 'server_copy', label: t('createMode.server_copy') },
-            ]}
-          />
-          <p className="text-xs leading-5 text-muted-foreground">{t('form.createModeHint')}</p>
-        </div>
       </div>
     </EditorialSection>
   );

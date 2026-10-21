@@ -1,4 +1,4 @@
-// 目标列表：编号子块逐个配置实例、路径、模式、密码、刷新与删除阈值；保留已有 ID 与密码保留语义。
+// 目标列表：逐个配置实例、路径、同步模式、创建方式、密码、刷新与删除阈值；保留稳定 ID。
 import { Plus, X } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
@@ -7,7 +7,8 @@ import { InputField } from '../../components/ui/input-field';
 import { SelectField } from '../../components/ui/select-field';
 import { Segmented } from '../../components/ui/segmented';
 import { Button } from '../../components/ui/button';
-import { emptyTarget } from './job-form-model';
+import { cn } from '../../lib/utils';
+import { emptyTarget, targetCreateModeState } from './job-form-model';
 import { SwitchRow } from './job-ui';
 import type { Instance } from '../instances/instance-contract';
 import type { TargetInput } from './job-form-model';
@@ -17,6 +18,8 @@ const EASE = [0.16, 1, 0.3, 1] as const;
 
 /** 单个目标子块属性。 */
 interface TargetBlockProps {
+  /** 当前源实例。 */
+  sourceInstanceId: string;
   /** 当前目标。 */
   target: TargetInput;
   /** 目标序号（从 0 起）。 */
@@ -32,13 +35,15 @@ interface TargetBlockProps {
 }
 
 /** 渲染一个目标的全部字段。
- * @param props 目标、实例与回调。
+ * @param props 源实例、目标、实例与回调。
  * @returns 目标子块。
  * @throws 不适用。
  */
-function TargetBlock({ target, index, instances, canRemove, onChange, onRemove }: TargetBlockProps) {
+function TargetBlock({ sourceInstanceId, target, index, instances, canRemove, onChange, onRemove }: TargetBlockProps) {
   const { t } = useTranslation('jobs');
   const label = t('form.target', { index: index + 1 });
+  const createMode = targetCreateModeState(sourceInstanceId, target);
+  const modeHintId = `target-${index}-create-mode-hint`;
   return (
     <fieldset className="rounded-[1.4rem] border border-hairline bg-white/[0.015] p-5 sm:p-6">
       <legend className="sr-only">{label}</legend>
@@ -98,6 +103,27 @@ function TargetBlock({ target, index, instances, canRemove, onChange, onRemove }
           />
           <p className="text-xs leading-5 text-muted-foreground">{t('form.modeHint')}</p>
         </div>
+        <div className="space-y-2">
+          <p className="field-label">{t('form.createMode')}</p>
+          <Segmented
+            label={`${label}: ${t('form.createMode')}`}
+            value={target.createMode}
+            onChange={(mode) => onChange('createMode', mode)}
+            describedBy={modeHintId}
+            invalid={createMode.invalid}
+            options={[
+              { value: 'relay', label: t('createMode.relay') },
+              { value: 'server_copy', label: t('createMode.server_copy'), disabled: createMode.unavailable },
+            ]}
+          />
+          <p
+            id={modeHintId}
+            role={createMode.invalid ? 'alert' : undefined}
+            className={cn('text-xs leading-5', createMode.invalid ? 'text-danger' : 'text-muted-foreground')}
+          >
+            {createMode.unavailable ? t('validation.serverCopySameInstance') : t('form.createModeHint')}
+          </p>
+        </div>
         <InputField
           id={`target-${index}-password`}
           label={t('form.pathPassword')}
@@ -147,15 +173,17 @@ function TargetBlock({ target, index, instances, canRemove, onChange, onRemove }
 }
 
 /** 渲染目标分节：编号子块列表与“添加目标”。
- * @param props targets 当前目标集合；instances 可选实例；onChange 整体替换目标集合。
+ * @param props sourceInstanceId 当前源实例；targets 当前目标集合；instances 可选实例；onChange 整体替换目标集合。
  * @returns 分节。
  * @throws 不适用。
  */
 export function TargetsFields({
+  sourceInstanceId,
   targets,
   instances,
   onChange,
 }: {
+  sourceInstanceId: string;
   targets: TargetInput[];
   instances: Instance[];
   onChange: (targets: TargetInput[]) => void;
@@ -175,6 +203,7 @@ export function TargetsFields({
               transition={{ duration: 0.45, ease: EASE }}
             >
               <TargetBlock
+                sourceInstanceId={sourceInstanceId}
                 target={target}
                 index={index}
                 instances={instances}

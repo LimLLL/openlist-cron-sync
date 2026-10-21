@@ -9,7 +9,7 @@
 openlist-cron-sync 是一个自托管的后端服务。它通过 [OpenList](https://github.com/OpenListTeam/OpenList) 的 HTTP API，把一个 OpenList 目录（source）中的文件按计划同步到一个或多个目标目录（Target）。目标可以与 source 在同一个 OpenList 实例上，也可以在另一个实例上。
 
 - 按 cron 或手动触发一次运行（Run）。每次 Run 比较 source 与每个 Target：新建目标缺失的文件，替换大小发生变化的文件；mirror 模式还会删除目标上多余的文件。见[同步引擎](sync-engine.md)。
-- 新建文件默认由本服务下载上传（relay）：下载 worker 把源文件分块写入本地缓冲，上传 worker 同时用目标 OpenList 的分片上传接口写入，两边互不等待。Job 也可以改选 server_copy，由 OpenList 在同一实例内自己复制。见[创建方式](sync-engine.md#创建方式)与[Relay](relay.md)。
+- 新建文件默认由本服务下载上传（relay）：下载 worker 把源文件分块写入本地缓冲，上传 worker 同时用目标 OpenList 的分片上传接口写入，两边互不等待。同实例的 Target 也可以显式改选 server_copy，由 OpenList 在同一实例内自己复制。见[创建方式](sync-engine.md#创建方式)与[Relay](relay.md)。
 - 删除一律调用 OpenList 的 remove。
 - 执行前有固定的安全检查：dry-run 预览、删除数量/比例阈值、扫描不完整时禁止删除、结果不明时隔离相关路径。见[删除保护](deletion.md)。
 - 管理面是 REST API 加 OpenAPI 文档，单管理员登录，支持 Webhook 通知、脱敏配置导入导出和 Docker 部署。见[REST API](../reference/rest-api.md)。
@@ -30,11 +30,11 @@ openlist-cron-sync 是一个自托管的后端服务。它通过 [OpenList](http
 | 概念                 | 含义                                                                                                                                                                     | 规范                                                  |
 | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------- |
 | Instance             | 一个 OpenList 服务地址加一个账号凭据（用户名密码或 token）；本服务通过它调用 OpenList API。OpenList 最低 4.2.5                                                           | [配置表](configuration-tables.md#instances)           |
-| Job                  | 一条同步配置：一个 source、一个或多个 Target、创建方式、Job 级过滤规则、cron 与时区等                                                                                    | [配置表](configuration-tables.md#jobs)                |
+| Job                  | 一条同步配置：一个 source、一个或多个 Target、Job 级过滤规则、cron 与时区等                                                                                              | [配置表](configuration-tables.md#jobs)                |
 | source               | Job 的来源端点，即（Instance，目录）；本服务只读                                                                                                                         | [需求](requirements.md#产品范围)                      |
-| Target               | 目标端点（Instance，目录），并带有本目标自己的 mode、删除阈值和 refresh 设置                                                                                             | [配置表](configuration-tables.md#job_targets)         |
+| Target               | 目标端点（Instance，目录），并带有本目标自己的同步模式 mode、创建方式 createMode、删除阈值和 refresh 设置                                                                | [配置表](configuration-tables.md#job_targets)         |
 | incremental / mirror | Target 的两种模式。incremental 新建缺失文件、替换大小变化的文件，保留目标上 source 没有的文件（extras）；mirror 在此基础上还会删除 extras                                | [行为矩阵](sync-engine.md#行为矩阵)                   |
-| relay / server_copy  | Job 的两种创建方式。relay（默认）由本服务下载再分片上传，适用于任意实例；server_copy 调用 OpenList copy，只适用于同一实例                                                | [创建方式](sync-engine.md#创建方式)                   |
+| relay / server_copy  | Target 的两种创建方式，同一 Job 可以混合使用。relay（默认）由本服务下载再分片上传，适用于任意实例；server_copy 调用 OpenList copy，只适用于同一实例                      | [创建方式](sync-engine.md#创建方式)                   |
 | Run                  | Job 的一次执行。创建时固定配置快照，之后编辑 Job 不影响它；状态从 queued 经 scanning、planned、executing 到终态（succeeded、partial、failed、cancelled、interrupted）    | [RunStatus](state-machines.md#run-status)             |
 | Operation            | Run 中针对一个目标路径的一次远程动作（mkdir、create、delete）及其结果；重试会创建新的 Operation，旧记录不改写                                                            | [OperationStatus](state-machines.md#operation-status) |
 | dry-run              | 只扫描、规划和做安全检查，不写任何远程文件的 Run；用来预览计划和被阻止的原因                                                                                             | [同步引擎](sync-engine.md)                            |
@@ -47,7 +47,7 @@ openlist-cron-sync 是一个自托管的后端服务。它通过 [OpenList](http
 
 ### 示例配置
 
-Job “照片备份”的 cron 为 `0 3 * * *`，时区 UTC；创建方式为默认的 relay；没有过滤规则，syncEmptyDirs 使用默认值 false。
+Job “照片备份”的 cron 为 `0 3 * * *`，时区 UTC；各 Target 的创建方式均为默认的 relay；没有过滤规则，syncEmptyDirs 使用默认值 false。
 
 | 端点     | Instance | 目录                  | 设置             |
 | -------- | -------- | --------------------- | ---------------- |

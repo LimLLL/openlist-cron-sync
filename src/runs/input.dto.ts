@@ -36,7 +36,8 @@ export class TriggerRunDto {
   @ApiPropertyOptional({
     type: Boolean,
     default: false,
-    description: 'true只预览；false按Job的relay/server_copy创建方式真实执行',
+    description:
+      'true只预览；false按各Target的relay/server_copy创建方式真实执行',
   })
   @Optional()
   @IsBoolean()

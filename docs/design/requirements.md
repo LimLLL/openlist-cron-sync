@@ -6,20 +6,20 @@
 
 ## 产品范围
 
-| 项目        | 基线                                                                                                         |
-| ----------- | ------------------------------------------------------------------------------------------------------------ |
-| 形态        | 开源、backend-first、自托管 REST 服务；MVP（M0–M8）只交付 REST/OpenAPI，Web 前端在后端 MVP 完成后再实现      |
-| 来源        | 一个 Job 只有一个 source，目录可位于账号虚拟文件系统任意深度                                                 |
-| 目标        | 每 Job 一个或多个 Target（上限见[配置](../reference/configuration.md)），可分布于不同 Instance               |
-| incremental | 新增、替换同名且大小变化的文件；保留目标 extras                                                              |
-| mirror      | incremental 加删除受管理的目标 extras                                                                        |
-| 比较        | 原始名称、类型、大小；同名同大小视为 unchanged，不比较时间和 hash                                            |
-| 替换        | 删除旧文件 → 刷新确认原名称消失 → create，禁止原地覆盖                                                       |
-| 删除        | 一律调用 OpenList remove；替换和 extras 共同计入删除阈值                                                     |
-| 创建方式    | Job 选择 relay（默认，本服务下载后经 OpenList 分片接口上传）或 server_copy（同 Instance 调用 OpenList copy） |
-| 控制        | cron、手动执行、dry-run、取消、超时、重试、保守重启恢复                                                      |
-| 限制        | 同 Job 不重叠、全局执行位、实例 API/任务/relay 限额、Job 聚合 relay 上传限速                                 |
-| 管理        | 多实例、单管理员认证、凭据与 Webhook URL 静态加密、Webhook、脱敏导入导出、OpenAPI、Docker                    |
+| 项目        | 基线                                                                                                                     |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------ |
+| 形态        | 开源、backend-first、自托管 REST 服务；MVP（M0–M8）只交付 REST/OpenAPI，Web 前端在后端 MVP 完成后再实现                  |
+| 来源        | 一个 Job 只有一个 source，目录可位于账号虚拟文件系统任意深度                                                             |
+| 目标        | 每 Job 一个或多个 Target（上限见[配置](../reference/configuration.md)），可分布于不同 Instance                           |
+| incremental | 新增、替换同名且大小变化的文件；保留目标 extras                                                                          |
+| mirror      | incremental 加删除受管理的目标 extras                                                                                    |
+| 比较        | 原始名称、类型、大小；同名同大小视为 unchanged，不比较时间和 hash                                                        |
+| 替换        | 删除旧文件 → 刷新确认原名称消失 → create，禁止原地覆盖                                                                   |
+| 删除        | 一律调用 OpenList remove；替换和 extras 共同计入删除阈值                                                                 |
+| 创建方式    | 每个 Target 独立选择 relay（默认，本服务下载后经 OpenList 分片接口上传）或 server_copy（同 Instance 调用 OpenList copy） |
+| 控制        | cron、手动执行、dry-run、取消、超时、重试、保守重启恢复                                                                  |
+| 限制        | 同 Job 不重叠、全局执行位、实例 API/任务/relay 限额、Job 聚合 relay 上传限速                                             |
+| 管理        | 多实例、单管理员认证、凭据与 Webhook URL 静态加密、Webhook、脱敏导入导出、OpenAPI、Docker                                |
 
 source 永不修改文件内容和目录结构：不写入或覆盖、不创建文件或目录、不改名、移动或删除。读取、OpenList 缓存刷新及管理本服务产生的远程任务不算修改源文件。源 refresh 仍可能要求 OpenList 写权限。
 

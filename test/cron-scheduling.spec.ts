@@ -101,8 +101,7 @@ describe('M4 scheduling', () => {
   it('coalesces duplicate callbacks, keeps theoretical time, and rejects stale registrations', async () => {
     f = await copyFixture();
     try {
-      const job = f.job({
-        createMode: 'server_copy',
+      const job = f.copyJob({
         enabled: true,
         cron: '0 0 1 1 *',
       });

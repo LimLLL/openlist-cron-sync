@@ -9,7 +9,7 @@
 1. 手动REST请求或cron回调调用RunsModule的触发服务；同一事务建立queued Run、固定配置，获取Job名额。
 2. 从CoordinationModule得到全局执行位及路径占用（dry-run全部端点read；实跑source=read、targets=write），进入scanning。先列source根（失败则Run failed）和各Target根：Target根缺失时实跑先计划一个prepare mkdir，无法判定时该Target记TARGET_ROOT_UNAVAILABLE（规则见[同步引擎](sync-engine.md)）。随后逐目录source→各Target，批量存计划。
 3. scanCompletedAt与planned同事务落库；计算保护与预算。
-4. executing；父mkdir成功后按Job的[创建方式](sync-engine.md#创建方式)创建文件：relay走分片流水线，server_copy为无task成功或task终态成功；替换按下节链执行。
+4. executing；父mkdir成功后按各Target快照的[创建方式](sync-engine.md#创建方式)创建文件：relay走分片流水线，server_copy为无task成功或task终态成功；替换按下节链执行。
 5. 每Target创建阶段成功且无阻断类异常，才执行mirror extras删除；仅当mirror且syncEmptyDirs=true时，再自底向上移除Target独有的空目录。
 6. 聚合Run终态，同一事务为订阅该事件的已启用channel创建delivery；释放运行资源，通知独立投递。server_copy的远程终态task持久化后再清理。
 

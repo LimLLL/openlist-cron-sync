@@ -69,7 +69,7 @@ describe('M6 retry cleanup preparation', () => {
         };
       const run = await terminal(
         f,
-        f.runs().trigger(f.job({ createMode: 'server_copy' }).id, {
+        f.runs().trigger(f.copyJob().id, {
           dryRun: false,
           confirmDeletes: true,
         }).id,

@@ -69,6 +69,7 @@ export function jobView(row: JobRecord, targets: TargetRecord[]): Job {
         hasPassword: t.passwordEnc !== null,
         refresh: t.refresh,
         mode: t.mode,
+        createMode: t.createMode,
         deleteLimits: {
           enabled: t.deleteLimitsEnabled,
           maxCount: t.maxDeleteCount,
@@ -76,7 +77,6 @@ export function jobView(row: JobRecord, targets: TargetRecord[]): Job {
         },
       }),
     ),
-    createMode: row.createMode,
     cron: row.cron,
     timezone: row.timezone,
     filters: {

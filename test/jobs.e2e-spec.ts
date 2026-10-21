@@ -96,7 +96,7 @@ describe('M2 Jobs and Runs API', () => {
       enabled: false,
       cron: null,
       timezone: 'UTC',
-      createMode: 'relay',
+      targets: [{ createMode: 'relay' }],
       source: { path: '/source', hasPassword: true, refresh: false },
       notificationChannelIds: [],
     });

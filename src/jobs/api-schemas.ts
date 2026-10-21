@@ -59,6 +59,13 @@ const targetInputFields = {
     enum: ['incremental', 'mirror'],
     default: 'incremental',
   } as SchemaObject,
+  createMode: {
+    type: 'string',
+    enum: ['relay', 'server_copy'],
+    default: 'relay',
+    description:
+      '此 Target 的创建方式；新目标省略为 relay，已有目标 PATCH 省略保留；server_copy 要求与源同 Instance ID',
+  } as SchemaObject,
   deleteLimits: {
     ...objectSchema(deleteLimitFields, []),
     description: '按字段合并；enabled=true 时不能同时禁用两个阈值',
@@ -72,13 +79,6 @@ const jobFields = {
     minItems: 1,
     maxItems: 32,
   },
-  createMode: {
-    type: 'string',
-    enum: ['relay', 'server_copy'],
-    default: 'relay',
-    description:
-      'server_copy 要求全部 Target 与源同 Instance；真实执行逐tid跟踪',
-  } as SchemaObject,
   enabled: {
     type: 'boolean',
     default: false,
@@ -101,7 +101,7 @@ const jobFields = {
   relayBandwidthLimit: {
     ...sizeSchema,
     default: 0,
-    description: 'relay聚合上传bytes/s；0不限',
+    description: '此 Job 所有 relay Target 的聚合上传 bytes/s；0 不限',
   },
   timeoutSeconds: {
     type: 'integer',
@@ -155,6 +155,7 @@ export const targetViewSchema = objectSchema({
   id: idSchema,
   position: sizeSchema,
   mode: targetInputFields.mode,
+  createMode: targetInputFields.createMode,
   deleteLimits: objectSchema(deleteLimitFields),
 });
 export const jobViewSchema = objectSchema({

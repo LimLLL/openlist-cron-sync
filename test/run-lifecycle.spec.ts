@@ -243,6 +243,10 @@ describe('M2 run lifecycle', () => {
           path: '/source',
           password: 'snapshot-path-secret',
         },
+        targets: [
+          { instanceId: f.id, path: '/target', createMode: 'server_copy' },
+          { instanceId: f.id, path: '/target-relay', createMode: 'relay' },
+        ],
       }).id,
       { dryRun: true, confirmDeletes: false },
     );
@@ -250,6 +254,7 @@ describe('M2 run lifecycle', () => {
     release.release();
     f.server.responder = responder;
     f.tree.set('/source', listing(file('a'), file('b')));
+    f.tree.set('/target-relay', listing());
     f.app = await startApplication(
       environmentFor(f.directory.path, {
         GLOBAL_MAX_RUNS: '1',
@@ -265,6 +270,12 @@ describe('M2 run lifecycle', () => {
     const done = await terminal(f, queued.id);
     expect(done.status).toBe('succeeded');
     expect(done.config.settings.scanMaxDirectoryEntries).toBe(3);
+    expect(
+      done.targets.map((target) => target.config.target.createMode),
+    ).toEqual(['server_copy', 'relay']);
+    expect(new Set(plan(f, done.id).map((op) => op.method))).toEqual(
+      new Set(['server_copy', 'relay']),
+    );
     expect(done.createdAt).toBe(queued.createdAt);
     expect(done.queueDeadlineAt).toBe(queued.queueDeadlineAt);
     expect(

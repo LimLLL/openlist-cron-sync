@@ -39,7 +39,7 @@ describe('M6 recovery task ownership', () => {
    * @throws Error SQL失败。
    */
   async function recovering(deadline: number) {
-    const run = await preview(f, f.job({ createMode: 'server_copy' }));
+    const run = await preview(f, f.copyJob());
     const id = plan(f, run.id)[0].id;
     const db = f.app.get(DatabaseService).db;
     db.update(operations)
@@ -136,7 +136,7 @@ describe('M6 recovery task ownership', () => {
     f.initialState = 1;
     const run = f
       .runs()
-      .trigger(f.job({ createMode: 'server_copy' }).id, {
+      .trigger(f.copyJob().id, {
         dryRun: false,
         confirmDeletes: false,
       });

@@ -38,6 +38,8 @@ export interface Target extends Endpoint {
   position: number;
   /** 每目标模式。 */
   mode: 'incremental' | 'mirror';
+  /** 此目标的文件创建方式；默认 relay。 */
+  createMode: 'relay' | 'server_copy';
   /** 每目标删除阈值。 */
   deleteLimits: DeleteLimits;
 }
@@ -51,8 +53,6 @@ export interface Job {
   source: Endpoint;
   /** 按 position 排序的成员目标；归档 Job 为其最终成员集合。 */
   targets: Target[];
-  /** 全 Job 文件创建方式。 */
-  createMode: 'relay' | 'server_copy';
   /** cron启用值；disabled仍允许手动执行。 */
   enabled: boolean;
   /** 五段 cron；null 为手动。 */
@@ -65,7 +65,7 @@ export interface Job {
   allowEmptySource: boolean;
   /** 是否同步目录结构。 */
   syncEmptyDirs: boolean;
-  /** relay 聚合上传 bytes/s；0 不限。 */
+  /** 此 Job 所有 relay Target 的聚合上传 bytes/s；0 不限。 */
   relayBandwidthLimit: number;
   /** 从扫描开始计的秒数。 */
   timeoutSeconds: number;

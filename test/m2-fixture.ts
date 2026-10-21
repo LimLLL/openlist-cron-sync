@@ -22,6 +22,8 @@ export interface M2Fixture extends ComponentFixture {
   runs: () => RunsService;
   /** 创建默认源和目标的 Job。 */
   job: (overrides?: Record<string, unknown>) => Job;
+  /** 创建默认源和 server_copy 目标的 Job。 */
+  copyJob: (overrides?: Record<string, unknown>) => Job;
 }
 /** 构造完整成功列表。
  * @param entries 上游条目。
@@ -67,6 +69,18 @@ export async function m2Fixture(
       call.url === '/api/fs/list'
         ? (tree.get(string(object(call.json).path)) ?? envelope(null, 500))
         : undefined;
+  /** 以默认源 /source 和目标 /target 创建 Job。
+   * @param overrides 覆盖默认创建请求的字段。
+   * @returns 已持久化的 Job。
+   * @throws Error 创建请求校验失败。
+   */
+  const job = (overrides: Record<string, unknown> = {}) =>
+    f.app.get(JobsService).create({
+      name: 'Preview',
+      source: { instanceId: f.id, path: '/source' },
+      targets: [{ instanceId: f.id, path: '/target' }],
+      ...overrides,
+    });
   return Object.assign(f, {
     tree,
     /** 读取当前应用中的 Job 服务。
@@ -81,16 +95,17 @@ export async function m2Fixture(
      * @throws Error 应用已关闭或服务未注册。
      */
     runs: () => f.app.get(RunsService),
-    /** 以默认源 /source 和目标 /target 创建 Job。
+    job,
+    /** 以默认源 /source 和同实例 server_copy 目标 /target 创建 Job。
      * @param overrides 覆盖默认创建请求的字段。
      * @returns 已持久化的 Job。
      * @throws Error 创建请求校验失败。
      */
-    job: (overrides: Record<string, unknown> = {}) =>
-      f.app.get(JobsService).create({
-        name: 'Preview',
-        source: { instanceId: f.id, path: '/source' },
-        targets: [{ instanceId: f.id, path: '/target' }],
+    copyJob: (overrides: Record<string, unknown> = {}) =>
+      job({
+        targets: [
+          { instanceId: f.id, path: '/target', createMode: 'server_copy' },
+        ],
         ...overrides,
       }),
   });

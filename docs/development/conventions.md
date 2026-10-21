@@ -36,7 +36,7 @@ tsconfig.build.json排除test/与`*spec.ts`，Vitest只转译不做类型检查�
 已批准：@nestjs/config、@nestjs/swagger、@nestjs/jwt、@nestjs/schedule、cron、class-validator、class-transformer、undici、picomatch及必要类型、drizzle-orm 0.45、better-sqlite3固定版本、drizzle-kit仅dev。
 使用Node crypto/stream、Nest JSON ConsoleLogger、简单semaphore/token bucket。保留已有reflect-metadata/rxjs；不增加Passport/Pino/Redis/BullMQ/第二套验证库。
 所有新第三方依赖仍需项目维护者批准；不能因暂时类型错误自行引入插件。M0已精确固定drizzle-orm 0.45.1、better-sqlite3 13.0.3与drizzle-kit 0.31.8（dev），并在Node 22.23.3上验证加载、PRAGMA与迁移；better-sqlite3随包附带各平台预编译二进制，无需放开pnpm构建脚本。升级须重新核对peerDependencies并按整套验证；若兼容验证失败，在[实施细化记录](implementation-decisions.md)更新选择并取得确认，不擅自换存储方案。原生依赖需匹配Node24及Debian架构。已批准的包类别不等于允许任意未来大版本。
-如直接import cron，必须直接声明依赖，不依赖pnpm传递提升。数据库迁移SQL只能由工具（`pnpm run db:generate`）生成并审核：schema分文件并保留NodeNext的.js相对引用，drizzle-kit 0.31直接读取TS时无法解析（上游issue #2705），因此经维护者确认，drizzle.config.ts读取编译后的dist/database/schema.js，脚本先`nest build`再`drizzle-kit generate`。禁止手工修改自动生成产物；整个迁移目录（含meta/_journal.json）随发行版分发。
+如直接import cron，必须直接声明依赖，不依赖pnpm传递提升。数据库结构迁移由工具（`pnpm run db:generate`）生成并审核：schema分文件并保留NodeNext的.js相对引用，drizzle-kit 0.31直接读取TS时无法解析（上游issue #2705），因此经维护者确认，drizzle.config.ts读取编译后的dist/database/schema.js，脚本先`nest build`再`drizzle-kit generate`。需要数据转换的重构只在新前向迁移中补充显式转换与失败校验，不修改已应用SQL及其元数据；schema元数据仍由工具生成。整个迁移目录（含meta/_journal.json）随发行版分发。
 
 ## 反过度设计
 

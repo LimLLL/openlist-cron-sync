@@ -80,23 +80,23 @@ SQLite busy_timeout=5000ms、WAL/FULL/foreign_keys、令牌桶单次取用64KiB�
 
 ## Job与Target默认值
 
-| API字段                             | 默认        | 范围/理由                                                                                                       |
-| ----------------------------------- | ----------- | --------------------------------------------------------------------------------------------------------------- |
-| enabled                             | false       | 导入和初创不立即运行                                                                                            |
-| cron                                | null        | 仅手动，5段分钟表达式                                                                                           |
-| timezone                            | UTC         | 有效IANA时区                                                                                                    |
-| source.refresh / targets[].refresh  | false       | 降低云API请求；不控制删除前提刷新                                                                               |
-| filters.include / exclude           | []          | 各最多100条，每条≤1024字符                                                                                      |
-| filters.minSizeBytes / maxSizeBytes | null        | 0至安全整数，min≤max                                                                                            |
-| allowEmptySource                    | false       | 防止空视图清空目标                                                                                              |
-| syncEmptyDirs                       | false       | false只建create所需父目录，从不删除目标目录；true同步目录结构，见[空目录](../design/filters-paths.md#空目录)    |
-| createMode                          | relay       | relay/server_copy；server_copy要求所有Target与source同Instance，见[创建方式](../design/sync-engine.md#创建方式) |
-| relayBandwidthLimit                 | 0           | 0不限；正数1–安全整数bytes/s，聚合该Job全部relay上传payload                                                     |
-| timeoutSeconds                      | 86400       | 60–604800；默认最长一天                                                                                         |
-| targets[].mode                      | incremental | incremental/mirror                                                                                              |
-| targets[].deleteLimits.enabled      | true        | 可禁用数量/比例保护，其他保护仍在                                                                               |
-| targets[].deleteLimits.maxCount     | 1000        | null或0–安全整数                                                                                                |
-| targets[].deleteLimits.maxPercent   | 50          | null或0–100整数；超过一半视作异常规模                                                                           |
+| API字段                             | 默认        | 范围/理由                                                                                                              |
+| ----------------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------- |
+| enabled                             | false       | 导入和初创不立即运行                                                                                                   |
+| cron                                | null        | 仅手动，5段分钟表达式                                                                                                  |
+| timezone                            | UTC         | 有效IANA时区                                                                                                           |
+| source.refresh / targets[].refresh  | false       | 降低云API请求；不控制删除前提刷新                                                                                      |
+| filters.include / exclude           | []          | 各最多100条，每条≤1024字符                                                                                             |
+| filters.minSizeBytes / maxSizeBytes | null        | 0至安全整数，min≤max                                                                                                   |
+| allowEmptySource                    | false       | 防止空视图清空目标                                                                                                     |
+| syncEmptyDirs                       | false       | false只建create所需父目录，从不删除目标目录；true同步目录结构，见[空目录](../design/filters-paths.md#空目录)           |
+| targets[].createMode                | relay       | relay/server_copy；server_copy要求该Target与source使用同一Instance ID，见[创建方式](../design/sync-engine.md#创建方式) |
+| relayBandwidthLimit                 | 0           | 0不限；正数1–安全整数bytes/s，聚合该Job所有relay Target的上传payload                                                   |
+| timeoutSeconds                      | 86400       | 60–604800；默认最长一天                                                                                                |
+| targets[].mode                      | incremental | incremental/mirror                                                                                                     |
+| targets[].deleteLimits.enabled      | true        | 可禁用数量/比例保护，其他保护仍在                                                                                      |
+| targets[].deleteLimits.maxCount     | 1000        | null或0–安全整数                                                                                                       |
+| targets[].deleteLimits.maxPercent   | 50          | null或0–100整数；超过一半视作异常规模                                                                                  |
 
 每Job 1–32个Target；每endpoint path≤4096 UTF-8字节，名称≤1024字节；超过限制返回400，不截断。API管理JSON上限1MiB，import上限10MiB；分页默认50、最大200。
 阈值enabled=true时两项不能同时null。保留值0的含义：count=0禁止任何文件删除；percent=0同理；bandwidth=0才代表不限，不能通用转换。

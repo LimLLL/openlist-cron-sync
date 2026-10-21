@@ -40,7 +40,7 @@ describe('M6 task maintenance responsibility', () => {
    * @throws Error 数据库失败。
    */
   async function flagged(unknown: boolean, state: number) {
-    const run = await preview(f, f.job({ createMode: 'server_copy' }));
+    const run = await preview(f, f.copyJob());
     const id = plan(f, run.id)[0].id;
     f.app
       .get(DatabaseService)

@@ -1,5 +1,7 @@
 // 定义并校验运行相关公开响应，保持与后端字段边界一致。
 import { ApiError, isRecord } from '../../lib/api-client';
+import { parseJob, parseTarget } from '../jobs/job-contract';
+import type { JobView, Target } from '../jobs/job-contract';
 import type { Page } from '../../lib/parsers';
 import {
   parsePage,
@@ -106,7 +108,7 @@ export interface RunTargetView {
   targetId: string;
   /** 快照配置。 */
   config: {
-    target: Record<string, unknown>;
+    target: Target;
     instance: Record<string, unknown>;
   };
   /** 目标统计。 */
@@ -137,8 +139,8 @@ export interface RunTargetView {
 export interface RunDetail extends RunView {
   /** 固定配置快照。 */
   config: {
-    snapshotVersion: number;
-    job: Record<string, unknown>;
+    snapshotVersion: 1;
+    job: JobView;
     instances: Record<string, Record<string, unknown>>;
     settings: Record<string, unknown>;
   };
@@ -215,20 +217,18 @@ export function parseRunView(value: unknown): RunView {
 
 /** 解析 RunTargetView。
  * @param value 未信任的 JSON。
+ * @param index 目标在响应中的序号。
  * @returns 类型安全的 RunTargetView。
  * @throws ApiError 响应不符合契约。
  */
-function parseRunTarget(value: unknown): RunTargetView {
+function parseRunTarget(value: unknown, index: number): RunTargetView {
   if (!isRecord(value) || typeof value.id !== 'string')
     throw new ApiError(0, 'INVALID_RESPONSE', 'Invalid run target.');
   return {
     id: value.id,
     targetId: expectString(value.targetId, 'targetId'),
     config: {
-      target: expectRecord(
-        expectRecord(value.config, 'config').target,
-        'target',
-      ),
+      target: parseTarget(expectRecord(value.config, 'config').target, index),
       instance: expectRecord(
         expectRecord(value.config, 'config').instance,
         'instance',
@@ -328,9 +328,11 @@ export function parseIssuePage(value: unknown): Page<IssueView> {
  */
 function parseConfig(value: unknown): RunDetail['config'] {
   const config = expectRecord(value, 'config');
+  if (config.snapshotVersion !== 1)
+    throw new ApiError(0, 'INVALID_RESPONSE', 'Invalid snapshotVersion.');
   return {
-    snapshotVersion: expectNumber(config.snapshotVersion, 'snapshotVersion'),
-    job: expectRecord(config.job, 'job'),
+    snapshotVersion: 1,
+    job: parseJob(config.job),
     settings: expectRecord(config.settings, 'settings'),
     instances: Object.fromEntries(
       Object.entries(expectRecord(config.instances, 'instances')).map(

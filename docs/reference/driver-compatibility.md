@@ -12,14 +12,14 @@
 ## 分类解释
 
 “同步返回”只表示驱动函数/HTTP请求返回；除非有独立证据，不保证云端后台完成。
-“未实现→OpenList传输任务”表示驱动没有服务端复制，OpenList 会自己创建下载再上传的传输任务；它不是本服务自动改用 relay 的依据。只读存储的这一列写“不支持（只读）”。Copy 列只影响选择 server_copy 的 Job。
+“未实现→OpenList传输任务”表示驱动没有服务端复制，OpenList 会自己创建下载再上传的传输任务；它不是本服务自动改用 relay 的依据。只读存储的这一列写“不支持（只读）”。Copy 列只影响选择 server_copy 的 Target。
 “委托”需要结合底层 storage/远端实例理解；虚拟同路径不能保证物理同 storage。
 Put 列描述已有同名对象时的底层行为；relay 经分片接口写入，底层同为驱动 Put。本服务总是先删除旧文件、确认原名消失后再以 Overwrite:false 上传，正常不会触达这条路径；只有缓存失真或竞态时才可能遇到。
 Remove 列只说明是否实现。
 
 ## 最终产品政策
 
-默认的 relay 由本服务下载后经分片接口上传，成功以 complete 结果为准。选择 server_copy 的 Job 通过 OpenList 复制：明确成功无 task 即本地 succeeded；有 task 跟踪其终态。异步受理、委托和成功空实现也不改成 accepted 状态，不由本服务 relay 兜底。取舍见 [ADR 0005](../adr/0005-openlist-success.md) 与 [ADR 0006](../adr/0006-create-mode.md)。
+默认的 relay 由本服务下载后经分片接口上传，成功以 complete 结果为准。选择 server_copy 的 Target 通过 OpenList 复制：明确成功无 task 即本地 succeeded；有 task 跟踪其终态。异步受理、委托和成功空实现也不改成 accepted 状态，不由本服务 relay 兜底。取舍见 [ADR 0005](../adr/0005-openlist-success.md) 与 [ADR 0006](../adr/0006-create-mode.md)。
 这不证明数据已落地。尤其 virtual、url_tree、strm、emby 这类虚拟或索引驱动并非真正的文件内容存储，必须明确提示其用途限制，不能宣传为完整备份支持；只读驱动只能作为 source。
 后台失败可能不被本轮发现；仅后续能够观察到缺失/大小不符时才重新规划。Temp 缓存、同大小错误、无后续运行都可能阻止修复。
 删除仍按原路径 refresh 确认和边界规则执行，不能把 copy 的成功定义当作省略删除前提的理由。

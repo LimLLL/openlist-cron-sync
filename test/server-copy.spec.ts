@@ -42,7 +42,7 @@ describe('M6 server copy execution', () => {
     f.files.set('/target/new.txt', Buffer.from('old'));
     const accepted = f
       .runs()
-      .trigger(f.job({ createMode: 'server_copy' }).id, {
+      .trigger(f.copyJob().id, {
         dryRun: false,
         confirmDeletes: true,
       });
@@ -84,7 +84,7 @@ describe('M6 server copy execution', () => {
             : response;
       const accepted = f
         .runs()
-        .trigger(f.job({ createMode: 'server_copy' }).id, {
+        .trigger(f.copyJob().id, {
           dryRun: false,
           confirmDeletes: true,
         });
@@ -103,7 +103,7 @@ describe('M6 server copy execution', () => {
     f.initialState = 1;
     const accepted = f
       .runs()
-      .trigger(f.job({ createMode: 'server_copy' }).id, {
+      .trigger(f.copyJob().id, {
         dryRun: false,
         confirmDeletes: false,
       });
@@ -142,7 +142,7 @@ describe('M6 server copy execution', () => {
       f,
       f
         .runs()
-        .trigger(f.job({ createMode: 'server_copy' }).id, {
+        .trigger(f.copyJob().id, {
           dryRun: false,
           confirmDeletes: false,
         }).id,
@@ -163,7 +163,7 @@ describe('M6 server copy execution', () => {
    * @throws Error 断言失败。
    */
   it('restores a known task and ends interrupted without replay', async () => {
-    const run = await preview(f, f.job({ createMode: 'server_copy' }));
+    const run = await preview(f, f.copyJob());
     const op = plan(f, run.id)[0];
     f.tasks.set('recovered', {
       state: 2,
@@ -211,7 +211,7 @@ describe('M6 server copy execution', () => {
       f,
       f
         .runs()
-        .trigger(f.job({ createMode: 'server_copy' }).id, {
+        .trigger(f.copyJob().id, {
           dryRun: false,
           confirmDeletes: true,
         }).id,
@@ -265,7 +265,7 @@ describe('M6 server copy execution', () => {
         f,
         f
           .runs()
-          .trigger(f.job({ createMode: 'server_copy' }).id, {
+          .trigger(f.copyJob().id, {
             dryRun: false,
             confirmDeletes: false,
           }).id,

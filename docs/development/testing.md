@@ -8,7 +8,7 @@
 
 | 对象             | 必测行为                                                                                                                                                                                                                                                                                                  |
 | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| planner/filter   | 两模式矩阵、过滤优先级、被排除源同名目标保护、source或Target大小未知；syncEmptyDirs=true创建全部未排除目录（含空目录），false只建所需父目录；超过最大扫描深度只保护该子树；createMode=server_copy含跨Instance Target时配置校验拒绝                                                                        |
+| planner/filter   | 两模式矩阵、过滤优先级、被排除源同名目标保护、source或Target大小未知；syncEmptyDirs=true创建全部未排除目录（含空目录），false只建所需父目录；超过最大扫描深度只保护该子树；Target.createMode=server_copy且与source的Instance ID不同时配置校验拒绝，并指明Target                                           |
 | glob             | `cache/`只匹配endpoint根下名为cache的目录并保护其子树；`**/cache/`匹配任意深度的cache目录；`**/tmp`对文件和目录路径都生效，命中目录时剪枝并保护；`*.log`不跨层：include只筛文件，exclude同时匹配根层文件和目录；include只筛选文件，不决定目录创建                                                         |
 | collision/path   | 原名精确比较、源/目标内部与跨侧碰撞、目录后代保护、/a与/ab；endpoint.path以`/@s`开头（含`/@sync`）保存400，根endpoint下`@s`开头的条目两侧固定排除；名称含`/`或`\`（`a\b`、`..\x`、`..\..\x`）→INVALID_NAME并保护父目录，且从不进入names[]、File-Path或/d、/p URL；%、+、#、?、中文、emoji、空格的编码往返 |
 | mount            | `.balance`按mount_path中最后一次出现的位置截断（`/a.balance1`与`/a.balance/b`的有效挂载都是`/a`），不是只去后缀；按路径段最长匹配；多个候选不猜；嵌套挂载禁止相关删除                                                                                                                                     |
@@ -150,4 +150,11 @@ copy-cleanup覆盖retry_cleanup中的源缺失、源不可读及目标刷新失�
 
 cron-scheduling/cron-delay锁定Berlin DST、稀疏count前缀、无下一日期、理论scheduledAt、迟到timer与库重挂时双回调合并、旧注册拒绝及重启无补跑。scheduling.e2e验证启停窄更新、活动Run例外、归档404、严格输入及OpenAPI。compiled-smoke包含background-fatal子进程验证cron/maintenance持久化异常以非零状态退出且不泄露原SQL参数。
 
-server-copy.int-spec沿用现有v4.2.7的Local /a与/b，只创建UUID临时根。L1记录并断言实际同步/task分支；L2必须返回task，由生产tracker收敛到state2并清理到info404，同时核对1 MiB+4097字节模式内容。不得把Local的task回退认定为同步reflink已测试。迁移仅由db:generate生成；不执行Docker build、不改变现有容器。
+server-copy.int-spec沿用现有v4.2.7的Local /a与/b，只创建UUID临时根。L1记录并断言实际同步/task分支；L2必须返回task，由生产tracker收敛到state2并清理到info404，同时核对1 MiB+4097字节模式内容。不得把Local的task回退认定为同步reflink已测试。结构迁移由db:generate生成；数据转换仅写入新的前向迁移，保留已应用SQL及元数据；不执行Docker build、不改变现有容器。
+
+## 每 Target 创建方式重构验收
+
+- 迁移：旧模式两种取值、归档Job/Target、queued/recovering历史、历史清理已删子记录的终态Run、当前值与历史值不同；两份快照保持原字段与数组顺序，Operation及秘密不变；异常结构或外键违规整体回滚；空库及重复启动恢复外键。
+- API：混合Target、按稳定ID省略/修改/重排/新增、source-only PATCH、相同URL不同Instance ID、Target错误路径、旧顶层字段及null拒绝；multipart只检查relay Target，保留原启用/接受Run边界与JOB_BUSY。
+- 执行：混合新建/替换/mirror、copy同步或task成功、relay分片、两类操作同Run恢复；两个relay Target共用Job带宽，copy不伪造传输字节。
+- 前端：新形状解析、Target控制项和错误、保留无效选值、两个提交按钮及提交入口、中英文历史目标展示；OpenAPI包含必填Target响应字段，不含Job层字段。

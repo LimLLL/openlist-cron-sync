@@ -69,6 +69,8 @@ export interface TargetInput {
   password: string;
   /** 同步模式。 */
   mode: 'incremental' | 'mirror';
+  /** 此目标的文件创建方式。 */
+  createMode: 'relay' | 'server_copy';
   /** 是否刷新扫描缓存。 */
   refresh: boolean;
   /** 是否启用删除阈值。 */
@@ -83,8 +85,6 @@ export interface TargetInput {
 export interface JobFormValues {
   /** 名称。 */
   name: string;
-  /** 文件创建方式。 */
-  createMode: 'relay' | 'server_copy';
   /** 源实例。 */
   sourceInstanceId: string;
   /** 源路径。 */
@@ -111,13 +111,14 @@ export interface JobFormValues {
   allowEmptySource: boolean;
   /** 同步空目录。 */
   syncEmptyDirs: boolean;
-  /** 上传字节每秒。 */
+  /** 此 Job 所有 relay Target 的聚合上传字节每秒。 */
   relayBandwidthLimit: string;
   /** 超时秒数。 */
   timeoutSeconds: string;
 }
 
 /** 创建与后端默认值一致的目标。
+ * @param 不适用。
  * @returns 默认目标输入。
  * @throws 不适用。
  */
@@ -127,6 +128,7 @@ export function emptyTarget(): TargetInput {
     path: '/',
     password: '',
     mode: 'incremental',
+    createMode: 'relay',
     refresh: false,
     deleteLimitsEnabled: true,
     maxCount: '1000',
@@ -146,11 +148,32 @@ export function targetsFromJob(job: JobView): TargetInput[] {
     path: target.path,
     password: '',
     mode: target.mode,
+    createMode: target.createMode,
     refresh: target.refresh,
     deleteLimitsEnabled: target.deleteLimits.enabled,
     maxCount: target.deleteLimits.maxCount?.toString() ?? '',
     maxPercent: target.deleteLimits.maxPercent?.toString() ?? '',
   }));
+}
+
+/** 根据当前实例选择计算创建方式状态，不修改用户选值或保存位置相关的错误。
+ * @param sourceInstanceId 当前源实例；未选择时为空字符串。
+ * @param target 当前目标。
+ * @returns server_copy 是否不可选，以及现有选择是否无效。
+ * @throws 不适用。
+ */
+export function targetCreateModeState(
+  sourceInstanceId: string,
+  target: Pick<TargetInput, 'instanceId' | 'createMode'>,
+): { unavailable: boolean; invalid: boolean } {
+  const unavailable =
+    sourceInstanceId !== '' &&
+    target.instanceId !== '' &&
+    target.instanceId !== sourceInstanceId;
+  return {
+    unavailable,
+    invalid: unavailable && target.createMode === 'server_copy',
+  };
 }
 
 /** 读取完整数值，拒绝 parseInt 截断小数或指数后的错误数值。
@@ -238,9 +261,9 @@ export function buildJobInput(values: JobFormValues) {
   if (values.targets.length < 1 || values.targets.length > 32)
     throw new JobFormError('targetCount');
   if (
-    values.createMode === 'server_copy' &&
     values.targets.some(
-      (target) => target.instanceId !== values.sourceInstanceId,
+      (target) =>
+        targetCreateModeState(values.sourceInstanceId, target).invalid,
     )
   )
     throw new JobFormError('serverCopySameInstance');
@@ -288,6 +311,7 @@ export function buildJobInput(values: JobFormValues) {
       path: path(target.path),
       ...(target.password ? { password: target.password } : {}),
       mode: target.mode,
+      createMode: target.createMode,
       refresh: target.refresh,
       deleteLimits: {
         enabled: target.deleteLimitsEnabled,
@@ -298,7 +322,6 @@ export function buildJobInput(values: JobFormValues) {
   });
   return {
     name: values.name,
-    createMode: values.createMode,
     source,
     targets,
     cron,

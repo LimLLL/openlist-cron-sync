@@ -46,8 +46,7 @@ describe('M4 Jobs scheduling API', () => {
    */
   it('enables and disables during a Run while ordinary PATCH remains busy', async () => {
     f.initialState = 1;
-    const job = f.job({
-      createMode: 'server_copy',
+    const job = f.copyJob({
       enabled: true,
       cron: '0 0 1 1 *',
     });

@@ -51,6 +51,8 @@ export interface Target extends Endpoint {
   position: number;
   /** 模式。 */
   mode: 'incremental' | 'mirror';
+  /** 此目标的文件创建方式。 */
+  createMode: 'relay' | 'server_copy';
   /** 删除阈值。 */
   deleteLimits: DeleteLimits;
 }
@@ -65,8 +67,6 @@ export interface JobView {
   source: Endpoint;
   /** 按 position 排序的目标。 */
   targets: Target[];
-  /** 文件创建方式。 */
-  createMode: 'relay' | 'server_copy';
   /** cron 启用值。 */
   enabled: boolean;
   /** 五段 cron 或 null。 */
@@ -79,7 +79,7 @@ export interface JobView {
   allowEmptySource: boolean;
   /** 是否同步目录结构。 */
   syncEmptyDirs: boolean;
-  /** relay 聚合上传 bytes/s。 */
+  /** 此 Job 所有 relay Target 的聚合上传 bytes/s。 */
   relayBandwidthLimit: number;
   /** 超时秒数。 */
   timeoutSeconds: number;
@@ -179,11 +179,18 @@ function parseEndpoint(value: unknown, label: string): Endpoint {
  * @returns Target。
  * @throws ApiError 结构不匹配。
  */
-function parseTarget(value: unknown, index: number): Target {
+export function parseTarget(value: unknown, index: number): Target {
   const endpoint = parseEndpoint(value, `targets[${index}]`);
   if (!isRecord(value))
     throw new ApiError(0, 'INVALID_RESPONSE', `Invalid target ${index}.`);
   const mode = value.mode;
+  const createMode = value.createMode;
+  if (createMode !== 'relay' && createMode !== 'server_copy')
+    throw new ApiError(
+      0,
+      'INVALID_RESPONSE',
+      `Invalid target createMode at ${index}.`,
+    );
   if (mode !== 'incremental' && mode !== 'mirror')
     throw new ApiError(
       0,
@@ -195,6 +202,7 @@ function parseTarget(value: unknown, index: number): Target {
     id: expectString(value.id, `targets[${index}].id`),
     position: expectNumber(value.position, `targets[${index}].position`),
     mode,
+    createMode,
     deleteLimits: parseDeleteLimits(value.deleteLimits),
   };
 }
@@ -207,9 +215,6 @@ function parseTarget(value: unknown, index: number): Target {
 export function parseJob(value: unknown): JobView {
   if (!isRecord(value))
     throw new ApiError(0, 'INVALID_RESPONSE', 'Invalid job.');
-  const createMode = value.createMode;
-  if (createMode !== 'relay' && createMode !== 'server_copy')
-    throw new ApiError(0, 'INVALID_RESPONSE', 'Invalid job createMode.');
   if (!Array.isArray(value.targets))
     throw new ApiError(0, 'INVALID_RESPONSE', 'Invalid job targets.');
   return {
@@ -217,7 +222,6 @@ export function parseJob(value: unknown): JobView {
     name: expectString(value.name, 'name'),
     source: parseEndpoint(value.source, 'source'),
     targets: value.targets.map((t: unknown, i: number) => parseTarget(t, i)),
-    createMode,
     enabled: expectBoolean(value.enabled, 'enabled'),
     cron: value.cron === null ? null : expectString(value.cron, 'cron'),
     timezone: expectString(value.timezone, 'timezone'),

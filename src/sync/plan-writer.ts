@@ -107,7 +107,7 @@ export class PlanWriter {
         action,
         method:
           action === 'create'
-            ? this.run.config.job.createMode
+            ? target.row.config.target.createMode
             : action === 'mkdir'
               ? 'mkdir'
               : 'remove',

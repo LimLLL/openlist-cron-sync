@@ -7,7 +7,6 @@ import { useArchiveJob, useJob, useToggleJob } from './job-queries';
 import { PageHeader } from '../../components/page-header';
 import { Magnetic } from '../../components/motion/magnetic';
 import { Button } from '../../components/ui/button';
-import { Badge } from '../../components/ui/badge';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog';
 import { ErrorState, LoadingState } from '../../components/states';
 import { JobTriggerDialog } from './job-trigger-dialog';
@@ -113,9 +112,6 @@ export function JobDetailPage() {
           <div className="space-y-4">
             <div className="flex flex-wrap gap-2">
               <ScheduleBadge job={data} />
-              <Badge plain variant="info">
-                {t(`createMode.${data.createMode}`)}
-              </Badge>
             </div>
             <p>{t('detail.summary', { path: data.source.path, count: data.targets.length })}</p>
           </div>

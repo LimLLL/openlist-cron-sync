@@ -125,13 +125,7 @@ export function JobsPage() {
                 to={`/jobs/${job.id}`}
                 index={(jobs.data.page - 1) * jobs.data.pageSize + position + 1}
                 title={job.name}
-                subtitle={
-                  <>
-                    {job.source.path}
-                    <span className="mx-2 opacity-40">·</span>
-                    {t(`createMode.${job.createMode}`)}
-                  </>
-                }
+                subtitle={job.source.path}
                 cells={[<RouteCell key="route" job={job} />, <ScheduleCell key="schedule" job={job} />]}
                 status={<ScheduleBadge job={job} />}
               />

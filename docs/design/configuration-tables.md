@@ -51,45 +51,45 @@ M1 已实现本表，并将 `secret_enc` 登记到生产 ENC 清单；AAD 为 `i
 
 ## jobs
 
-| 字段                            | 类型            | 默认/约束                                                             |
-| ------------------------------- | --------------- | --------------------------------------------------------------------- |
-| id / name                       | ID / STR        | name 1–100                                                            |
-| enabled                         | BOOL            | 0                                                                     |
-| source_instance_id              | ID FK instances | 不允许归档Instance                                                    |
-| source_path                     | STR             | 规范化账号相对绝对形式，如 /照片                                      |
-| source_password_enc             | ENC?            | 路径密码                                                              |
-| source_refresh                  | BOOL            | 0                                                                     |
-| cron                            | STR?            | NULL=仅手动；5段，分钟精度                                            |
-| timezone                        | STR             | UTC，IANA名                                                           |
-| include_globs_json              | JSON            | []                                                                    |
-| exclude_globs_json              | JSON            | []                                                                    |
-| min_size_bytes / max_size_bytes | INT?            | NULL=无该边界；min≤max                                                |
-| allow_empty_source              | BOOL            | 0                                                                     |
-| sync_empty_dirs                 | BOOL            | 0                                                                     |
-| create_mode                     | ENUM            | relay / server_copy，默认relay，见[创建方式](sync-engine.md#创建方式) |
-| relay_bandwidth_limit           | INT             | 0=不限；单位bytes/s，限制relay上传payload                             |
-| timeout_seconds                 | INT             | 86400                                                                 |
-| archived_at                     | TS?             | 归档时间                                                              |
-| created_at / updated_at         | TS              | 通用                                                                  |
+| 字段                            | 类型            | 默认/约束                                                   |
+| ------------------------------- | --------------- | ----------------------------------------------------------- |
+| id / name                       | ID / STR        | name 1–100                                                  |
+| enabled                         | BOOL            | 0                                                           |
+| source_instance_id              | ID FK instances | 不允许归档Instance                                          |
+| source_path                     | STR             | 规范化账号相对绝对形式，如 /照片                            |
+| source_password_enc             | ENC?            | 路径密码                                                    |
+| source_refresh                  | BOOL            | 0                                                           |
+| cron                            | STR?            | NULL=仅手动；5段，分钟精度                                  |
+| timezone                        | STR             | UTC，IANA名                                                 |
+| include_globs_json              | JSON            | []                                                          |
+| exclude_globs_json              | JSON            | []                                                          |
+| min_size_bytes / max_size_bytes | INT?            | NULL=无该边界；min≤max                                      |
+| allow_empty_source              | BOOL            | 0                                                           |
+| sync_empty_dirs                 | BOOL            | 0                                                           |
+| relay_bandwidth_limit           | INT             | 0=不限；单位bytes/s，聚合该Job所有relay Target的上传payload |
+| timeout_seconds                 | INT             | 86400                                                       |
+| archived_at                     | TS?             | 归档时间                                                    |
+| created_at / updated_at         | TS              | 通用                                                        |
 
 索引：(enabled,archived_at)、(source_instance_id)。同Job targets不能含源或彼此重叠，见[过滤与路径](filters-paths.md)。
 
 ## job_targets
 
-| 字段                    | 类型            | 默认/约束                             |
-| ----------------------- | --------------- | ------------------------------------- |
-| id                      | ID              | 稳定id，修改列表不能复用旧id          |
-| job_id                  | ID FK jobs      | RESTRICT                              |
-| instance_id             | ID FK instances | RESTRICT                              |
-| path / password_enc     | STR / ENC?      | 目标根及路径密码                      |
-| position                | INT             | 从0开始；同Job成员唯一                |
-| mode                    | ENUM            | incremental / mirror；默认incremental |
-| refresh                 | BOOL            | 0                                     |
-| delete_limits_enabled   | BOOL            | 1                                     |
-| max_delete_count        | INT?            | 1000；NULL禁用数量一项                |
-| max_delete_percent      | INTEGER?        | 50，整数0–100；NULL禁用比例一项       |
-| archived_at             | TS?             | 被配置更新移出成员集合的时间          |
-| created_at / updated_at | TS              | 通用                                  |
+| 字段                    | 类型            | 默认/约束                                                                           |
+| ----------------------- | --------------- | ----------------------------------------------------------------------------------- |
+| id                      | ID              | 稳定id，修改列表不能复用旧id                                                        |
+| job_id                  | ID FK jobs      | RESTRICT                                                                            |
+| instance_id             | ID FK instances | RESTRICT                                                                            |
+| path / password_enc     | STR / ENC?      | 目标根及路径密码                                                                    |
+| position                | INT             | 从0开始；同Job成员唯一                                                              |
+| mode                    | ENUM            | incremental / mirror；默认incremental                                               |
+| create_mode             | ENUM            | relay / server_copy，默认relay；仅该目标生效，见[创建方式](sync-engine.md#创建方式) |
+| refresh                 | BOOL            | 0                                                                                   |
+| delete_limits_enabled   | BOOL            | 1                                                                                   |
+| max_delete_count        | INT?            | 1000；NULL禁用数量一项                                                              |
+| max_delete_percent      | INTEGER?        | 50，整数0–100；NULL禁用比例一项                                                     |
+| archived_at             | TS?             | 被配置更新移出成员集合的时间                                                        |
+| created_at / updated_at | TS              | 通用                                                                                |
 
 CHECK(delete_limits_enabled=0 OR max_delete_count IS NOT NULL OR max_delete_percent IS NOT NULL)。部分UNIQUE(job_id,position) WHERE archived_at IS NULL（同Job成员position唯一）；索引(instance_id,archived_at)。路径唯一/包含在应用事务中检查。
 成员关系：Target属于其Job且archived_at为NULL。archived_at只记录被PATCH或导入update移出目标集合，Job归档时不写入；归档Job的JobView.targets即其最终成员集合。archived_at为NULL只说明是成员，能否运行、导出、修改或构成活动引用还要求父Job未归档；移出的id不再复用。

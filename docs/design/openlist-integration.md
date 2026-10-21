@@ -40,7 +40,7 @@ M1 客户端只返回协议事实；不执行 observe-after-500、unknown/quaran
 连接后将accountBasePath与endpoint path按POSIX段连接得到全局下载路径；URL每段编码，query sign独立编码。baseUrl允许反向代理子路径，追加api/d/p时保留该前缀。
 不双重编码JSON路径；File-Path执行一次URL path编码。对%、+、#、?、中文、emoji、空格做往返测试，对`a\b`、`..\x`、`..\..\x`做逃逸测试。密码、token、sign和下载URL不写日志。
 OpenList对每个API路径及/d、/p路径执行FixAndCleanPath：先把`\`替换为`/`，再做path.Clean；copy/move/remove的handler则先把names[]与src_dir/dir拼接，之后才规范化。因此名称含`\`的条目绝不能放入names[]、File-Path或/d、/p URL：`a\b`会指向子目录b中的对象，names[]中的`..\x`可解析到endpoint根之外。此类名称按[路径规范](filters-paths.md#路径规范)记INVALID_NAME并保护其父目录。
-创建方式由Job选择（见[创建方式](sync-engine.md#创建方式)）：relay对任意实例关系都下载再上传；server_copy只用于同一Instance，同storage或跨storage都走/api/fs/copy，返回task时跟踪。本服务不调用/api/fs/move。
+创建方式由每个Target独立选择（见[创建方式](sync-engine.md#创建方式)）：relay对任意实例关系都下载再上传；server_copy只用于同一Instance，同storage或跨storage都走/api/fs/copy，返回task时跟踪。本服务不调用/api/fs/move。
 
 ## envelope与错误
 

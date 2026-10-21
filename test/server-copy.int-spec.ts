@@ -144,9 +144,15 @@ describe('M6 real Local server_copy topologies', () => {
       .get(JobsService)
       .create({
         name: 'M6 ' + label,
-        createMode: 'server_copy',
         source: { instanceId: id, path: source, refresh: true },
-        targets: [{ instanceId: id, path: target, refresh: true }],
+        targets: [
+          {
+            instanceId: id,
+            path: target,
+            refresh: true,
+            createMode: 'server_copy',
+          },
+        ],
       });
     const service = app.get(RunsService);
     const accepted = service.trigger(job.id, {

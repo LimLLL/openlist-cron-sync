@@ -42,7 +42,7 @@ erDiagram
 run_config_json 持久化规范化后的 Job 公共字段、Target完整列表、目标稳定UUID、Instance id/baseUrl/authMode/username/accountBasePath、全部有效默认值、通知channel id、snapshotVersion=1。
 不存解密secret、JWT、sign、storage.addition、下载URL、Webhook URL。source/target路径密码放 runs.secret_snapshot_enc，内容仅为按endpoint id键控的密码；没有路径密码时为NULL。
 
-run_config_json的精确形状为{snapshotVersion:1,job:JobView,instances:Record<instanceId,InstanceSnapshot>,settings:ExecutionSettings}。JobView为当时的完整公共形状；InstanceSnapshot={id,name,baseUrl,authMode,username:string|null,accountUsername:string|null,accountBasePath,accountRole,accountPermissions,limits,downloadMode}，不含authState、error或secret。run_targets.target_snapshot_json={target:JobView.targets中对应对象,instance:对应InstanceSnapshot}。
+run_config_json的精确形状为{snapshotVersion:1,job:JobView,instances:Record<instanceId,InstanceSnapshot>,settings:ExecutionSettings}。JobView为当时的完整公共形状，每个targets[]对象包含必填createMode，Job本身不含该字段；InstanceSnapshot={id,name,baseUrl,authMode,username:string|null,accountUsername:string|null,accountBasePath,accountRole,accountPermissions,limits,downloadMode}，不含authState、error或secret。run_targets.target_snapshot_json={target:JobView.targets中对应对象,instance:对应InstanceSnapshot}。
 ExecutionSettings使用[配置](../reference/configuration.md)定义的映射。secret_snapshot_enc解密形状为{sourcePassword:string|null,targetPasswords:Record<targetId,string|null>}，无任何路径密码时整个字段NULL。
 Instance 的连接配置在[未决责任](#responsibility)引用它时禁止修改地址/账号/删除；允许原地址同账号更新token/password恢复认证。账号是否相同以 /api/me 返回的 username 与 base_path 为准，见[OpenList集成](openlist-integration.md#认证与实例身份)。
 Instance.limits/downloadMode在被非终态Run引用时也禁止修改；name允许修改但不回写旧snapshot。全局执行位/队列容量为进程级配置，不是每个Run各自建立一套配额。
@@ -62,7 +62,7 @@ Job 编辑在存在非终态Run时409；无活动Run时可编辑，但旧target�
 
 ## 持久性与清理
 
-连接固定设置 journal_mode=WAL、synchronous=FULL、foreign_keys=ON、busy_timeout=5000ms。只有一个写连接，短批事务，不在进度每个chunk上写入。
+运行期连接固定设置 journal_mode=WAL、synchronous=FULL、foreign_keys=ON、busy_timeout=5000ms。启动迁移在Drizzle事务外临时关闭foreign_keys，重建表的迁移在事务内用CHECK断言foreign_key_check无违规，否则连同数据和迁移记录一起回滚。迁移完成后恢复并确认foreign_keys=ON，再检查外键完整性；失败即关闭连接并退出，不能开放业务工作。只有一个写连接，短批事务，不在进度每个chunk上写入。
 历史查询用(run_id,seq)、(status,created_at,id)索引分页；客户端不得拉取全部operations作进度聚合。
 具体清理算法见 [维护与历史保留](retention.md)。运行配置JSON不是跨运行目录快照，不用于代替下一轮扫描。
 
@@ -83,3 +83,5 @@ Instance 编辑/归档、Job 归档后的引用保留、历史清理都使用同
 Run路径密码仅服务当前Run扫描、执行和恢复；在终态事务清除，包括interrupted。后续重新观察由新Run使用自己的快照，不回借旧Run密码。M3沿用现有schema，不建立spool表、额外checkpoint列或持久化路径锁。
 
 M4–M6：Run.trigger=cron时scheduled_at为注册记住的理论发生时刻。task本地终态与remote_cleanup_pending同事务写入；维护的安全/housekeeping分类不持久化。abandon只结束unknown责任，flag仍由维护按当前事实处理。历史资格按整组判断，物理删除按有界事务提交，过期历史可暂时不完整。新增expiry、反向引用及责任稀疏索引用于闭包及FK检查，不增加持久锁或cancel字段。
+
+逐目标创建方式的前向迁移保留已应用SQL及元数据：所有Target行（含已移出成员集合或父Job已归档的行）继承其Job当前值；Run的两份Target快照均取该Run自己的历史值，保留数组顺序和其它配置，然后移除历史Job层字段。非规范快照中止迁移，不补默认值。终态历史清理可能已移除run_targets而尚未删除Run；迁移仍转换其完整Job快照，并只转换剩余子记录，不重建已清理记录。snapshotVersion仍为1，运行期只读取迁移后的单一形状。

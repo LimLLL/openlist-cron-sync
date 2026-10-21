@@ -16,12 +16,13 @@ import type {
 
 /** 拒绝非法字段。
  * @param field 字段路径。
+ * @param reason 拒绝原因；默认通用说明。
  * @returns 不返回。
  * @throws ApiError 400，不回显值。
  */
-export function invalid(field: string): never {
+export function invalid(field: string, reason = 'Invalid value'): never {
   throw new ApiError(400, 'VALIDATION_ERROR', 'Invalid job configuration', [
-    { field, reason: 'Invalid value' },
+    { field, reason },
   ]);
 }
 /** 验证输入对象及白名单。
@@ -271,7 +272,6 @@ export function mergeJob(
       'name',
       'source',
       'targets',
-      'createMode',
       'enabled',
       'cron',
       'timezone',
@@ -324,7 +324,8 @@ export function mergeJob(
       invalid('targets');
     targets = [];
     const seen = new Set<string>();
-    for (const item of v.targets) {
+    for (const [index, item] of v.targets.entries()) {
+      const field = `targets[${index}]`;
       const t = objectInput(
         item,
         [
@@ -334,12 +335,13 @@ export function mergeJob(
           'password',
           'refresh',
           'mode',
+          'createMode',
           'deleteLimits',
         ],
-        'targets',
+        field,
       );
       const targetId =
-        t.id === undefined ? randomUUID() : id(t.id, 'targets.id');
+        t.id === undefined ? randomUUID() : id(t.id, field + '.id');
       const old = previous?.targets.find(
         /** 在旧配置中查找同 ID 目标。
          * @param target 旧配置中的目标。
@@ -349,31 +351,33 @@ export function mergeJob(
         (target) => target.id === targetId,
       );
       if ((t.id !== undefined && !old) || seen.has(targetId))
-        invalid('targets.id');
+        invalid(field + '.id');
       seen.add(targetId);
       const e = endpoint(
         t,
         old,
         secrets.targetPasswords[targetId] ?? null,
-        'targets',
+        field,
       );
       const mode = t.mode === undefined ? (old?.mode ?? 'incremental') : t.mode;
-      if (mode !== 'incremental' && mode !== 'mirror') invalid('targets.mode');
+      if (mode !== 'incremental' && mode !== 'mirror') invalid(field + '.mode');
+      const createMode =
+        t.createMode === undefined
+          ? (old?.createMode ?? 'relay')
+          : t.createMode;
+      if (createMode !== 'relay' && createMode !== 'server_copy')
+        invalid(field + '.createMode');
       targets.push({
         ...e.value,
         id: targetId,
         position: targets.length,
         mode,
+        createMode,
         deleteLimits: limits(t.deleteLimits, old?.deleteLimits),
       });
       targetPasswords[targetId] = e.password;
     }
   }
-  const mode =
-    v.createMode === undefined
-      ? (previous?.createMode ?? 'relay')
-      : v.createMode;
-  if (mode !== 'relay' && mode !== 'server_copy') invalid('createMode');
   const channelIds = v.notificationChannelIds;
   if (
     channelIds !== undefined &&
@@ -386,7 +390,6 @@ export function mergeJob(
     name: text(v.name === undefined ? previous?.name : v.name, 'name', 1, 100),
     source: source.value,
     targets,
-    createMode: mode,
     enabled: bool(
       v.enabled === undefined ? (previous?.enabled ?? false) : v.enabled,
       'enabled',
@@ -430,17 +433,15 @@ export function mergeJob(
     archivedAt: null,
   };
   validateSchedule(job.cron, job.timezone);
-  if (
-    mode === 'server_copy' &&
-    targets.some(
-      /** 检查目标是否位于源以外的实例，server_copy 不支持跨实例。
-       * @param t 合并后的目标。
-       * @returns 该目标是否与源不在同一实例。
-       * @throws 不适用。
-       */
-      (t) => t.instanceId !== job.source.instanceId,
+  // source-only PATCH 也可能使保留的目标失效，必须检查完整合并结果。
+  for (const [index, target] of job.targets.entries())
+    if (
+      target.createMode === 'server_copy' &&
+      target.instanceId !== job.source.instanceId
     )
-  )
-    invalid('createMode');
+      invalid(
+        `targets[${index}].createMode`,
+        'Server copy requires the source Instance',
+      );
   return { job, secrets: { sourcePassword: source.password, targetPasswords } };
 }
