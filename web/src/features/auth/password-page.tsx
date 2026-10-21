@@ -49,8 +49,6 @@ export function PasswordPage() {
       <PageHeader
         index="00"
         kicker={t('password.eyebrow')}
-        title={forced ? t('password.forcedTitle') : t('password.title')}
-        accent={forced ? t('password.forcedAccent') : t('password.accent')}
         description={
           <>
             {forced ? t('password.forcedDescription') : t('password.description')}{' '}

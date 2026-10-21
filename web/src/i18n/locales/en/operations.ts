@@ -1,8 +1,6 @@
 // 英文 operations 模块文案。
 export default {
   list: {
-    title: 'Every write,',
-    accent: 'accounted for.',
     description:
       'Each file a run copied, created or removed, with its exact outcome. Unknown outcomes stay quarantined until you settle them.',
     total_one: '{{count}} operation',

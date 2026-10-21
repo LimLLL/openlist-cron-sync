@@ -124,7 +124,6 @@ function InstanceDetail({ instance }: { instance: Instance }) {
     <section>
       <PageHeader
         index="02"
-        variant="detail"
         kicker={t('common:nav.instances')}
         title={instance.name}
         description={

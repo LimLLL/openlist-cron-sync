@@ -125,8 +125,7 @@ export function JobForm({ existing }: { existing?: JobView }) {
       <PageHeader
         index="03"
         kicker={isEdit ? t('form.kickerEdit') : t('form.kickerNew')}
-        title={isEdit ? t('form.titleEdit') : t('form.titleNew')}
-        accent={isEdit ? existing.name : t('form.accentNew')}
+        title={isEdit ? existing.name : undefined}
         description={isEdit ? t('form.descriptionEdit') : t('form.descriptionNew')}
         meta={
           <Link to={backTo} className="inline-flex items-center gap-1.5 transition-colors hover:text-foreground">

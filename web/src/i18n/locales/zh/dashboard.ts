@@ -4,8 +4,6 @@ import type { Translation } from '../../types';
 
 export default {
   hero: {
-    title: '你的网络，',
-    accent: '一览无余。',
     description: '所有实例、定时与运行汇成一张实时星图：什么需要你处理，什么正在流转，下一次在何时触发。',
   },
   system: {

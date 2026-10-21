@@ -40,8 +40,6 @@ export function RunsPage() {
       <PageHeader
         index="04"
         kicker={t('common:nav.runs')}
-        title={t('list.title')}
-        accent={t('list.accent')}
         description={t('list.description')}
         meta={runs.data ? t('list.total', { count: runs.data.total }) : undefined}
       />

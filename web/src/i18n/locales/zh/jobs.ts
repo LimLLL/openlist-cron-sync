@@ -4,8 +4,6 @@ import type { Translation } from '../../types';
 
 export default {
   list: {
-    title: '同步任务，',
-    accent: '按你的节奏。',
     description:
       '每个任务把一个源目录同步到一个或多个目标——可以按 Cron 定时自动运行，也可以随时手动触发。',
     count_one: '共 {{count}} 个任务',
@@ -35,9 +33,6 @@ export default {
     allJobs: '全部任务',
     kickerNew: '新建任务',
     kickerEdit: '编辑任务',
-    titleNew: '规划一条',
-    accentNew: '新的轨道。',
-    titleEdit: '重新配置',
     descriptionNew: '选择源、添加目标，再决定文件何时流转。之后随时可以修改。',
     descriptionEdit: '修改只影响之后的运行；已经开始的运行仍按启动时的配置执行。',
     loadingJob: '加载任务中…',

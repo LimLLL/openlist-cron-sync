@@ -100,7 +100,6 @@ export function JobDetailPage() {
   return (
     <section>
       <PageHeader
-        variant="detail"
         index="03"
         kicker={t('detail.kicker')}
         title={data.name}

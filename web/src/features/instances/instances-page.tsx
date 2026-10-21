@@ -120,8 +120,6 @@ export function InstancesPage() {
       <PageHeader
         index="02"
         kicker={t('common:nav.instances')}
-        title={t('list.title')}
-        accent={t('list.accent')}
         description={t('list.description')}
         meta={data ? t('list.count', { count: data.total }) : undefined}
         actions={<NewInstanceButton label={t('list.newInstance')} />}

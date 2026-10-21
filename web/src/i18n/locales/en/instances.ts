@@ -3,8 +3,6 @@ export default {
   authState: { untested: 'Untested', ready: 'Ready', auth_blocked: 'Blocked' },
   status: { error: 'Needs attention' },
   list: {
-    title: 'Your servers,',
-    accent: 'in orbit.',
     description:
       'Every OpenList server this console reads from or writes to. Test a connection before using it in a job.',
     count_one: '{{count}} instance',
@@ -26,8 +24,6 @@ export default {
   },
   create: {
     back: 'All instances',
-    title: 'Add a server,',
-    accent: 'connect it once.',
     description:
       'Register an OpenList instance so jobs can use it as a source or a target. Nothing is contacted until you test it.',
   },

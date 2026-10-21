@@ -68,7 +68,6 @@ export function OperationDetailPage() {
       <PageHeader
         index="05"
         kicker={t('common:nav.operations')}
-        variant="detail"
         title={name || t('detail.title')}
         meta={
           <Link to="/operations" className="inline-flex items-center gap-1.5 hover:text-foreground">

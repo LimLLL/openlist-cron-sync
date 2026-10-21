@@ -7,29 +7,20 @@
     letter-spacing: 0.18em;
     text-transform: uppercase;
   }
+  /* 详情页实体名：作身份标识而非海报，实体名可能很长，允许任意处折行。 */
   .page-title {
     font-family: var(--font-display);
-    font-size: clamp(2.6rem, 6vw, 6rem);
+    font-size: clamp(1.5rem, 2.2vw, 2rem);
     font-weight: 500;
-    line-height: 0.98;
-    letter-spacing: -0.045em;
-  }
-  /* 详情页标题：实体名可能很长，字号收一档。 */
-  .page-title-detail {
-    font-size: clamp(2.1rem, 4.2vw, 4rem);
-    line-height: 1.02;
-    letter-spacing: -0.04em;
+    line-height: 1.1;
+    letter-spacing: -0.03em;
     overflow-wrap: anywhere;
   }
-  .page-title-accent,
   .serif-accent {
     font-family: var(--font-serif);
     font-style: italic;
     font-weight: 400;
     letter-spacing: -0.015em;
-  }
-  .page-title-accent {
-    color: var(--color-muted-foreground);
   }
   /* 遮罩行：标题逐行从下方升起时裁掉溢出部分。 */
   .reveal-line {
@@ -42,8 +33,8 @@
   .page-header {
     position: relative;
     display: grid;
-    gap: 1.75rem;
-    padding-bottom: 2.5rem;
+    gap: 1.5rem;
+    padding-bottom: 2rem;
     margin-bottom: 0.5rem;
   }
   .page-header-meta {
@@ -62,13 +53,10 @@
     font: 500 11px var(--font-mono);
     letter-spacing: 0.08em;
   }
-  @media (min-width: 1024px) {
-    .page-header-body {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(16rem, 22rem);
-      align-items: end;
-      gap: 3rem;
-    }
+  /* 身份 → 属性纵向排列：实体名在上，说明或属性紧随其下。 */
+  .page-header-body {
+    display: grid;
+    gap: 0.75rem;
   }
 
   /* —— 结构：玻璃面板与编辑式分节 —— */

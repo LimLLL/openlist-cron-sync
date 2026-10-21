@@ -83,7 +83,6 @@ export function RunDetailPage() {
   return (
     <section>
       <PageHeader
-        variant="detail"
         index="04"
         kicker={
           <>

@@ -22,8 +22,6 @@ export function InstanceCreatePage() {
       <PageHeader
         index="02"
         kicker={t('common:nav.instances')}
-        title={t('create.title')}
-        accent={t('create.accent')}
         description={t('create.description')}
         meta={
           <Link to="/instances" className="inline-flex items-center gap-1.5 hover:text-foreground">

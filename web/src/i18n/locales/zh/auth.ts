@@ -27,10 +27,6 @@ export default {
   },
   password: {
     eyebrow: '账户安全',
-    forcedTitle: '先换上',
-    forcedAccent: '你自己的钥匙。',
-    title: '换一把',
-    accent: '新的钥匙。',
     forcedDescription: '进入工作区之前，请先替换初始密码。',
     description: '修改管理员账户的密码。',
     sessionsEnd: '修改后，所有现有会话都会结束。',

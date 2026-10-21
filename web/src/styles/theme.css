@@ -78,7 +78,6 @@
   letter-spacing: -0.01em;
   line-height: 1.12;
 }
-:lang(zh) .page-title-accent,
 :lang(zh) .serif-accent {
   font-style: normal;
   letter-spacing: 0.02em;

@@ -81,8 +81,6 @@ export function JobsPage() {
       <PageHeader
         index="03"
         kicker={t('common:nav.jobs')}
-        title={t('list.title')}
-        accent={t('list.accent')}
         description={t('list.description')}
         meta={jobs.data ? t('list.count', { count: jobs.data.total }) : undefined}
         actions={<CreateButton />}

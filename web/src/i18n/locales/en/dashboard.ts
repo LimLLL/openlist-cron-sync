@@ -1,8 +1,6 @@
 // 英文 dashboard 模块文案。
 export default {
   hero: {
-    title: 'Your network,',
-    accent: 'at a single glance.',
     description:
       'Every instance, schedule and run in one living map — what needs you, what is moving, and what fires next.',
   },

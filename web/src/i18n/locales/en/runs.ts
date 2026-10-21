@@ -1,8 +1,6 @@
 // 英文 runs 模块文案。
 export default {
   list: {
-    title: 'Every run,',
-    accent: 'on the record.',
     description:
       'Scheduled and manual executions, with every scan, plan and transfer kept for inspection.',
     total_one: '{{count}} run',

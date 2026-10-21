@@ -4,8 +4,6 @@ import type { Translation } from '../../types';
 
 export default {
   list: {
-    title: '每一次写入，',
-    accent: '都有据可查。',
     description:
       '运行复制、创建或删除的每个文件，以及它的确切结果。结果未知的路径会一直保持隔离，直到你作出处置。',
     total_one: '共 {{count}} 个操作',

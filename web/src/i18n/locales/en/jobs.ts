@@ -1,8 +1,6 @@
 // 英文 jobs 模块文案。
 export default {
   list: {
-    title: 'Synchronization,',
-    accent: 'on your schedule.',
     description:
       'Each job carries one source folder to one or more targets — on a cron schedule, or whenever you trigger it.',
     count_one: '{{count}} job',
@@ -33,9 +31,6 @@ export default {
     allJobs: 'All jobs',
     kickerNew: 'New job',
     kickerEdit: 'Edit job',
-    titleNew: 'Plot a new',
-    accentNew: 'orbit.',
-    titleEdit: 'Reconfigure',
     descriptionNew:
       'Pick a source, add targets, and decide when files should move. You can change everything later.',
     descriptionEdit:

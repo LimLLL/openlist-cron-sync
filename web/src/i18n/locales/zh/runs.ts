@@ -4,8 +4,6 @@ import type { Translation } from '../../types';
 
 export default {
   list: {
-    title: '每一次运行，',
-    accent: '都有迹可循。',
     description: '定时与手动执行的完整记录，每一次扫描、计划与传输都可以回看。',
     total_one: '共 {{count}} 次运行',
     total_other: '共 {{count}} 次运行',

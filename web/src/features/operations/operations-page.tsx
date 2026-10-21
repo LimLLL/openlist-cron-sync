@@ -35,8 +35,6 @@ export function OperationsPage() {
       <PageHeader
         index="05"
         kicker={t('common:nav.operations')}
-        title={t('list.title')}
-        accent={t('list.accent')}
         description={t('list.description')}
         meta={ops.data ? t('list.total', { count: ops.data.total }) : undefined}
       />

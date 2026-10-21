@@ -25,10 +25,6 @@ export default {
   },
   password: {
     eyebrow: 'ACCOUNT SECURITY',
-    forcedTitle: 'Make it',
-    forcedAccent: 'your own.',
-    title: 'A fresh set',
-    accent: 'of keys.',
     forcedDescription: 'Replace your initial password before entering the workspace.',
     description: 'Change the password for your administrator account.',
     sessionsEnd: 'All existing sessions will end after this change.',

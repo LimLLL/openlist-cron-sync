@@ -118,8 +118,6 @@ export function DashboardPage() {
       <PageHeader
         index="01"
         kicker={t('common:nav.dashboard')}
-        title={t('hero.title')}
-        accent={t('hero.accent')}
         description={t('hero.description')}
         meta={systemMeta}
         actions={
