@@ -1,13 +1,13 @@
 用途：规定单进程容器部署、数据持久化、升级和恢复操作。
 
-范围：目标部署和运维流程；Dockerfile与部署示例在M8交付。
+范围：目标部署和运维流程；Dockerfile与部署示例已在M8交付。
 
 # 部署
 
 ## 镜像与进程
 
-生产运行Node 24，官方基础系列node:24-bookworm-slim；本地开发最低Node 22.22.3。package.json的engines为`^22.22.3 || >=24.15.0`，与Nest CLI依赖链（@angular-devkit/core）声明的支持范围一致；发布时记录精确镜像版本或digest，避免浮动标签被误认为固定运行时。
-构建和运行均采用相同libc/目标架构，better-sqlite3固定版本，随包附带含Linux glibc/musl在内的预编译二进制，无需放开pnpm构建脚本；禁止将macOS node_modules拷入Linux。
+镜像固定为node:22.23.3-bookworm-slim，与本地开发和测试所用Node版本一致；本地开发最低Node 22.22.3。package.json的engines为`^22.22.3 || >=24.15.0`，与Nest CLI依赖链（@angular-devkit/core）声明的支持范围一致。Dockerfile只在一处声明精确镜像版本，不使用浮动标签；升级Node时先在本地新版本上通过全部测试，再同步修改镜像版本。
+构建和运行采用相同libc（Debian bookworm glibc）。better-sqlite3固定版本，随包附带各平台（含Linux glibc/musl的x64与arm64）预编译二进制，运行时按架构选择，因此多架构镜像的编译与依赖安装可在构建机原生架构完成；新增带原生或分平台二进制的生产依赖时须重新评估。禁止将macOS node_modules拷入Linux。
 多阶段镜像最终仅含dist、生产依赖和发行版迁移目录（drizzle/下的SQL与meta/_journal.json，缺journal时migrator无法运行）；drizzle-kit为dev依赖，启动调用ORM migrator，不执行generate/push。
 容器非root，uid/gid建议1000，工作目录/app，数据/data；管理员自行预建卷并设置权限。应用不以root递归chown宿主目录；启动时只把数据目录与spool目录自身收紧为0700，因此卷须由运行用户拥有，否则启动失败。
 启动命令显式node dist/main.js。一个数据目录只运行一个应用进程，不开PM2 cluster或Kubernetes多副本；这是部署前提，不新增自造文件锁。
@@ -37,7 +37,7 @@ health/live只判断进程存活；ready在迁移/恢复责任重建后成功，
 升级前禁用触发并等待运行结束，备份DB+keys，停止旧进程，再启动携带已审核迁移的新镜像。不可同时运行新旧实例。
 停止进程（SIGTERM）时，仍在运行的Run不会被写成终态，也不会取消已提交的OpenList任务；下次启动按[关机与恢复规则](state-machines.md#shutdown)收尾为interrupted。因此计划内重启前应先等待Run结束。
 回滚版本前确认其支持现有schema；不支持时恢复成套备份，不能只换旧镜像硬读新schema。发布记录迁移版本和最低可读版本。
-AGPL-3.0和CLA文档在M8加入，见[许可证ADR](../adr/0008-license-cla.md)。
+许可证为AGPL-3.0-only，不设CLA，见[许可证ADR](../adr/0008-license-cla.md)。
 
 ## 备份
 

@@ -29,11 +29,11 @@
 | TECH                            | 最低支持OpenList 4.2.5；源码核对基线为OpenList v4.2.6 系列源码（上游 main 分支 2026-09 快照，提交 5447ecb0）；MVP 发布以 M8 实际集成测试所用的固定官方镜像版本为准，并覆盖4.2.5 | 4.2.5是分片上传接口首次发布的版本，连接测试从公开设置读取版本：v4.2.6把meta路径匹配改为大小写不敏感，影响写权限、隐藏与路径密码判断。行号可能随上游演进漂移                                                |
 | TECH                            | 简单碰撞键NFC→toLowerCase→NFC                                                                                                                                                   | 无额外依赖；明确不是完整Unicode casefold                                                                                                                                                                   |
 | TECH                            | 配置逻辑归档、责任链阻止历史物理清理                                                                                                                                            | Job删除不能抹掉未决unknown                                                                                                                                                                                 |
-| REQ（发布待定，不阻塞实现设计） | AGPL精确SPDX表述（AGPL-3.0-only或AGPL-3.0-or-later）与CLA文本/签署方式                                                                                                          | 已决定采用AGPL-3.0并要求CLA（见[ADR 0008](../adr/0008-license-cla.md)），但没有授权推断版权转让、再许可或or-later条款；M8由项目维护者确认法律文本，并同步修改package.json的license字段（当前为UNLICENSED） |
+| REQ（已于M8发布前由维护者确认） | 许可证为AGPL-3.0-only，不设CLA                                                                                                                                                  | 维护者在M8确认：作为自身代码的版权人本就保留商用与再许可权利，CLA只在需要再许可外部贡献时才有意义；package.json的license字段已同步；外部贡献均按同一许可证授权（见[ADR 0008](../adr/0008-license-cla.md)） |
 
 具体字段规范：[API schemas](../reference/api-schemas.md)、[配置](../reference/configuration.md)、[数据模型](../design/data-model.md)。上述选择如将来改变，先更新对应规范和验收，不增加并行同义配置。
 
-补充TECH：统计按逻辑动作最后attempt聚合，失败历史不改写。ORM/驱动在M0固定为drizzle-orm 0.45.1、better-sqlite3 13.0.3、drizzle-kit 0.31.8，已在Node 22.23.3上实际验证加载、PRAGMA与迁移；Node 24待M8镜像验证。
+补充TECH：统计按逻辑动作最后attempt聚合，失败历史不改写。ORM/驱动在M0固定为drizzle-orm 0.45.1、better-sqlite3 13.0.3、drizzle-kit 0.31.8，已在Node 22.23.3上实际验证加载、PRAGMA与迁移；发布镜像固定同一Node版本。
 
 补充TECH：启动密文校验由代码显式登记的加密列清单驱动，M0清单为空，校验逻辑用测试夹具（真实SQLite与AES-GCM）验证；生产数据上“主密钥错误即启动失败”的端到端验收在M1首个ENC列出现时完成。不为此新增哨兵表，避免keys.json丢失时只有管理员账号的库也无法启动。
 

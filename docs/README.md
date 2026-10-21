@@ -1,6 +1,6 @@
-用途：提供 openlist-cron-sync 设计文档集的入口、阅读顺序和规范优先级。
+用途：提供 openlist-cron-sync 文档集（用户指南与设计文档）的入口、阅读顺序和规范优先级。
 
-范围：本目录描述目标行为；实现进度以[里程碑](development/milestones.md)为准，镜像和法律文件尚未交付。
+范围：本目录描述目标行为；实现进度以[里程碑](development/milestones.md)为准。
 
 # 实施设计索引
 
@@ -23,9 +23,22 @@
 1. [需求与保证](design/requirements.md)和已接受的 [ADR](#决策记录) 是产品决策基线，高于其他设计文件中的实现细节，也高于[实施细化选择](development/implementation-decisions.md)。
 2. 单一事实来源：状态枚举与转换只在[状态机](design/state-machines.md)中定义（[RunStatus](design/state-machines.md#run-status) / [OperationStatus](design/state-machines.md#operation-status)）；可调数值与默认值只在[配置参考](reference/configuration.md)中定义；公共 JSON 形状只在 [API schemas](reference/api-schemas.md) 中定义；新增错误码或跳过原因登记在 [REST API](reference/rest-api.md) 的原因码表，规划保护码还须同步状态机中的影响分类。其他文件只引用，不另行定义。
 3. ADR 说明取舍，不另定义字段或数值。
-4. [剩余工作](remaining_tasks.md)只列 MVP 发布前须完成的指南与明确延期的功能，不是扩大 MVP 需求的依据。
+4. [剩余工作](remaining_tasks.md)只列明确延期的功能，不是扩大 MVP 需求的依据。
+5. [用户指南](#用户指南)只描述操作步骤，不另定义行为；与设计或参考文档冲突时以后者为准，并修正指南。
 
 OpenList 行为依据 OpenList v4.2.6 系列源码（上游 main 分支 2026-09 快照，提交 5447ecb0）；行号可能随上游演进漂移。源码调查不等同于运行或驱动集成测试通过，所有驱动的初始实测状态均为未执行。MVP 发布以 M8 实际集成测试所用的固定官方镜像版本为准；更早 v4 版本仅为源码推测，不作保证。
+
+## 用户指南
+
+| 文件                                                          | 一句话用途                                                    |
+| ------------------------------------------------------------- | ------------------------------------------------------------- |
+| [getting-started.md](guides/getting-started.md)               | 说明首次部署、初始化管理员和保管密钥的操作步骤                |
+| [openlist-accounts.md](guides/openlist-accounts.md)           | 说明 OpenList 账号权限、base_path、挂载解析及实例的添加与测试 |
+| [jobs-and-dry-run.md](guides/jobs-and-dry-run.md)             | 说明任务配置、dry-run 预览的解读和第一次真实运行              |
+| [cancel-restart-unknown.md](guides/cancel-restart-unknown.md) | 说明取消、计划内重启和结果未知操作的处理                      |
+| [driver-verification.md](guides/driver-verification.md)       | 说明驱动矩阵的读法、已接受风险和云盘人工验证步骤              |
+| [relay-troubleshooting.md](guides/relay-troubleshooting.md)   | 说明 relay 传输常见故障的表现与排查                           |
+| [backup-restore-upgrade.md](guides/backup-restore-upgrade.md) | 说明停机一致备份、恢复、升级和回滚的操作步骤                  |
 
 ## 设计
 
@@ -83,6 +96,6 @@ OpenList 行为依据 OpenList v4.2.6 系列源码（上游 main 分支 2026-09 
 | [0005-openlist-success.md](adr/0005-openlist-success.md)           | 记录server_copy模式统一采用OpenList复制成功语义的取舍与后果 |
 | [0006-create-mode.md](adr/0006-create-mode.md)                     | 记录每个 Target 独立选择创建方式的取舍与后果                |
 | [0007-relay.md](adr/0007-relay.md)                                 | 记录分片流水线 relay 的取舍与后果                           |
-| [0008-license-cla.md](adr/0008-license-cla.md)                     | 记录AGPL-3.0与CLA的取舍与后果                               |
+| [0008-license-cla.md](adr/0008-license-cla.md)                     | 记录采用AGPL-3.0-only且不设CLA的取舍与后果                  |
 | [0009-drop-move.md](adr/0009-drop-move.md)                         | 记录MVP移除源端move的取舍与后果                             |
 | [template.md](adr/template.md)                                     | 规定新增MADR决策记录的最小结构                              |

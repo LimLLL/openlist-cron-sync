@@ -1,0 +1,14 @@
+.git
+.github
+.claude
+.codex
+.env*
+node_modules
+web/node_modules
+dist
+web/dist
+*.tsbuildinfo
+coverage
+.data
+docs
+test

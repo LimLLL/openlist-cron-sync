@@ -2,18 +2,18 @@
 
 基于 [OpenList](https://github.com/OpenListTeam/OpenList) API 的自托管定时同步服务：按计划把一个 OpenList 目录中的文件同步到一个或多个目标目录，目标可以和源在同一个 OpenList 实例上，也可以在另一个实例上。
 
-> **开发中**：目前支持 cron 定时与手动运行、relay 和 server_copy 两种新建方式、替换、Mirror 清理、dry-run、取消、隔离管理、重启恢复和运行记录自动清理。Webhook 通知、配置导入导出和 Docker 镜像仍待后续里程碑。进度见[开发进度](#开发进度)。
+> Webhook 通知和配置导入导出尚未提供，计划在首个版本发布后实现。进度见[开发进度](#开发进度)。
 
 ## 功能
 
-完整功能如下，其中 Webhook 通知、配置导入导出和 Docker 部署仍在开发；设计细节见[设计文档](docs/README.md)：
+功能如下，设计细节见[设计文档](docs/README.md)：
 
 - **定时或手动同步**：按 cron 表达式定时运行，也可以手动触发。每次运行比较源目录和目标目录中文件的名称、类型和大小，新建目标缺失的文件，替换大小发生变化的文件。
 - **两种目标模式**：`incremental` 只新增和替换文件；`mirror` 还会删除目标上源目录中没有的文件。
 - **跨实例传输**：默认由本服务边下载边分片上传，适用于任意两个 OpenList 实例；源和目标在同一实例时，也可以改用 OpenList 自带的服务端复制。
 - **删除保护**：支持 dry-run 预览、删除数量和比例阈值；扫描不完整时禁止删除；结果不明的路径会被暂时隔离，不再写入。
 - **安全**：单管理员登录（JWT）；保存的 OpenList 凭据用 AES-256-GCM 加密存储。
-- **管理与集成**：REST API 加 OpenAPI 文档，支持 Webhook 通知、配置导入导出和 Docker 部署。
+- **管理与集成**：REST API 加 OpenAPI 文档，提供 Docker 镜像。Webhook 通知和配置导入导出计划中。
 - **Web 控制台**：提供深色概览、管理员登录与改密、实例配置和目录浏览、任务配置与触发、运行监控及未知操作管理，支持中文和英文界面。概览使用现有 API 的分页数据，并标注统计范围。
 
 明确不做的事：
@@ -24,19 +24,36 @@
 
 ## 开发进度
 
-| 里程碑  | 内容                                                         | 状态   |
-| ------- | ------------------------------------------------------------ | ------ |
-| M0      | 基础设施：配置、数据库、管理员认证、密钥、健康检查、API 文档 | 已完成 |
-| M1      | OpenList 客户端与实例管理                                    | 已完成 |
-| M2      | 扫描、规划与 dry-run 预览                                    | 已实现 |
-| M3a/M3b | relay新建/替换、Mirror、取消/隔离与恢复                      | 已实现 |
-| M4      | cron、启停与next-fire/DST                                    | 已实现 |
-| M5      | 历史记录保留                                                 | 已实现 |
-| M6      | 同实例服务端复制                                             | 已实现 |
-| M7      | Webhook 通知与配置导入导出                                   | 计划中 |
-| M8      | Docker 镜像与正式发布                                        | 计划中 |
+| 里程碑  | 内容                                                         | 状态             |
+| ------- | ------------------------------------------------------------ | ---------------- |
+| M0      | 基础设施：配置、数据库、管理员认证、密钥、健康检查、API 文档 | 已完成           |
+| M1      | OpenList 客户端与实例管理                                    | 已完成           |
+| M2      | 扫描、规划与 dry-run 预览                                    | 已实现           |
+| M3a/M3b | relay新建/替换、Mirror、取消/隔离与恢复                      | 已实现           |
+| M4      | cron、启停与next-fire/DST                                    | 已实现           |
+| M5      | 历史记录保留                                                 | 已实现           |
+| M6      | 同实例服务端复制                                             | 已实现           |
+| M7      | Webhook 通知与配置导入导出                                   | 计划中（发布后） |
+| M8      | Docker 镜像与正式发布                                        | 已实现           |
 
 ## 快速开始
+
+### Docker
+
+镜像发布在 `ghcr.io/limlll/openlist-cron-sync`，支持 amd64 和 arm64。使用仓库中的 [docker-compose.yaml](docker-compose.yaml)：
+
+```sh
+docker compose up -d
+docker compose logs openlist-cron-sync   # 未设置 ADMIN_PASSWORD 时，在日志中查看随机初始密码
+```
+
+- 数据保存在 `/data` 卷中，容器以 uid 1000 运行。使用宿主机目录挂载时，先把目录属主改为 1000。
+- 一个数据目录只能给一个容器使用，不要多副本运行。
+- 容器内的 `localhost` 指容器自身；OpenList 地址要填容器能访问到的地址。
+
+首次部署、添加实例和建立任务的完整步骤见[用户指南](docs/README.md#用户指南)，从[首次部署与管理员初始化](docs/guides/getting-started.md)开始。
+
+### 从源码运行
 
 环境要求：Node.js `^22.22.3` 或 `>=24.15.0`，pnpm 10。
 
@@ -64,8 +81,6 @@ curl -X POST http://localhost:3000/api/v1/auth/login \
 ```
 
 在浏览器中打开 <http://localhost:3000/api/v1/docs> 可以查看 API 文档，OpenAPI JSON 位于 `/api/v1/openapi.json`。
-
-Docker 镜像会在正式发布时提供。
 
 ## 配置
 
@@ -108,10 +123,10 @@ Docker 镜像会在正式发布时提供。
 | `SPOOL_DIR`                                | 传输时的临时缓冲                           |
 
 - **`keys.json` 必须和数据库一起备份。** 主密钥一旦丢失，数据库中加密保存的 OpenList 凭据就无法再解密，只能重新录入。如果数据库里已有加密数据，而密钥缺失或不匹配，服务会拒绝启动，不会换一把新密钥继续运行。
-- 备份时先停止服务，再整体复制数据目录（spool 目录除外）。不要在服务运行时只复制 `app.sqlite`。
+- 备份时先停止服务，再整体复制数据目录（spool 目录除外）。不要在服务运行时只复制 `app.sqlite`。完整步骤见[备份、恢复和升级](docs/guides/backup-restore-upgrade.md)。
 - 一个数据目录同一时间只能被一个服务进程使用。
 - 运行记录（含 dry-run）在结束后默认保留 30 天，每天 UTC 03:00 自动删除过期部分；仍有未处理的 unknown 或仍在跟踪 OpenList 远程任务的记录会继续保留。清理只删数据库行，不碰 OpenList 上的文件，也不会自动 VACUUM 收缩数据库文件。
-- 忘记管理员密码时，参考[安全文档](docs/design/security.md#管理员)中的离线重置步骤。
+- 忘记管理员密码时，按[首次部署指南](docs/guides/getting-started.md#忘记管理员密码)中的步骤离线重置。
 
 ## API
 
@@ -169,8 +184,8 @@ Vite 开发代理从仓库根目录的 `.env`（及 Vite 当前模式对应的�
 
 ## 文档
 
-完整的设计文档（中文）见 [docs/README.md](docs/README.md)，建议从[概览](docs/design/overview.md)开始读。
+[用户指南](docs/README.md#用户指南)说明部署、配置和日常操作步骤；完整的设计文档（中文）见 [docs/README.md](docs/README.md)，建议从[概览](docs/design/overview.md)开始读。
 
 ## 许可证
 
-项目计划以 AGPL-3.0 开源，并要求贡献者签署 CLA。许可证文件会在首个正式版本发布前加入（见 [ADR 0008](docs/adr/0008-license-cla.md)），目前仓库还没有附带许可证文件。
+[AGPL-3.0-only](LICENSE)。提交贡献即表示同意以同一许可证授权，不需要另签 CLA（见 [ADR 0008](docs/adr/0008-license-cla.md)）。

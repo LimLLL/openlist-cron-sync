@@ -1,0 +1,89 @@
+# 推送版本标签（如 v0.1.0）时构建多架构镜像并发布到 GHCR。
+name: Release image
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-qemu-action@v4
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # semver 标签生成 1.2.3 与 1.2；正式版额外打 latest，预发布版不打。
+      - id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/limlll/openlist-cron-sync
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
+      # 推送前逐个架构构建并加载到本机（arm64 经 QEMU 运行），冒烟测试通过后才发布。
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          tags: smoke:amd64
+          cache-from: type=gha
+
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/arm64
+          load: true
+          tags: smoke:arm64
+          cache-from: type=gha
+
+      # 用空数据卷启动：ready 证明迁移、SQLite 原生模块和启动恢复可用，首页证明网页控制台已打包。
+      # 只在失败时输出容器日志，避免把冒烟容器生成的初始密码写进公开日志。
+      - name: Smoke test
+        run: |
+          for arch in amd64 arm64; do
+            docker run -d --name smoke --platform "linux/$arch" -p 127.0.0.1:3000:3000 "smoke:$arch"
+            ready=false
+            for _ in $(seq 1 90); do
+              if curl -fsS http://127.0.0.1:3000/api/v1/system/health/ready > /dev/null 2>&1; then
+                ready=true
+                break
+              fi
+              sleep 2
+            done
+            if [ "$ready" != true ]; then
+              echo "linux/$arch did not become ready"
+              docker logs smoke
+              exit 1
+            fi
+            expected=$([ "$arch" = amd64 ] && echo x64 || echo arm64)
+            test "$(docker exec smoke node -p process.arch)" = "$expected"
+            # 先取完整响应再匹配，避免 grep 提前退出使 curl 在 pipefail 下失败。
+            grep -q '<div id="root">' <<< "$(curl -fsS http://127.0.0.1:3000/)"
+            docker rm -f smoke
+          done
+
+      # 本 job 内的构建缓存已含上面两次构建，此处复用同样的层生成多架构镜像。
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

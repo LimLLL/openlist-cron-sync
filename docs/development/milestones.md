@@ -137,9 +137,11 @@ M3a与M3b不拆分交付，同时执行Mirror文件extras、syncEmptyDirs空目�
 
 ## M8 发布
 
-交付：Dockerfile与部署示例、OpenAPI完整契约、README和用户指南、AGPL-3.0许可证及CLA（同步package.json的license字段）、版本兼容记录。
+交付：Dockerfile与部署示例、OpenAPI完整契约、README和用户指南、AGPL-3.0-only许可证（同步package.json的license字段，不设CLA）、版本兼容记录。
 
-任务：固定Node24-bookworm-slim版本、原生依赖架构验证流程、迁移携带、备份恢复演练、指南和API示例对照。
+状态：已完成。用户指南见[用户指南索引](../README.md#用户指南)，集成重跑与兼容版本记录见[OpenList依赖表](../reference/openlist-api.md#兼容版本)，备份恢复演练为`test/backup-restore.e2e-spec.ts`，原生依赖架构验证由发布流程在推送镜像前对amd64与arm64分别启动冒烟测试。M7按维护者决定推迟到首个版本发布后。
+
+任务：固定Node精确版本（与本地开发测试一致的bookworm-slim镜像）、原生依赖架构验证流程、迁移携带、备份恢复演练、指南和API示例对照。
 
 验收：
 

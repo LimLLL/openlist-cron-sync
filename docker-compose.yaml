@@ -1,0 +1,18 @@
+# 单实例部署示例：一个数据卷只能挂给一个容器，不要多副本运行。
+services:
+  openlist-cron-sync:
+    image: ghcr.io/limlll/openlist-cron-sync:latest
+    container_name: openlist-cron-sync
+    restart: unless-stopped
+    ports:
+      - '3000:3000'
+    volumes:
+      - data:/data
+    # 首次启动未设置 ADMIN_PASSWORD 时，随机初始密码会打印在容器日志中（docker compose logs）。
+    # environment:
+    #   ADMIN_PASSWORD: change-me-at-least-12-chars
+    # 给运行中的同步留出收尾时间，应大于 SHUTDOWN_GRACE_SECONDS（默认 30 秒）。
+    stop_grace_period: 60s
+
+volumes:
+  data:
