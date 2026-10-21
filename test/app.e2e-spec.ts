@@ -90,7 +90,7 @@ describe('M0 HTTP', () => {
     expect(schema.text).not.toMatch(
       /password_hash|secret_enc|schedulerReady|token_version/,
     );
-    for (const path of ['/docs', '/api/v1/docs-json', '/api/v1/docs-yaml'])
+    for (const path of ['/api/v1/docs-json', '/api/v1/docs-yaml'])
       await request(server).get(path).expect(404);
     readiness.ready = false;
     await request(server)

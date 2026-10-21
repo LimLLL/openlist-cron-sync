@@ -14,13 +14,13 @@
 - **删除保护**：支持 dry-run 预览、删除数量和比例阈值；扫描不完整时禁止删除；结果不明的路径会被暂时隔离，不再写入。
 - **安全**：单管理员登录（JWT）；保存的 OpenList 凭据用 AES-256-GCM 加密存储。
 - **管理与集成**：REST API 加 OpenAPI 文档，支持 Webhook 通知、配置导入导出和 Docker 部署。
+- **Web 控制台**：目前提供深色应用框架、管理员登录和改密；实例、任务、运行与操作管理页面在后续实现。
 
 明确不做的事：
 
 - 不修改源目录：对源只读，没有“同步后删除源文件”的移动模式。
 - 不做双向同步。
 - 只比较名称、类型和大小，不比较修改时间或内容 hash。
-- 暂时没有 Web 界面，后端完成后再开发。
 
 ## 开发进度
 
@@ -42,13 +42,14 @@
 
 ```sh
 pnpm install --frozen-lockfile
-pnpm build
+pnpm build:all
 DATA_DIR=/path/to/data ADMIN_PASSWORD='your-strong-password' node dist/main.js
 ```
 
 - `DATA_DIR` 必须是绝对路径，并且属于运行服务的用户。服务启动时会把它的权限收紧为 0700。
 - 如果不设置 `ADMIN_PASSWORD`，首次启动会生成一个随机密码，并在 stderr 打印一次；用它首次登录后必须修改密码。
 - 服务默认监听 `0.0.0.0:3000`。
+- Web 控制台与 API 共用端口，在 <http://localhost:3000/> 打开。JWT 仅保存在页面内存中，刷新需要重新登录；改密会撤销所有旧会话。
 
 启动后可以这样验证：
 
@@ -137,21 +138,30 @@ Job保存五段cron（IANA时区，默认UTC）后，`POST /jobs/:id/enable`启�
 
 ## 开发
 
-技术栈：NestJS 12、TypeScript 6（ESM）、SQLite（better-sqlite3 + Drizzle ORM）、Vitest、oxlint。
+技术栈：NestJS 12、TypeScript 6（ESM）、SQLite（better-sqlite3 + Drizzle ORM）、Vitest、oxlint；`web/` 为 pnpm workspace 成员，使用 React 19、Vite 6、Tailwind CSS 4、TanStack Query 和 Motion（framer-motion）。
 
 ```sh
 NODE_ENV=development pnpm run start:dev   # 开发模式：监听文件变化，读取 .env
+pnpm dev:web                              # 另一终端启动 Vite，按根目录 PORT 代理 /api/v1
 pnpm run lint                              # 代码检查
 pnpm exec tsc --noEmit --incremental false -p tsconfig.json   # 类型检查（含测试代码）
 pnpm test                                  # 单元测试
 pnpm test:e2e                              # 端到端测试
+pnpm --filter web test                     # 前端请求与认证契约测试
+pnpm --filter web lint                     # 前端代码检查
 pnpm test:integration                      # 真实 OpenList 集成测试，需要 OPENLIST_IT_* 环境变量
 pnpm build                                 # 构建
+pnpm build:web                             # 前端类型检查与构建，输出 web/dist/
+pnpm build:all                             # 同时构建后端和前端
 node test/compiled-smoke.mjs               # 构建产物冒烟测试，需先 build
 pnpm run db:generate                       # 修改数据库 schema 后生成迁移（自动先 build）
 ```
 
-表定义分在多个文件中，NodeNext 要求它们以 `.js` 相对引用；drizzle-kit 0.31 直接加载 TS 源文件时无法解析这类引用（[上游 issue #2705](https://github.com/drizzle-team/drizzle-orm/issues/2705)），因此 `drizzle.config.ts` 读取编译后的 `dist/database/schema.js`，`db:generate` 脚本先执行 `nest build` 保证产物最新。数据库迁移由 drizzle-kit 生成到 `drizzle/` 目录，服务启动时会自动应用，生成的文件不要手工修改。部署时需要一起带上 `dist/`、生产依赖和整个 `drizzle/` 目录。
+表定义分在多个文件中，NodeNext 要求它们以 `.js` 相对引用；drizzle-kit 0.31 直接加载 TS 源文件时无法解析这类引用（[上游 issue #2705](https://github.com/drizzle-team/drizzle-orm/issues/2705)），因此 `drizzle.config.ts` 读取编译后的 `dist/database/schema.js`，`db:generate` 脚本先执行 `nest build` 保证产物最新。数据库迁移由 drizzle-kit 生成到 `drizzle/` 目录，服务启动时会自动应用，生成的文件不要手工修改。部署时需要一起带上 `dist/`、`web/dist/`、生产依赖和整个 `drizzle/` 目录。
+
+`test:e2e` 自动构建前端后验证 API 和 SPA 托管。仅运行后端开发服务时不要求已有前端产物；Vite 单独提供页面。生产通过 `@nestjs/serve-static` 在根路径提供 SPA，`/api` 和缺失资源不进入 HTML 回退。浏览器环境变量是公开构建内容，不得放入管理员密码或实例凭据。
+
+Vite 开发代理从仓库根目录的 `.env`（及 Vite 当前模式对应的环境文件）读取端口，优先级为 `VITE_API_PORT`、`PORT`、默认 `3000`；同名变量以启动进程中已导出的值优先。例如根目录配置 `PORT=39123` 时直接运行 `pnpm dev:web` 即可；也可以用 `VITE_API_PORT=40123 pnpm dev:web` 单独指定代理目标端口。修改环境文件后需重启 Vite。此配置只读取代理所需的端口，不把后端环境目录设为浏览器环境目录。
 
 真实集成测试沿用维护者准备的实例，额外要求`OPENLIST_IT_SECOND_LOCAL_PATH`、`OPENLIST_IT_PEER_BASE_URL`、`OPENLIST_IT_PEER_ADMIN_TOKEN`、`OPENLIST_IT_PEER_LOCAL_PATH`；只在测试自有UUID目录内写入及清理，不创建容器。变量缺失会在收集前失败。
 

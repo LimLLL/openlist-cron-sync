@@ -2,6 +2,8 @@
 import { Module } from '@nestjs/common';
 import type { DynamicModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ServeStaticModule } from '@nestjs/serve-static';
+import { webStaticOptions } from './web-static.js';
 import type { Environment } from './configuration/validation.js';
 import { InstancesModule } from './instances/instances.module.js';
 import { JobsModule } from './jobs/jobs.module.js';
@@ -22,6 +24,7 @@ import { SystemModule } from './system/system.module.js';
     MaintenanceModule,
     InstancesModule,
     SystemModule,
+    ServeStaticModule.forRoot(webStaticOptions),
   ],
 })
 export class AppModule {}
