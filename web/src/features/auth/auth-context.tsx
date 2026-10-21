@@ -1,4 +1,4 @@
-// 管理仅存在内存中的管理员会话；退出时中止请求并清空 Query 缓存。
+// 管理管理员会话（localStorage 持久化）；退出时中止请求并清空 Query 缓存。
 import {
   createContext,
   useCallback,
@@ -9,11 +9,13 @@ import {
 } from 'react';
 import type { ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { apiRequest, ApiError } from '../../lib/api-client';
+import { apiRequest, ApiError, isRecord } from '../../lib/api-client';
 import type { JsonRequestOptions } from '../../lib/api-client';
 import { parseAdministrator, parseLogin } from './auth-contract';
 
-/** 内存会话，不进入 URL、浏览器存储或 Query 缓存。 */
+const STORAGE_KEY = 'ocs_session';
+
+/** 会话数据，持久化到 localStorage。 */
 export interface Session {
   /** 管理 JWT。 */
   accessToken: string;
@@ -23,6 +25,90 @@ export interface Session {
   expiresAt: number;
   /** 是否只允许修改密码。 */
   mustChangePassword: boolean;
+}
+
+/** 从 localStorage 恢复未过期会话；格式不符或已过期的记录会被清除。
+ * @returns 有效会话或 null。
+ * @throws 不适用；存储不可用或解析失败时返回 null，令牌失效由首个请求的 401 处理。
+ */
+function restoreSession(): Session | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw === null) return null;
+    const data: unknown = JSON.parse(raw);
+    if (
+      isRecord(data) &&
+      typeof data.accessToken === 'string' &&
+      /^[\x21-\x7e]+$/u.test(data.accessToken) &&
+      typeof data.username === 'string' &&
+      [...data.username].length >= 1 &&
+      [...data.username].length <= 64 &&
+      typeof data.expiresAt === 'number' &&
+      Number.isSafeInteger(data.expiresAt) &&
+      typeof data.mustChangePassword === 'boolean' &&
+      data.expiresAt > Date.now() &&
+      // 后端 TTL 最长一天，同时拒绝会令浏览器定时器溢出的损坏记录。
+      data.expiresAt <= Date.now() + 86_400_000
+    )
+      return {
+        accessToken: data.accessToken,
+        username: data.username,
+        expiresAt: data.expiresAt,
+        mustChangePassword: data.mustChangePassword,
+      };
+  } catch {
+    // 存储被禁用或内容损坏，按未登录处理。
+  }
+  clearPersistedSession();
+  return null;
+}
+
+/** 持久化会话到 localStorage。
+ * @param session 当前会话。
+ * @param expectedToken 更新已有会话时必须匹配的令牌，避免旧标签页覆盖新登录。
+ * @returns 不适用。
+ * @throws 不适用。
+ */
+function persistSession(session: Session, expectedToken?: string): void {
+  let previous: string | null | undefined;
+  try {
+    previous = localStorage.getItem(STORAGE_KEY);
+    if (expectedToken !== undefined) {
+      const stored: unknown = JSON.parse(previous ?? 'null');
+      if (!isRecord(stored) || stored.accessToken !== expectedToken) return;
+    }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+  } catch {
+    // 写入失败时降级为内存；仅移除本次读取的旧值，不影响并发登录。
+    try {
+      if (
+        previous !== undefined &&
+        localStorage.getItem(STORAGE_KEY) === previous
+      )
+        localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      /* 存储禁用时仍可使用当前内存会话。 */
+    }
+  }
+}
+
+/** 清除 localStorage 中的会话。
+ * @param expectedToken 指定时只删除这个令牌，迟到的 401 不得删除其他标签页的新会话。
+ * @returns 不适用。
+ * @throws 不适用。
+ */
+function clearPersistedSession(expectedToken?: string): void {
+  try {
+    if (expectedToken !== undefined) {
+      const stored: unknown = JSON.parse(
+        localStorage.getItem(STORAGE_KEY) ?? 'null',
+      );
+      if (!isRecord(stored) || stored.accessToken !== expectedToken) return;
+    }
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    /* 存储不可用时仍清除内存会话。 */
+  }
 }
 
 /** 登录页可展示的退出原因。 */
@@ -65,16 +151,24 @@ interface ActiveSession {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-/** 提供内存认证上下文及过期清理。
+/** 提供可跨刷新恢复的认证上下文及过期清理。
  * @param props 子组件。
  * @returns 认证上下文 provider。
  * @throws 不适用；网络错误由公开操作返回调用方。
  */
 export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
-  const [session, setSession] = useState<Session | null>(null);
+  const [session, setSession] = useState<Session | null>(restoreSession);
   const [notice, setNotice] = useState<SessionNotice>(null);
   const active = useRef<ActiveSession | null>(null);
+  const initialized = useRef(false);
+
+  // 一次性惰性初始化：把刷新前保存的会话绑定到新的请求生命周期。
+  if (!initialized.current) {
+    initialized.current = true;
+    if (session)
+      active.current = { data: session, controller: new AbortController() };
+  }
 
   /** 取消旧会话后同步清缓存，禁止迟到请求恢复旧用户数据。
    * @param reason 登录页提示原因。
@@ -83,8 +177,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    */
   const logout = useCallback(
     (reason: SessionNotice = 'signed-out') => {
+      const current = active.current;
       active.current?.controller.abort();
       active.current = null;
+      if (current) clearPersistedSession(current.data.accessToken);
       queryClient.clear();
       setSession(null);
       setNotice(reason);
@@ -105,6 +201,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         logout('expired');
       if (error.code === 'PASSWORD_CHANGE_REQUIRED') {
         current.data = { ...current.data, mustChangePassword: true };
+        persistSession(current.data, current.data.accessToken);
         setSession(current.data);
       }
     },
@@ -143,6 +240,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           result.mustChangePassword || administrator.mustChangePassword,
       };
       active.current = { data, controller: new AbortController() };
+      persistSession(data);
       setNotice(null);
       setSession(data);
     },
@@ -162,8 +260,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       options: Omit<JsonRequestOptions<T>, 'token'>,
     ): Promise<T> => {
       const current = active.current;
-      if (!current)
+      if (!current || current.data.expiresAt <= Date.now()) {
+        if (current) logout('expired');
         throw new ApiError(401, 'UNAUTHENTICATED', 'Sign in to continue.');
+      }
       const signal = options.signal
         ? AbortSignal.any([options.signal, current.controller.signal])
         : current.controller.signal;
@@ -178,7 +278,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw error;
       }
     },
-    [handleSessionError],
+    [handleSessionError, logout],
   );
 
   /** 修改密码，204 成功后立即清除当前和缓存中的认证数据。
@@ -195,8 +295,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signal: AbortSignal,
     ) => {
       const current = active.current;
-      if (!current)
+      if (!current || current.data.expiresAt <= Date.now()) {
+        if (current) logout('expired');
         throw new ApiError(401, 'UNAUTHENTICATED', 'Sign in to continue.');
+      }
       try {
         await apiRequest('/auth/change-password', {
           method: 'POST',
@@ -216,18 +318,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!session) return;
     const timer = window.setTimeout(
-      () => logout('expired'),
+      () => {
+        if (active.current?.data === session) logout('expired');
+      },
       Math.max(0, session.expiresAt - Date.now()),
     );
     return () => window.clearTimeout(timer);
   }, [session, logout]);
 
-  useEffect(
-    () => () => {
-      active.current?.controller.abort();
-    },
-    [],
-  );
+  useEffect(() => {
+    /** 同步其他标签页的登录、退出和强制改密标记；读取最新值而非可能排队的事件值。
+     * @param event 浏览器存储事件。
+     * @returns 不适用。
+     * @throws 不适用。
+     */
+    function syncSession(event: StorageEvent): void {
+      if (event.key !== STORAGE_KEY && event.key !== null) return;
+      try {
+        if (event.storageArea !== localStorage) return;
+      } catch {
+        return; // 禁用存储时保留本标签页的内存会话。
+      }
+      const next = restoreSession();
+      const current = active.current;
+      if (next && current?.data.accessToken === next.accessToken) {
+        current.data = next;
+        setSession(next);
+        return;
+      }
+      current?.controller.abort();
+      active.current = next
+        ? { data: next, controller: new AbortController() }
+        : null;
+      queryClient.clear();
+      setSession(next);
+      setNotice(next ? null : 'signed-out');
+    }
+    window.addEventListener('storage', syncSession);
+    return () => window.removeEventListener('storage', syncSession);
+  }, [queryClient]);
+
+  // 不在卸载时中止请求：根 provider 只会被 StrictMode 模拟卸载，中止会让恢复的会话请求全部失败。
 
   return (
     <AuthContext.Provider

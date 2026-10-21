@@ -35,6 +35,8 @@ export class ApiError extends Error {
 
 /** 所有请求共有的参数。 */
 export interface RequestOptions {
+  /** 特定端点以非 2xx 返回正常数据时允许的状态，例如健康检查的 503。 */
+  acceptedStatuses?: readonly number[];
   /** 默认 GET；变更请求不自动重试。 */
   method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
   /** 仅发送给当前源 /api/v1 的内存 token。 */
@@ -133,7 +135,7 @@ export async function apiRequest<T>(
     );
   }
   options.signal?.throwIfAborted();
-  if (response.status === 204 && !options.parse) return;
+  if (response.status === 204) return options.parse?.(undefined);
   let payload: unknown;
   try {
     payload = await response.json();
@@ -148,7 +150,7 @@ export async function apiRequest<T>(
     );
   }
   options.signal?.throwIfAborted();
-  if (!response.ok) {
+  if (!response.ok && !options.acceptedStatuses?.includes(response.status)) {
     const error =
       isRecord(payload) && isRecord(payload.error) ? payload.error : {};
     const details = Array.isArray(error.details)

@@ -1,40 +1,55 @@
-/* 深色观测站设计令牌；Tailwind v4 直接从 CSS 生成主题工具类。 */
+/* 深色观测站设计令牌与基础样式；组件与外壳样式拆分在同目录的分文件中。 */
 @import 'tailwindcss';
+@import './components.css';
+@import './shell.css';
 
 @theme {
-  --color-background: #101211;
-  --color-foreground: #eeeede;
-  --color-surface: #141715;
-  --color-surface-raised: #1b201d;
-  --color-surface-hover: #242c26;
-  --color-muted-foreground: #a0aaa2;
-  --color-border: #2b342e;
+  --color-background: #090b0a;
+  --color-foreground: #ecedde;
+  --color-surface: #0f1210;
+  --color-surface-raised: #141815;
+  --color-surface-hover: #1b211d;
+  --color-muted-foreground: #8b958d;
+  --color-border: #202722;
+  --color-hairline: rgb(236 237 222 / 0.08);
   --color-accent: #b9edbc;
-  --color-accent-foreground: #152219;
+  --color-accent-foreground: #0d1810;
   --color-danger: #f4a39b;
   --color-signal: #e2ae73;
-  --font-sans: 'Avenir Next', Avenir, 'Segoe UI', sans-serif;
-  --font-display: 'Avenir Next', Avenir, 'Segoe UI', sans-serif;
-  --font-mono: 'SFMono-Regular', Consolas, monospace;
-  --text-display: clamp(3rem, 6vw, 6.5rem);
-  --text-display--line-height: 1.02;
-  --text-display--letter-spacing: -0.065em;
+  --font-sans:
+    'Geist Variable', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei',
+    'Noto Sans SC', system-ui, sans-serif;
+  --font-display:
+    'Geist Variable', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei',
+    'Noto Sans SC', system-ui, sans-serif;
+  --font-serif:
+    'Instrument Serif', 'Songti SC', 'STSong', 'Noto Serif SC', Georgia, serif;
+  --font-mono:
+    'Geist Mono Variable', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @layer base {
   :root {
     color-scheme: dark;
+    /* 固定顶栏高度，供吸顶元素与滚动锚点共用。 */
+    --topbar-height: 4rem;
+    scroll-padding-top: calc(var(--topbar-height) + 1rem);
   }
   body {
     margin: 0;
     background: var(--color-background);
     color: var(--color-foreground);
     font-family: var(--font-sans);
+    font-feature-settings: 'ss01', 'cv11';
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
   button,
   a,
-  input {
+  input,
+  select,
+  textarea {
     -webkit-tap-highlight-color: transparent;
   }
   button:not(:disabled),
@@ -43,271 +58,37 @@
   }
   :focus-visible {
     outline: 2px solid var(--color-accent);
-    outline-offset: 4px;
+    outline-offset: 3px;
+    border-radius: 0.375rem;
   }
   ::selection {
-    background: #b9edbc;
-    color: #152219;
-  }
-}
-
-@layer components {
-  .brand {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.7rem;
-    font-size: 1.05rem;
-    font-weight: 600;
-    letter-spacing: -0.04em;
-    white-space: nowrap;
-  }
-  .brand > svg {
-    color: var(--color-accent);
-  }
-  .brand-suffix {
-    color: var(--color-muted-foreground);
-    font-weight: 400;
-  }
-  .eyebrow {
-    color: var(--color-muted-foreground);
-    font: 10px/1.7 var(--font-mono);
-    letter-spacing: 0.17em;
-  }
-  .page-title {
-    font-family: var(--font-display);
-    font-size: clamp(2.7rem, 4.5vw, 4.8rem);
-    line-height: 1.06;
-    letter-spacing: -0.065em;
-    font-weight: 500;
-  }
-  .panel {
-    border: 1px solid var(--color-border);
-    border-radius: 1.25rem;
-    background: var(--color-surface);
-  }
-  .field-label {
-    display: block;
-    color: var(--color-foreground);
-    font-size: 0.8rem;
-    font-weight: 500;
-  }
-  .field-input {
-    width: 100%;
-    min-height: 3rem;
-    border: 1px solid var(--color-border);
-    border-radius: 0.75rem;
-    background: var(--color-surface);
-    padding: 0.75rem 1rem;
-    color: var(--color-foreground);
-    font-size: 0.9rem;
-    transition: border-color 150ms;
-  }
-  .field-input:focus {
-    border-color: var(--color-accent);
-    outline: 1px solid var(--color-accent);
-    outline-offset: 0;
-  }
-  .field-input:autofill {
-    box-shadow: 0 0 0 1000px var(--color-surface-raised) inset;
-    -webkit-text-fill-color: var(--color-foreground);
-  }
-  .nav-item {
-    display: flex;
-    align-items: center;
-    gap: 0.85rem;
-    min-height: 2.75rem;
-    padding: 0.65rem 0.85rem;
-    border-radius: 0.65rem;
-    color: var(--color-muted-foreground);
-    font-size: 0.8rem;
-    transition:
-      background 150ms,
-      color 150ms;
-  }
-  a.nav-item:hover,
-  button.nav-item:hover {
-    background: var(--color-surface-hover);
-    color: var(--color-foreground);
-  }
-  .nav-item-active {
-    background: #b9edbc0c;
-    color: var(--color-accent);
-    box-shadow: inset 2px 0 var(--color-accent);
-  }
-  .skip-link {
-    position: fixed;
-    z-index: 100;
-    top: 1rem;
-    left: 1rem;
-    transform: translateY(-200%);
-    padding: 0.75rem 1rem;
-    border-radius: 0.5rem;
+    background: var(--color-accent);
     color: var(--color-accent-foreground);
-    background: var(--color-accent);
   }
-  .skip-link:focus {
-    transform: translateY(0);
-  }
-  .login-layout {
-    display: grid;
-    min-height: 100svh;
-    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
-  }
-  .login-art-panel {
-    position: relative;
-    display: flex;
-    min-height: 100svh;
-    flex-direction: column;
-    overflow: hidden;
-    padding: 3rem;
-    border-right: 1px solid var(--color-border);
-    background: radial-gradient(
-      ellipse at 80% 75%,
-      #253c2d 0,
-      #161e18 35%,
-      #131714 70%
-    );
-  }
-  .login-editorial {
-    z-index: 1;
-    margin-top: clamp(4rem, 11vh, 9rem);
-  }
-  .login-editorial h1 {
-    margin-top: 1.75rem;
-    font: 500 var(--text-display)/1.02 var(--font-display);
-    letter-spacing: -0.065em;
-  }
-  .login-art-footer {
-    position: relative;
-    z-index: 1;
-    display: flex;
-    justify-content: space-between;
-    margin-top: auto;
-    padding-top: 4rem;
-    font: 9px var(--font-mono);
-    letter-spacing: 0.15em;
-    color: var(--color-muted-foreground);
-  }
-  .orbit-art {
-    position: absolute;
-    right: -12%;
-    bottom: 1%;
-    width: 42rem;
-    height: 42rem;
-    pointer-events: none;
-  }
-  .orbit-ring {
-    position: absolute;
-    border: 1px solid #b9edbc24;
-    border-radius: 50%;
-  }
-  .orbit-ring-outer {
-    inset: 5%;
-  }
-  .orbit-ring-middle {
-    inset: 18%;
-    transform: rotate(-30deg) scaleY(0.65);
-    border-color: #b9edbc45;
-  }
-  .orbit-ring-inner {
-    inset: 27%;
-    transform: rotate(35deg) scaleX(0.65);
-  }
-  .orbit-core {
-    position: absolute;
-    inset: 42%;
-    display: grid;
-    place-items: center;
-    border: 1px solid #b9edbc40;
-    border-radius: 50%;
-    background: radial-gradient(circle at 30% 30%, #779974, #253729 65%);
-    box-shadow: 0 0 90px #b9edbc12;
-    color: #d1f1ce;
-  }
-  .orbit-axis {
-    position: absolute;
-    top: 50%;
-    width: 100%;
-    border-top: 1px dashed #b9edbc15;
-    transform: rotate(-30deg);
-  }
-  .orbit-point {
-    position: absolute;
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--color-accent);
-    box-shadow: 0 0 20px #b9edbc70;
-  }
-  .orbit-point-one {
-    top: 36%;
-    right: 21%;
-  }
-  .orbit-point-two {
-    bottom: 30%;
-    left: 9%;
-    background: var(--color-signal);
-  }
-  .orbit-caption {
-    position: absolute;
-    right: 30%;
-    bottom: 17%;
-    font: 8px var(--font-mono);
-    letter-spacing: 0.2em;
-    color: #a0aaa270;
-  }
-  .workspace-hero {
-    position: relative;
-    min-height: 23rem;
-    overflow: hidden;
-    padding-top: 1rem;
-  }
-  .workspace-hero .orbit-art {
-    width: 30rem;
-    height: 30rem;
-    right: -1rem;
-    bottom: -3rem;
-    opacity: 0.65;
+  /* 细滚动条，与发丝线风格一致。 */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #2a322d transparent;
   }
 }
 
-@media (max-width: 1100px) {
-  .login-art-panel {
-    padding: 2rem;
-  }
-  .login-art-panel .orbit-art {
-    width: 32rem;
-    height: 32rem;
-    bottom: 2rem;
-    right: -40%;
-  }
-  .workspace-hero .orbit-art {
-    right: -10rem;
-    opacity: 0.3;
-  }
+/* 中文排版：负字距与紧行高是为拉丁字母设计的，汉字需要放宽；不分层以覆盖 Tailwind 工具类。 */
+:lang(zh) .page-title,
+:lang(zh) .login-headline {
+  letter-spacing: -0.01em;
+  line-height: 1.12;
 }
-
-@media (max-width: 767px) {
-  .login-layout {
-    grid-template-columns: 1fr;
-  }
-  .login-art-panel {
-    min-height: auto;
-    border-right: 0;
-    border-bottom: 1px solid var(--color-border);
-    padding: 1.5rem;
-  }
-  .login-art-panel .login-editorial,
-  .login-art-panel .orbit-art,
-  .login-art-footer {
-    display: none;
-  }
-  .login-layout > section:last-child {
-    min-height: calc(100svh - 5rem);
-  }
-  .workspace-hero {
-    min-height: 21rem;
-  }
+:lang(zh) .page-title-accent,
+:lang(zh) .serif-accent {
+  font-style: normal;
+  letter-spacing: 0.02em;
+}
+:lang(zh) .tracking-tight {
+  letter-spacing: -0.005em;
+}
+:lang(zh) .eyebrow {
+  font-size: 11px;
+  letter-spacing: 0.12em;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -315,5 +96,7 @@
   *::before,
   *::after {
     scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
   }
 }

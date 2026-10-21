@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import type { ComponentProps } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 /** 密码字段属性。 */
 type PasswordFieldProps = Omit<ComponentProps<'input'>, 'type'> & {
@@ -22,8 +23,10 @@ export function PasswordField({
   id,
   label,
   hint,
+  required = true,
   ...props
 }: PasswordFieldProps) {
+  const { t } = useTranslation('common');
   const [visible, setVisible] = useState(false);
   return (
     <div className="space-y-2">
@@ -37,12 +40,12 @@ export function PasswordField({
           type={visible ? 'text' : 'password'}
           className="field-input pr-12"
           aria-describedby={hint ? `${id}-hint` : undefined}
-          required
+          required={required}
         />
         <button
           type="button"
           className="absolute inset-y-0 right-0 flex w-12 items-center justify-center rounded-r-xl text-muted-foreground hover:text-foreground"
-          aria-label={`${visible ? 'Hide' : 'Show'} ${label.toLowerCase()}`}
+          aria-label={t(visible ? 'password.hide' : 'password.show', { label: label.toLowerCase() })}
           aria-pressed={visible}
           onClick={() => setVisible(!visible)}
         >

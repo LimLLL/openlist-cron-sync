@@ -14,7 +14,7 @@
 - **删除保护**：支持 dry-run 预览、删除数量和比例阈值；扫描不完整时禁止删除；结果不明的路径会被暂时隔离，不再写入。
 - **安全**：单管理员登录（JWT）；保存的 OpenList 凭据用 AES-256-GCM 加密存储。
 - **管理与集成**：REST API 加 OpenAPI 文档，支持 Webhook 通知、配置导入导出和 Docker 部署。
-- **Web 控制台**：目前提供深色应用框架、管理员登录和改密；实例、任务、运行与操作管理页面在后续实现。
+- **Web 控制台**：提供深色概览、管理员登录与改密、实例配置和目录浏览、任务配置与触发、运行监控及未知操作管理，支持中文和英文界面。概览使用现有 API 的分页数据，并标注统计范围。
 
 明确不做的事：
 
@@ -49,7 +49,7 @@ DATA_DIR=/path/to/data ADMIN_PASSWORD='your-strong-password' node dist/main.js
 - `DATA_DIR` 必须是绝对路径，并且属于运行服务的用户。服务启动时会把它的权限收紧为 0700。
 - 如果不设置 `ADMIN_PASSWORD`，首次启动会生成一个随机密码，并在 stderr 打印一次；用它首次登录后必须修改密码。
 - 服务默认监听 `0.0.0.0:3000`。
-- Web 控制台与 API 共用端口，在 <http://localhost:3000/> 打开。JWT 仅保存在页面内存中，刷新需要重新登录；改密会撤销所有旧会话。
+- Web 控制台与 API 共用端口，在 <http://localhost:3000/> 打开。登录后 JWT 保存在浏览器 localStorage 中，刷新页面仍保持登录，直到令牌过期或主动退出；改密会撤销所有旧会话。界面语言首次按浏览器语言选择（中文或英文），手动切换后会被记住。
 
 启动后可以这样验证：
 
@@ -138,7 +138,7 @@ Job保存五段cron（IANA时区，默认UTC）后，`POST /jobs/:id/enable`启�
 
 ## 开发
 
-技术栈：NestJS 12、TypeScript 6（ESM）、SQLite（better-sqlite3 + Drizzle ORM）、Vitest、oxlint；`web/` 为 pnpm workspace 成员，使用 React 19、Vite 6、Tailwind CSS 4、TanStack Query 和 Motion（framer-motion）。
+技术栈：NestJS 12、TypeScript 6（ESM）、SQLite（better-sqlite3 + Drizzle ORM）、Vitest、oxlint；`web/` 为 pnpm workspace 成员，使用 React 19、Vite 6、Tailwind CSS 4、TanStack Query、Motion（framer-motion）和 react-i18next。
 
 ```sh
 NODE_ENV=development pnpm run start:dev   # 开发模式：监听文件变化，读取 .env

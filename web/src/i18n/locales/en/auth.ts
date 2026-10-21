@@ -1,0 +1,48 @@
+// 英文认证模块文案：登录、改密与会话提示。
+export default {
+  login: {
+    eyebrow: 'THE SYNCHRONIZATION OBSERVATORY',
+    headline1: 'Everything.',
+    headline2: 'In orbit.',
+    tagline: 'A considered space for the files that move between your worlds.',
+    footerRight: 'PRIVATE CONSOLE',
+    sourceDestination: 'SOURCE / DESTINATION',
+    access: 'ADMINISTRATOR ACCESS',
+    title: 'Welcome back.',
+    subtitle: 'Sign in to your synchronization workspace.',
+    formLabel: 'Administrator login',
+    username: 'Username',
+    password: 'Password',
+    submit: 'Enter workspace',
+    submitting: 'Signing in…',
+    sessionNote:
+      'Your session persists until it expires or you sign out. Changing your password ends all active sessions.',
+  },
+  notice: {
+    'password-changed': 'Password updated. Sign in with your new password.',
+    expired: 'Your session has ended. Sign in to continue.',
+    'signed-out': 'You have been signed out.',
+  },
+  password: {
+    eyebrow: 'ACCOUNT SECURITY',
+    forcedTitle: 'Make it',
+    forcedAccent: 'your own.',
+    title: 'A fresh set',
+    accent: 'of keys.',
+    forcedDescription: 'Replace your initial password before entering the workspace.',
+    description: 'Change the password for your administrator account.',
+    sessionsEnd: 'All existing sessions will end after this change.',
+    formLabel: 'Change password',
+    currentLabel: 'Current password',
+    nextLabel: 'New password',
+    nextHint: '12–128 characters. Use a unique password for this console.',
+    confirmLabel: 'Confirm new password',
+    submit: 'Update password',
+    submitting: 'Updating password…',
+  },
+  validation: {
+    username: 'Enter a username of 1–64 characters.',
+    passwordLength: 'Use 12–128 characters, up to 512 UTF-8 bytes.',
+    mismatch: 'The new passwords do not match.',
+  },
+} as const;

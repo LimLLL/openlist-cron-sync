@@ -1,2 +1,10 @@
 packages:
   - web
+
+onlyBuiltDependencies:
+  - better-sqlite3
+  - esbuild
+
+# swagger-ui-dist 间接依赖的安装统计脚本，对功能无作用，明确跳过。
+ignoredBuiltDependencies:
+  - '@scarf/scarf'

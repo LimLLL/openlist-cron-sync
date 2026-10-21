@@ -1,20 +1,23 @@
 // 支持首次强制改密与主动改密，成功后要求使用新密码重新登录。
 import { useState } from 'react';
 import type { FormEvent } from 'react';
-import { ArrowLeft, ArrowUpRight, KeyRound, LoaderCircle } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, LoaderCircle } from 'lucide-react';
 import { Link } from 'react-router';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from './auth-context';
 import { passwordError } from './auth-contract';
 import { useAuthForm } from './use-auth-form';
 import { Button } from '../../components/ui/button';
 import { PasswordField } from '../../components/ui/password-field';
 import { ErrorState } from '../../components/states';
+import { PageHeader } from '../../components/page-header';
 
 /** 渲染改密表单，强制改密时不提供绕过入口。
  * @returns 密码修改页面。
  * @throws 不适用；网络和校验错误显示在表单中。
  */
 export function PasswordPage() {
+  const { t } = useTranslation(['auth', 'common']);
   const { session, changePassword } = useAuth();
   const [current, setCurrent] = useState('');
   const [password, setPassword] = useState('');
@@ -29,10 +32,12 @@ export function PasswordPage() {
    */
   function handleSubmit(event: FormEvent<HTMLFormElement>): void {
     event.preventDefault();
-    const validation =
-      passwordError(current) ||
-      passwordError(password) ||
-      (password !== confirmation ? 'The new passwords do not match.' : null);
+    const invalid = passwordError(current) ?? passwordError(password);
+    const validation = invalid
+      ? invalid
+      : password !== confirmation
+        ? 'mismatch'
+        : null;
     void submit(
       (signal) => changePassword(current, password, signal),
       validation,
@@ -40,24 +45,23 @@ export function PasswordPage() {
   }
 
   return (
-    <section className="mx-auto max-w-2xl py-4 sm:py-10">
-      <p className="eyebrow mb-4 flex items-center gap-2">
-        <KeyRound size={15} aria-hidden="true" />
-        ACCOUNT SECURITY
-      </p>
-      <h1 className="page-title">
-        {forced ? 'Make it your own.' : 'A fresh set of keys.'}
-      </h1>
-      <p className="mt-4 max-w-lg text-sm leading-7 text-muted-foreground">
-        {forced
-          ? 'Replace your initial password before entering the workspace.'
-          : 'Change the password for your administrator account.'}{' '}
-        All existing sessions will end after this change.
-      </p>
+    <section>
+      <PageHeader
+        index="00"
+        kicker={t('password.eyebrow')}
+        title={forced ? t('password.forcedTitle') : t('password.title')}
+        accent={forced ? t('password.forcedAccent') : t('password.accent')}
+        description={
+          <>
+            {forced ? t('password.forcedDescription') : t('password.description')}{' '}
+            {t('password.sessionsEnd')}
+          </>
+        }
+      />
       <form
-        className="panel mt-8 space-y-6 p-6 sm:p-8"
+        className="panel max-w-xl space-y-6 p-6 sm:p-9"
         onSubmit={handleSubmit}
-        aria-label="Change password"
+        aria-label={t('password.formLabel')}
       >
         <input
           type="text"
@@ -70,7 +74,7 @@ export function PasswordPage() {
         <PasswordField
           id="current-password"
           name="currentPassword"
-          label="Current password"
+          label={t('password.currentLabel')}
           value={current}
           onChange={(event) => setCurrent(event.target.value)}
           autoComplete="current-password"
@@ -78,32 +82,32 @@ export function PasswordPage() {
         <PasswordField
           id="new-password"
           name="newPassword"
-          label="New password"
+          label={t('password.nextLabel')}
           value={password}
           onChange={(event) => setPassword(event.target.value)}
           autoComplete="new-password"
-          hint="12–128 characters. Use a unique password for this console."
+          hint={t('password.nextHint')}
         />
         <PasswordField
           id="confirm-password"
           name="confirmation"
-          label="Confirm new password"
+          label={t('password.confirmLabel')}
           value={confirmation}
           onChange={(event) => setConfirmation(event.target.value)}
           autoComplete="new-password"
         />
         {error && <ErrorState error={error} />}
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-6">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-hairline pt-6">
           {!forced && (
             <Button asChild variant="ghost">
               <Link to="/">
                 <ArrowLeft size={16} aria-hidden="true" />
-                Back
+                {t('common:actions.back')}
               </Link>
             </Button>
           )}
           <Button type="submit" className="ml-auto" disabled={pending}>
-            {pending ? 'Updating password…' : 'Update password'}
+            {pending ? t('password.submitting') : t('password.submit')}
             {pending ? (
               <LoaderCircle
                 size={17}

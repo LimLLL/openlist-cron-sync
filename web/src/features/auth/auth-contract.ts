@@ -3,7 +3,7 @@ import { ApiError, isRecord } from '../../lib/api-client';
 
 /** 登录成功时返回的短期会话。 */
 export interface LoginResult {
-  /** 仅允许留在内存中的 JWT。 */
+  /** 管理 JWT，由认证上下文负责持久化及退出清理。 */
   accessToken: string;
   /** 固定 Bearer 类型。 */
   tokenType: 'Bearer';
@@ -82,14 +82,14 @@ export function parseAdministrator(value: unknown): Administrator {
 
 /** 按 Unicode 码点与 UTF-8 字节校验密码，不裁剪或规范化秘密。
  * @param password 用户原始密码。
- * @returns 错误文案；合法时为 null。
+ * @returns 不合法时返回 auth 命名空间 validation 下的文案键；合法时为 null。
  * @throws 不适用。
  */
-export function passwordError(password: string): string | null {
+export function passwordError(password: string): 'passwordLength' | null {
   const length = [...password].length;
   return length < 12 ||
     length > 128 ||
     new TextEncoder().encode(password).length > 512
-    ? 'Use 12–128 characters, up to 512 UTF-8 bytes.'
+    ? 'passwordLength'
     : null;
 }
