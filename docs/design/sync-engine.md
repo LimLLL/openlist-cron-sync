@@ -92,7 +92,7 @@ dry-run显示planned动作、blocked原因、预算及受保护项；不是可�
 | create，overwrite=false | relay完成/无task成功/任务成功                         | 明确失败可有界重试；请求未知则隔离；不回滚                                                                                       |
 
 刷新后原文件已缺失时，对应delete标skipped PRECONDITION_ALREADY_ABSENT，作为正常前提变化不阻断依赖create，执行器显式重连依赖。
-create前不额外列出源目录。可获得的源检查只有relay下载响应（长度不符为SIZE_MISMATCH，见[relay结果分类](relay.md#结果分类)）和/d 401后的重新list（名称/类型/大小变化为SOURCE_CHANGED并跳过本次create）；server_copy以OpenList执行时的源内容为准。不存在源版本锁。
+纯新建server_copy不额外列出源目录；替换和retry_cleanup的每次删除前，先refresh=true读取source父目录并核对原名、文件类型及计划大小。缺失/变化使create skipped SOURCE_CHANGED，读取失败/可疑视图使源准备失败，伴随delete不提交。该元数据前提不锁定后续内容，也不能证明驱动能读完整文件。relay额外依据下载响应（长度不符为SIZE_MISMATCH，见[relay结果分类](relay.md#结果分类)）和/d 401后的重新list（名称/类型/大小变化为SOURCE_CHANGED并跳过本次create）；server_copy以OpenList执行时的源内容为准。不存在源版本锁。
 create重试发现部分目标文件：先刷新并确认原远程动作已结束；生成retry_cleanup删除动作（remove），再重新检查预算余量，然后新create。禁止overwrite重试。已成功的delete不会因create重试而再次提交。
 同一目标路径的已计划替换重试仍按一个逻辑文件计数，清理字节另报actualDeletedBytes；超出预算余量的retry_cleanup及其create在提交前skipped DELETE_LIMIT。
 
@@ -104,7 +104,7 @@ unchanged是扫描事实，不逐个持久化Operation。扫描错误保留scan_
 
 ## M3执行细化
 
-M3a/M3b作为一个变更实现relay、替换、Mirror和Run生命周期。真实server_copy在触发事务之前拒绝，dry-run仍可预览。执行器查询当前pending集合，按依赖选择准备动作；不能只向前扫描seq，因为重试可能使更早的下游重新就绪。替换和retry_cleanup的delete只能由文件协调器在源首块准备后调用，不能独立派发。父mkdir失败会阻断子操作；新根mkdir成功后的刷新失败保留mkdir成功，并记TARGET_ROOT_UNAVAILABLE。
+M3a/M3b作为一个变更实现relay、替换、Mirror和Run生命周期。server_copy与relay共用文件依赖、预算及隔离工作流。执行器查询当前pending集合，按依赖选择准备动作；不能只向前扫描seq，因为重试可能使更早的下游重新就绪。替换和retry_cleanup的delete只能由文件协调器在relay源首块准备或server_copy源元数据前提成立后调用，不能独立派发。父mkdir失败会阻断子操作；新根mkdir成功后的刷新失败保留mkdir成功，并记TARGET_ROOT_UNAVAILABLE。
 
 每个Target的创建阶段包含延迟重试和retry_cleanup。最后attempt收敛后重算extras_blocked，再执行文件extras；目录extras按计划后序逐个刷新为空再删除。目录成功不计入deletedAsExtra等文件计数，其结果从Operations查询。PRECONDITION_ALREADY_ABSENT是正常收敛；只有这类跳过而无异常时Run仍可succeeded。
 

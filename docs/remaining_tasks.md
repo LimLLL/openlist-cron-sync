@@ -13,8 +13,8 @@
 | 首次部署与管理员初始化  | Node/Docker、卷权限、密钥、改密、代理；初始随机密码写入stderr，会留在容器日志中；离线重置管理员密码的步骤；API文档公开开关                                                        | M0/M8     |
 | OpenList账号与挂载配置  | 权限、base_path、静态token、refresh、非管理员前提                                                                                                                                 | M1        |
 | 建立任务与dry-run解读   | 每目标模式、过滤、syncEmptyDirs、冲突、共同删除阈值                                                                                                                               | M2/M3b    |
-| 取消、重启和unknown处理 | TTL风险、提前release与abandon的区别、计划内重启不取消远程task                                                                                                                     | M3a/M4    |
-| 驱动兼容与云盘人工验证  | 矩阵各列含义及证据等级（源码推断/集成测试/人工验证）、异步受理驱动按成功计的后果（后台失败不可见、extras可能先删除、通知不追溯）、Temp幽灵与refresh、用户人工验证云盘并记录的步骤 | M3a/M5/M8 |
+| 取消、重启和unknown处理 | TTL风险、提前release与abandon的区别、计划内重启不取消远程task                                                                                                                     | M3a/M6    |
+| 驱动兼容与云盘人工验证  | 矩阵各列含义及证据等级（源码推断/集成测试/人工验证）、异步受理驱动按成功计的后果（后台失败不可见、extras可能先删除、通知不追溯）、Temp幽灵与refresh、用户人工验证云盘并记录的步骤 | M3a/M6/M8 |
 | relay排障               | 302、sign、长度、Range续传、spool磁盘与保留空间、低带宽、反代chunk大小与超时限制                                                                                                  | M3a       |
 | Webhook与配置迁移       | 原始bytes验签、重复投递、secret补录、导入后Webhook URL复核                                                                                                                        | M7        |
 | 备份、恢复和升级        | 备份前禁用Job、DB+key一致备份、旧备份远端不回退                                                                                                                                   | M8        |

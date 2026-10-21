@@ -46,6 +46,8 @@ export class AppConfig implements OnModuleInit {
   readonly spoolReserveBytes: number;
   /** 进程关闭的持久化和清理宽限秒。 */
   readonly shutdownGraceSeconds: number;
+  /** 终态历史保留天数，维护使用进程当前值。 */
+  readonly runRetentionDays: number;
   readonly host: string;
   readonly port: number;
   dataDir: string;
@@ -82,6 +84,13 @@ export class AppConfig implements OnModuleInit {
   constructor(@Inject(ConfigService) config: ConfigService) {
     this.environment = config.getOrThrow<Environment>('environment');
     const env = this.environment;
+    this.runRetentionDays = integerSetting(
+      env,
+      'RUN_RETENTION_DAYS',
+      30,
+      1,
+      3650,
+    );
     this.execution = executionSettings(env);
     this.globalMaxRuns = integerSetting(env, 'GLOBAL_MAX_RUNS', 2, 1, 16);
     this.maxQueuedRuns = integerSetting(env, 'MAX_QUEUED_RUNS', 100, 1, 10000);

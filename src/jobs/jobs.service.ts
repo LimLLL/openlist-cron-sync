@@ -10,9 +10,11 @@ import { decryptJobSecrets } from './job-secrets.js';
 import { mergeJob } from './validation.js';
 import { validateEndpoints } from './endpoint-validation.js';
 import type { Job, PathSecrets } from './job-types.js';
+import { SchedulingService } from '../scheduling/scheduling.service.js';
+import { validateSchedule } from '../scheduling/cron-time.js';
 import { ApiError } from '../common/errors.js';
 
-/** Job 配置服务；不注册 cron，也不调用远程文件 API。
+/** Job 配置服务；事务提交后通知 Scheduling 更新 cron，不调用远程文件 API。
  * @param 不适用。
  * @returns 不适用。
  * @throws 不适用。
@@ -20,15 +22,17 @@ import { ApiError } from '../common/errors.js';
 @Injectable()
 export class JobsService {
   private readonly logger = new Logger(JobsService.name);
-  /** 保存数据库及加密依赖。
+  /** 保存数据库、加密及提交后的调度依赖。
    * @param database 数据库。
    * @param keys 已通过启动校验的密钥。
+   * @param scheduling 提交后更新cron注册。
    * @returns 不适用。
    * @throws 不适用。
    */
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(KeysService) private readonly keys: KeysService,
+    @Inject(SchedulingService) private readonly scheduling: SchedulingService,
   ) {}
   /** 获取公共 Job。
    * @param id Job ID。
@@ -114,6 +118,7 @@ export class JobsService {
         return this.get(merged.job.id);
       },
     );
+    this.scheduling.sync(result);
     this.logger.log('Job created', { jobId: result.id });
     return result;
   }
@@ -143,6 +148,7 @@ export class JobsService {
         return this.get(id);
       },
     );
+    this.scheduling.sync(result);
     this.logger.log('Job updated', { jobId: id });
     return result;
   }
@@ -170,7 +176,49 @@ export class JobsService {
           .run();
       },
     );
+    this.scheduling.remove(id);
     this.logger.log('Job archived', { jobId: id });
+  }
+  /** 仅切换enabled，不改写目标、密码或活动Run快照。
+   * @param id 未归档Job。
+   * @param enabled 新启用值。
+   * @returns 公共Job。
+   * @throws ApiError 配置不可启用；Error 数据库失败。
+   */
+  setEnabled(id: string, enabled: boolean): Job {
+    const result = this.database.db.transaction(
+      /** 启用复用保存校验，disable不要求Job空闲。
+       * @param 不适用。
+       * @returns 提交后的配置。
+       * @throws ApiError 校验失败；Error 数据库失败。
+       */
+      () => {
+        const job = this.get(id);
+        if (enabled) {
+          validateSchedule(job.cron, job.timezone);
+          validateEndpoints(this.database.db, job, true);
+        }
+        if (job.enabled !== enabled)
+          this.database.db
+            .update(jobs)
+            .set({ enabled, updatedAt: Date.now() })
+            .where(eq(jobs.id, id))
+            .run();
+        return this.get(id);
+      },
+    );
+    this.scheduling.sync(result);
+    this.logger.log('Job scheduling changed', { jobId: id, enabled });
+    return result;
+  }
+  /** 返回库搜索范围内的未来UTC前缀。
+   * @param id 未归档Job。
+   * @param count 最大结果数。
+   * @returns 时区及未来时间；disabled/manual-only为空。
+   * @throws ApiError Job不存在；Error 数据库或非预期cron计算失败。
+   */
+  nextFireTimes(id: string, count: number) {
+    return this.scheduling.next(this.get(id), count);
   }
   /** 持久化合并值；事务内先把全部成员移出成员集合以安全交换 position，再恢复保留成员，只有被移除的目标留下 archived_at。
    * @param job 完整配置。

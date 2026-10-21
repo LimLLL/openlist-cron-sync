@@ -66,7 +66,7 @@ OpenList任务只来自server_copy（同storage驱动未实现Copy时的回退�
 state0/5/8/9保持submitted；1/3/6保持running；2为成功、4取消、7失败。未知数值为协议错误，有界查询后仍无法分类则unknown。远程progress只展示，不驱动状态。
 
 先持久化本地结果，再确认remote_state为2/4/7，才POST delete_some数组id。Operation本地unknown也是终态，但不是远程已停止的证据，不能据此delete。解析data逐id错误；非空map不直接按message判断task是否丢失，而是对该id再info：404表示已不存在，其他情况按下面的清理规则处理。只清理本服务的远程终态id，不delete运行任务，不retry、不clear_*。
-清理时逐id返回task not found，或info返回JSON404，表示远端记录已不存在：清除remoteCleanupPending，绝不改动Operation结果。其他失败设置remoteCleanupPending；维护器在下一周期先info确认任务仍为终态，再按`RETRY_*`有界重试清理；仍失败则清除标志并记warn日志（OpenList任务列表可能残留该记录，不影响文件），使该标志不会无限期阻塞历史保留。
+清理时逐id返回task not found，或info返回JSON404，表示远端记录已不存在：清除remoteCleanupPending，绝不改动Operation结果。其他失败保留remoteCleanupPending交维护；维护先info，按下文“维护责任分类”决定读取失败时保留或放弃。确认终态后按`RETRY_*`有界重试删除，耗尽清标志warn；删除失败后的info仍按责任分类处理。记录清理本身不修改目标文件。
 维护器info发现任务已回到非终态（管理员在OpenList手动重试，超出[目标独占前提](requirements.md#部署前提)）时不删除，而是：
 
 - 仅在原remote_state从2/4/7变为非终态时，在原run/run_target下插入新Operation：action、method、target_path与原行相同，status=unknown，error_code=REMOTE_TASK_CHANGED，unknown_since=now，unknown_until=now+QUARANTINE_SECONDS（取进程当前有效配置，与维护器创建的其他Operation一致），tid列为NULL，caused_by_operation_id指向原行；同事务更新原remote_state，使持续轮询不重复建隔离记录。本地unknown而远程一直未结束的任务只继续观察，不适用此分支。
@@ -116,3 +116,9 @@ mount_details可因设置、超时、驱动能力和中间虚拟目录而缺失�
 
 源码基准：OpenList v4.2.6 系列源码（上游 main 分支 2026-09 快照，提交 5447ecb0）；行号可能随上游演进漂移。
 主要位置：server/handles/fsread.go、fsmanage.go、fsup.go、multipart.go、task.go、storage.go、setting.go；server/common/auth.go、check.go；pkg/utils/path.go、balance.go；internal/op/fs.go、storage.go；internal/fs/copy_move.go；internal/multipart/session.go、window.go。各驱动的操作语义见[兼容矩阵](../reference/driver-compatibility.md)。
+
+## 维护责任分类
+
+remote_cleanup_pending与有tid的本地终态同事务写入。其自身是未解决unknown，或按seq排序的最新REMOTE_TASK_CHANGED子记录是未解决unknown时，派生为safety跟踪；其余为housekeeping，不持久化分类。info失败后safety保留标志及已有额度；housekeeping在本轮有界尝试耗尽后清标志、释放额度并warn。AUTH_BLOCKED不重试登录。info404两类均清标志与额度；观察到非终态均继续跟踪，终态到非终态边沿原子建立新隔离。观察到终态后释放额度并有界delete_some，耗尽清标志warn；清理失败后的info仍按责任分类处理。关闭中止不算耗尽，SQL错误fail-fast。
+
+abandon维持resolution-only行为；只结束unknown责任，task标志由后续维护处理，若仍能观察到非终态则继续跟踪。旧子记录不会替最新事件解除跟踪，旧未解决unknown仍独立保护路径。每次异步响应后事务复查标志、remote_state、自身及最新子记录resolution，过期响应不恢复责任。housekeeping放弃后不可见迟到动作属于已接受风险。

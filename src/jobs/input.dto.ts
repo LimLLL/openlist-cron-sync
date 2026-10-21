@@ -15,7 +15,7 @@ export class JobInputDto {
   @Allow() targets?: unknown;
   /** relay/server_copy。 */
   @Allow() createMode?: unknown;
-  /** 启用值，M2 无调度作用。 */
+  /** 启用cron，不影响手动触发。 */
   @Allow() enabled?: unknown;
   /** 五段 cron 或 null。 */
   @Allow() cron?: unknown;
@@ -31,6 +31,6 @@ export class JobInputDto {
   @Allow() relayBandwidthLimit?: unknown;
   /** 扫描及规划总秒数。 */
   @Allow() timeoutSeconds?: unknown;
-  /** M2 只能省略或为空。 */
+  /** 通知尚未接入，只能省略或为空。 */
   @Allow() notificationChannelIds?: unknown;
 }

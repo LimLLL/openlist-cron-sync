@@ -22,7 +22,7 @@
 reason要求1–1000字符，禁止只有空白。分页和错误格式继承[REST](rest-api.md)，error code取值见[固定原因码](rest-api.md#reason-codes)。没有Operation直接retry API；请求新Run重新扫描，自动有限attempt由执行器负责。
 Operation列表按(runId,seq)升序，seq是Run内的计划顺序。includeMaintenance=false时不返回维护循环挂在该Run下的REMOTE_TASK_CHANGED隔离记录；GET /operations不按此过滤。
 
-M3默认dryRun=false，支持真实relay、取消和unknown管理。createMode=server_copy的非dry-run请求在插入Run之前返回400 VALIDATION_ERROR（M6边界），dry-run仍允许。
+默认dryRun=false，支持relay与server_copy真实执行、取消及unknown管理；dry-run仅规划。
 
 ## 手动执行
 
@@ -38,14 +38,14 @@ confirmDeletes只在该Run有效，不修改Job保存值。它只跳过每个Tar
 dryRun=true且confirmDeletes=true只展示跳过阈值后的计划，仍没有远程文件变更。
 重复HTTP请求没有幂等key；第一个仍非终态时第二个409。若第一个已完成，第二个是新的运行，此行为必须公开。
 
-取消：非终态Run返回202并写cancelRequestedAt，重复请求不重复发送远程cancel或abort。recovering Run同样返回202，但只写cancelRequestedAt，并对仍未终态的已知task最多发送一次cancel；该Run最终仍为interrupted（stopReason=PROCESS_RESTART），不会变为cancelled。完整转换见[取消与超时](../design/scheduling-recovery.md#取消与超时)。
+取消：非终态Run返回202并写cancelRequestedAt，重复请求不重复发送远程cancel或abort。recovering Run同样返回202，但只写cancelRequestedAt，并对仍未终态的已知task每进程最多尝试一次cancel（崩溃后允许重复）；该Run最终仍为interrupted（stopReason=PROCESS_RESTART），不会变为cancelled。完整转换见[取消与超时](../design/scheduling-recovery.md#取消与超时)。
 
 ## 两种管理动作的区别
 
-| 动作                        | 改变                                                                                                                                                                                | 不改变                                                 |
-| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
-| quarantine-release          | 写quarantineReleasedAt及原因；隔离提前结束，路径进入reobserve_required                                                                                                              | 不改Operation.status，不写resolution，不直接写远程文件 |
-| operation.resolve abandoned | 写独立resolution（kind=abandoned，note=reason）；对unknown行，quarantineReleasedAt为空时同一事务写入当前时间及reason，并结束该记录；该Operation不再计入未决责任，也不再要求重新观察 | 不改status，不修复或回滚目标                           |
+| 动作                        | 改变                                                                                                                                                                                                                                               | 不改变                                                 |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| quarantine-release          | 写quarantineReleasedAt及原因；隔离提前结束，路径进入reobserve_required                                                                                                                                                                             | 不改Operation.status，不写resolution，不直接写远程文件 |
+| operation.resolve abandoned | 写独立resolution（kind=abandoned，note=reason）；对unknown行，quarantineReleasedAt为空时同一事务写入当前时间及reason，并结束该记录；该Operation不再计入unknown责任，也不再要求重新观察；remote_cleanup_pending及task额度由维护器按当前责任分类处理 | 不改status，不修复或回滚目标                           |
 
 quarantine-release一个unknown之后，任何要写受影响路径或删除其祖先的非dry-run Run，都必须先用refresh=true读取全部受影响父目录，成功后才写reobservedAt；读取失败则本轮不写这些路径。规则见[Unknown隔离](../design/scheduling-recovery.md#unknown隔离)，派生状态见[辅助状态](../design/state-machines.md#auxiliary-states)。
 
@@ -56,7 +56,7 @@ operation.resolve只接受status=unknown且无resolution的Operation。对已aba
 ## 查询与进度
 
 Operation未知列表用status=unknown&unresolved=true；已resolution但历史unknown仍能用status=unknown查到。不要用状态成功数推算它们已被改写。
-Stats在Run终态固定；后续resolution只改变其独立记录，不改变历史同步统计或重发终态通知。
+Stats排除caused_by_operation_id非空的维护Operation，含Run尚未终态时的聚合及extras判断。Stats在Run终态固定；后续resolution只改变其独立记录，不改变历史同步统计或重发终态通知。
 RunDetail.config只包含当时有效的脱敏值；路径密码和download sign从不展示。
 轮询建议3s，允许客户端退避；MVP没有SSE、WS、按字节实时数据库更新承诺。
 

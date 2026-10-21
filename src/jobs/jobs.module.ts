@@ -1,8 +1,9 @@
-// 装配 M2 配置模块，调度 hook 随 M4 加入。
+// 装配配置与单向调度依赖，提交之后才更新cron。
 import { Module } from '@nestjs/common';
 import { InstancesModule } from '../instances/instances.module.js';
 import { DatabaseModule } from '../database/database.module.js';
 import { SecurityModule } from '../security/security.module.js';
+import { SchedulingModule } from '../scheduling/scheduling.module.js';
 import { JobsService } from './jobs.service.js';
 import { JobsController } from './jobs.controller.js';
 /** Job 配置模块。
@@ -11,7 +12,7 @@ import { JobsController } from './jobs.controller.js';
  * @throws 不适用。
  */
 @Module({
-  imports: [InstancesModule, DatabaseModule, SecurityModule],
+  imports: [SchedulingModule, InstancesModule, DatabaseModule, SecurityModule],
   providers: [JobsService],
   controllers: [JobsController],
 })

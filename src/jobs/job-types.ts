@@ -53,7 +53,7 @@ export interface Job {
   targets: Target[];
   /** 全 Job 文件创建方式。 */
   createMode: 'relay' | 'server_copy';
-  /** 调度启用值；M2 仅存储。 */
+  /** cron启用值；disabled仍允许手动执行。 */
   enabled: boolean;
   /** 五段 cron；null 为手动。 */
   cron: string | null;
@@ -69,7 +69,7 @@ export interface Job {
   relayBandwidthLimit: number;
   /** 从扫描开始计的秒数。 */
   timeoutSeconds: number;
-  /** M2 固定为空。 */
+  /** 通知随M7接入，当前固定为空。 */
   notificationChannelIds: string[];
   /** 创建 UTC 时间。 */
   createdAt: string;

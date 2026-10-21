@@ -82,7 +82,7 @@ suspect与扫描产生的delete_blocked在本Run内只从0变1；delete_blocked�
 
 action/method合法组合：mkdir/mkdir，create/server_copy或relay，delete/remove。应用校验及SQL CHECK共同约束。openlist_task_id与remote_state只允许method=server_copy非NULL；multipart_*与source_stream_completed_at只允许method=relay非NULL。
 UNIQUE(run_id,seq)；UNIQUE(target_instance_id,openlist_task_id) WHERE openlist_task_id IS NOT NULL；UNIQUE(target_instance_id,multipart_upload_id) WHERE multipart_upload_id IS NOT NULL。
-索引(run_target_id,status,seq)、(status,next_attempt_at)、(target_instance_id,target_path)、(status,unknown_until)、(remote_cleanup_pending)。
+索引(run_target_id,status,seq)、(status,next_attempt_at)、(target_instance_id,target_path)、(status,unknown_until)、(remote_cleanup_pending,id)。保留清理另有retry_of、(caused_by_operation_id,seq)、(resolved_by_run_id,id)、(reobserved_by_run_id,id)，及run_id上的未决责任/引用稀疏索引；Runs有(ended_at,id)。
 相同路径不同尝试不加全局唯一约束；路径占用在应用调度器统一管理。
 
 ## operation_dependencies

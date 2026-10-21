@@ -151,6 +151,7 @@ export class OperationStore {
           errorMessage: outcome.message ?? outcome.code ?? null,
           endedAt: now,
           updatedAt: now,
+          remoteCleanupPending: sql`CASE WHEN openlist_task_id IS NOT NULL THEN 1 ELSE 0 END`,
           unknownSince: outcome.status === 'unknown' ? now : null,
           unknownUntil:
             outcome.status === 'unknown'
@@ -230,6 +231,9 @@ export class OperationStore {
             now + backoffMs(this.run.config.settings, previous.attemptNo),
           errorCode: null,
           errorMessage: null,
+          openlistTaskId: null,
+          remoteState: null,
+          remoteCleanupPending: false,
           multipartUploadId: null,
           multipartChunkSize: null,
           multipartState: null,

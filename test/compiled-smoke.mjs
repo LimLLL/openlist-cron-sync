@@ -1,5 +1,6 @@
 // 从不同工作目录启动真实编译产物，验证迁移、重启、认证和信号关闭。
 import assert from 'node:assert/strict';
+import './background-fatal.mjs';
 import { spawn } from 'node:child_process';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { createServer } from 'node:net';

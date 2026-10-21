@@ -1,6 +1,6 @@
 // 校验 Job 补丁的完整合并值，错误仅包含字段名而不回显输入。
 import { randomUUID } from 'node:crypto';
-import { CronTime } from 'cron';
+import { validateSchedule } from '../scheduling/cron-time.js';
 import { isUUID } from 'class-validator';
 import picomatch from 'picomatch';
 import { ApiError } from '../common/errors.js';
@@ -253,35 +253,6 @@ function filters(input: unknown, previous?: Filters): Filters {
     invalid('filters');
   return result;
 }
-/** 校验时区和五段 cron，不创建定时器。
- * @param cron 五段表达式或 null。
- * @param timezone IANA 时区。
- * @returns 不适用。
- * @throws ApiError INVALID_CRON 或时区错误。
- */
-function schedule(cron: string | null, timezone: string): void {
-  // Intl 接受 IANA 别名；显式拒绝新版 Intl 的数字 offset 及 Luxon 的本地/固定区扩展。
-  if (/^[+-]|^(?:local|system)$|^UTC[+-]/i.test(timezone)) invalid('timezone');
-  try {
-    new Intl.DateTimeFormat('en', { timeZone: timezone });
-  } catch {
-    invalid('timezone');
-  }
-  if (
-    cron !== null &&
-    (cron.trim().split(/\s+/).length !== 5 || cron.includes('@'))
-  )
-    throw new ApiError(
-      400,
-      'INVALID_CRON',
-      'Expected a five-field cron expression',
-    );
-  try {
-    new CronTime(cron ?? '* * * * *', timezone);
-  } catch {
-    throw new ApiError(400, 'INVALID_CRON', 'Invalid cron expression');
-  }
-}
 /** 合并创建或 PATCH，禁止目标 ID 跨 Job、复用归档 ID。
  * @param input 请求体。
  * @param previous 旧公共配置；创建时省略。
@@ -458,7 +429,7 @@ export function mergeJob(
     updatedAt: now,
     archivedAt: null,
   };
-  schedule(job.cron, job.timezone);
+  validateSchedule(job.cron, job.timezone);
   if (
     mode === 'server_copy' &&
     targets.some(

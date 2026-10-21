@@ -89,7 +89,7 @@ export class ExecutionContext {
     readonly signal: AbortSignal,
     readonly cleanup = false,
     readonly hard: AbortSignal = signal,
-    readonly stopping: () => boolean = () => false,
+    readonly stopping: () => boolean = notStopping,
   ) {}
   /** 组合当前凭据与固定身份，不读取可变Job配置。
    * @param id 实例ID。
@@ -134,6 +134,7 @@ export class ExecutionContext {
    * @param target 本Run目标。
    * @param path 账号内目录。
    * @param inflight 已派发动作的确认/观察读取期限；省略表示提交前读取，使用停止派发信号。
+   * @param passwordOverride 源元数据准备时使用源路径密码。
    * @returns 完整可用于前提判断的列表。
    * @throws OpenListError 不可读或挂载视图不可用；Error 本地失败。
    */
@@ -141,6 +142,7 @@ export class ExecutionContext {
     target: RunTargetRecord,
     path: string,
     inflight?: AbortSignal,
+    passwordOverride?: string,
   ): Promise<FileList> {
     const options = inflight ? this.inflight(inflight) : this.request();
     const instance = this.instance(target.config.target.instanceId);
@@ -152,7 +154,7 @@ export class ExecutionContext {
     const list = await this.client.list(
       instance,
       path,
-      this.secrets.targetPasswords[target.targetId] ?? '',
+      passwordOverride ?? this.secrets.targetPasswords[target.targetId] ?? '',
       true,
       options,
     );
@@ -245,4 +247,13 @@ export class ExecutionContext {
       throw error;
     }
   }
+}
+
+/** 未显式提供生命周期时按正常运行处理。
+ * @param 不适用。
+ * @returns false。
+ * @throws 不适用。
+ */
+function notStopping(): boolean {
+  return false;
 }

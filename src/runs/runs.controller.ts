@@ -69,8 +69,7 @@ export class RunsController {
   })
   @ApiBadRequestResponse({
     type: ErrorDto,
-    description:
-      'VALIDATION_ERROR：server_copy真实执行属于M6，或端点配置不可运行',
+    description: 'VALIDATION_ERROR：端点配置不可运行',
   })
   @ApiConflictResponse({
     type: ErrorDto,

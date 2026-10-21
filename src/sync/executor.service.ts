@@ -1,6 +1,6 @@
 // 执行数据库计划并恢复已知副作用；Runs仍拥有运行终态事务。
-import { Inject, Injectable, Logger } from '@nestjs/common';
-import { and, asc, eq, gt, inArray } from 'drizzle-orm';
+import { Inject, Injectable } from '@nestjs/common';
+import { and, eq } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { DatabaseService } from '../database/database.service.js';
 import { operations } from '../database/operation-schema.js';
@@ -8,7 +8,8 @@ import { runTargets, scanIssues } from '../database/run-schema.js';
 import type { RunRecord, RunTargetRecord } from '../database/run-schema.js';
 import { KeysService } from '../security/keys.service.js';
 import { OpenListClient } from '../openlist/client.service.js';
-import { OpenListMultipart } from '../openlist/multipart.service.js';
+import { ExecutionRecovery } from './execution-recovery.js';
+import { CopyTracker } from './copy-tracker.js';
 import { OpenListError } from '../openlist/errors.js';
 import { RelayService } from '../relay/relay.service.js';
 import { RelayResources } from '../coordination/relay-resources.js';
@@ -28,12 +29,12 @@ import { targetResult } from './results.js';
  */
 @Injectable()
 export class Executor {
-  private readonly logger = new Logger(Executor.name);
   /** 保存单向依赖。
    * @param database 数据库。
    * @param keys 路径密码解密。
    * @param client 文件协议。
-   * @param multipart session恢复协议。
+   * @param recovery 已提交动作恢复。
+   * @param copies copy任务生命周期。
    * @param relay 具体传输实现。
    * @param resources 共享relay资源。
    * @param quarantine 持久未知责任。
@@ -45,7 +46,8 @@ export class Executor {
     @Inject(DatabaseService) readonly database: DatabaseService,
     @Inject(KeysService) private readonly keys: KeysService,
     @Inject(OpenListClient) private readonly client: OpenListClient,
-    @Inject(OpenListMultipart) private readonly multipart: OpenListMultipart,
+    @Inject(ExecutionRecovery) private readonly recovery: ExecutionRecovery,
+    @Inject(CopyTracker) private readonly copies: CopyTracker,
     @Inject(RelayService) private readonly relay: RelayService,
     @Inject(RelayResources) private readonly resources: RelayResources,
     @Inject(Quarantine) private readonly quarantine: Quarantine,
@@ -73,6 +75,11 @@ export class Executor {
       signal,
       cleanup,
       hard,
+      /** 判断进程关闭，以区分取消和SIGTERM收尾。
+       * @param 不适用。
+       * @returns 是否关闭。
+       * @throws 不适用。
+       */
       () => this.readiness.stopping,
     );
   }
@@ -156,6 +163,7 @@ export class Executor {
       mutations,
       observer,
       stop.abort.bind(stop),
+      this.copies,
     );
     const targets = this.database.db
       .select()
@@ -372,116 +380,14 @@ export class Executor {
       },
     );
   }
-  /** 恢复已知副作用，不派发旧pending或续传旧session。
-   * 进程关闭时停止处理，剩余在途记录保持原状交给下次启动，不写无证据的unknown。
-   * @param run recovering Run。
-   * @param signal 恢复期限或进程停止。
-   * @returns 已知责任已收尾，或因进程关闭提前返回。
+  /** 恢复已提交动作；具体task与relay恢复共用单向协作。
+   * @param run 原运行。
+   * @param signal 进程停止。
+   * @returns 恢复完成。
    * @throws Error 数据库或实现错误。
    */
-  async recover(run: RunRecord, signal: AbortSignal): Promise<void> {
-    try {
-      await this.recoverKnown(run, signal);
-    } catch (error) {
-      if (this.readiness.stopping) return;
-      throw error;
-    }
-  }
-  /** 逐批收尾已提交但无结论的操作。
-   * @param run recovering Run。
-   * @param signal 恢复期限或进程停止。
-   * @returns 收尾结束。
-   * @throws Error 数据库或实现错误；进程关闭时由调用方吞掉中止。
-   */
-  private async recoverKnown(
-    run: RunRecord,
-    signal: AbortSignal,
-  ): Promise<void> {
-    const context = this.context(run, signal, true);
-    const store = new OperationStore(this.database.db, run);
-    const observer = new QuarantineObserver(context, this.quarantine);
-    const mutations = new Mutations(context, store, observer);
-    let after = 0;
-    for (;;) {
-      const batch = this.database.db
-        .select()
-        .from(operations)
-        .where(
-          and(
-            eq(operations.runId, run.id),
-            gt(operations.seq, after),
-            inArray(operations.status, ['submitting', 'submitted', 'running']),
-          ),
-        )
-        .orderBy(asc(operations.seq))
-        .limit(128)
-        .all();
-      if (!batch.length) return;
-      for (const op of batch) {
-        if (this.readiness.stopping) return;
-        after = op.seq;
-        const target = this.database.db
-          .select()
-          .from(runTargets)
-          .where(eq(runTargets.id, op.runTargetId))
-          .get();
-        if (!target) throw new Error('Recovery target missing');
-        if (op.status === 'running' && op.action === 'delete') {
-          await mutations.confirm(target, op);
-          continue;
-        }
-        if (
-          op.multipartUploadId &&
-          op.multipartState === 'completed' &&
-          op.sourceStreamCompletedAt !== null
-        ) {
-          store.end(op.id, { status: 'succeeded' });
-          continue;
-        }
-        if (op.multipartUploadId && !signal.aborted) {
-          try {
-            const instance = context.instance(op.targetInstanceId);
-            const status = await this.multipart.status(
-              instance,
-              op.multipartUploadId,
-              context.request(),
-            );
-            if (
-              status.state === 'completed' &&
-              status.uploadId === op.multipartUploadId &&
-              status.attempt === op.multipartAttempt &&
-              status.chunkSize === op.multipartChunkSize &&
-              op.expectedSourceSize !== null &&
-              status.totalChunks ===
-                Math.ceil(op.expectedSourceSize / status.chunkSize) &&
-              op.sourceStreamCompletedAt !== null
-            ) {
-              store.end(op.id, { status: 'succeeded' });
-              continue;
-            }
-            await this.multipart.abort(
-              instance,
-              op.multipartUploadId,
-              context.request(),
-            );
-          } catch (error) {
-            if (!(error instanceof OpenListError) && !signal.aborted)
-              throw error;
-            this.logger.warn('Recovery session unavailable', {
-              operationId: op.id,
-              errorCode:
-                error instanceof OpenListError ? error.code : 'PROCESS_RESTART',
-            });
-          }
-        }
-        if (this.readiness.stopping) return;
-        store.end(op.id, {
-          status: 'unknown',
-          code: 'OPENLIST_ERROR',
-          message: 'Process restarted without completion evidence',
-        });
-      }
-    }
+  recover(run: RunRecord, signal: AbortSignal): Promise<void> {
+    return this.recovery.recover(run, signal);
   }
   /** 责任重建完成后清空旧进程块，不续传。
    * @param 不适用。

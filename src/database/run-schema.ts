@@ -64,6 +64,7 @@ export const runs = sqliteTable(
       .where(
         sql`${t.status} IN ('queued','scanning','planned','executing','cancelling','recovering')`,
       ),
+    index('runs_ended_id').on(t.endedAt, t.id),
     index('runs_created_id').on(t.createdAt, t.id),
     index('runs_job_created_id').on(t.jobId, t.createdAt, t.id),
     index('runs_status_created_id').on(t.status, t.createdAt, t.id),

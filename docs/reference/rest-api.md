@@ -153,9 +153,10 @@ token模式替换token时无法当场判断新token属于哪个账号，因此�
 | DELETE /jobs/:id              | 无                             | 204；逻辑归档；活动Run时409                                   |
 | POST /jobs/:id/enable         | {}                             | 200 JobView；必要secret缺失400                                |
 | POST /jobs/:id/disable        | {}                             | 200 JobView；不取消已运行任务，允许执行期间调用               |
-| GET /jobs/:id/next-fire-times | count?默认5，1–20              | 200 {timezone:string,times:Time[]}；manual-only或disabled为[] |
+| GET /jobs/:id/next-fire-times | count?默认5，1–20，为最大数量  | 200 {timezone:string,times:Time[]}；manual-only或disabled为[] |
 
 enable/disable只修改enabled，运行snapshot不变，属于PATCH活动限制的明确例外。
+next-fire-times仅返回固定cron库八年搜索范围内的时间前缀，可能少于count；没有任何下一时刻的表达式保存/启用返回400 INVALID_CRON。归档Job在enable/disable/next-fire-times均返回404。
 next-fire-times的times是UTC时间，timezone是Job的IANA时区；客户端据此换算当地时间和UTC偏移（含DST），API不另行返回偏移。
 
 ## Notifications与系统

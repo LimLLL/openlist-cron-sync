@@ -76,12 +76,13 @@ const jobFields = {
     type: 'string',
     enum: ['relay', 'server_copy'],
     default: 'relay',
-    description: 'server_copy 要求全部 Target 与源同 Instance；M2 仅规划',
+    description:
+      'server_copy 要求全部 Target 与源同 Instance；真实执行逐tid跟踪',
   } as SchemaObject,
   enabled: {
     type: 'boolean',
     default: false,
-    description: 'M2 仅保存和校验，不注册 cron',
+    description: '启用cron；禁用仍允许显式手动执行',
   } as SchemaObject,
   cron: {
     type: 'string',
@@ -100,7 +101,7 @@ const jobFields = {
   relayBandwidthLimit: {
     ...sizeSchema,
     default: 0,
-    description: 'bytes/s；0 不限；M2 仅保存',
+    description: 'relay聚合上传bytes/s；0不限',
   },
   timeoutSeconds: {
     type: 'integer',
@@ -113,7 +114,7 @@ const jobFields = {
     ...arraySchema(idSchema),
     maxItems: 0,
     default: [],
-    description: 'M2 只接受省略或 []',
+    description: '通知关联随M7接入，当前只接受省略或 []',
   },
 };
 export const jobCreateSchema = objectSchema(jobFields, [

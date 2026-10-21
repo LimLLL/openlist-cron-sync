@@ -1,4 +1,4 @@
-// 定义持久化计划及依赖，保留规范中的执行字段但不实现执行器。
+// 定义操作计划、执行事实、远程任务责任及依赖约束。
 import { sql } from 'drizzle-orm';
 import {
   check,
@@ -169,7 +169,26 @@ export const operations = sqliteTable(
     index('operations_retry').on(t.status, t.nextAttemptAt),
     index('operations_path').on(t.targetInstanceId, t.targetPath),
     index('operations_unknown').on(t.status, t.unknownUntil),
-    index('operations_cleanup').on(t.remoteCleanupPending),
+    index('operations_cleanup').on(t.remoteCleanupPending, t.id),
+    index('operations_responsibility_run')
+      .on(t.runId)
+      .where(
+        sql`(${t.status} = 'unknown' AND ${t.resolutionKind} IS NULL) OR ${t.remoteCleanupPending} = 1`,
+      ),
+    index('operations_retry_of').on(t.retryOf),
+    index('operations_cause_seq').on(t.causedByOperationId, t.seq),
+    index('operations_resolved_run').on(t.resolvedByRunId, t.id),
+    index('operations_reobserved_run').on(t.reobservedByRunId, t.id),
+    index('operations_run_clearable')
+      .on(t.runId, t.id)
+      .where(
+        sql`${t.retryOf} IS NOT NULL OR ${t.resolvedByRunId} IS NOT NULL OR ${t.reobservedByRunId} IS NOT NULL`,
+      ),
+    index('operations_run_references')
+      .on(t.runId, t.id)
+      .where(
+        sql`${t.retryOf} IS NOT NULL OR ${t.causedByOperationId} IS NOT NULL OR ${t.resolvedByRunId} IS NOT NULL OR ${t.reobservedByRunId} IS NOT NULL`,
+      ),
     check(
       'operations_method',
       sql`(${t.action} = 'mkdir' AND ${t.method} = 'mkdir') OR (${t.action} = 'create' AND ${t.method} IN ('relay','server_copy')) OR (${t.action} = 'delete' AND ${t.method} = 'remove')`,

@@ -28,10 +28,10 @@
 | executing                       | 取消或总执行超时                                                                                          | cancelling               | 停止新工作，请求取消                                                                                       |
 | executing                       | 本地不可恢复实现错误                                                                                      | failed                   | 不进入cancelling：停止派发，对已知远程动作执行取消步骤（宽限内）；未决者unknown；error_code=INTERNAL_ERROR |
 | cancelling                      | 已收尾或取消宽限到期                                                                                      | cancelled                | 未确认副作用进入 unknown                                                                                   |
-| recovering                      | 用户取消                                                                                                  | recovering               | 只写cancelRequestedAt；对仍未终态的已知tid最多发一次cancel；最终仍为interrupted                            |
+| recovering                      | 用户取消                                                                                                  | recovering               | 只写cancelRequestedAt；对仍未终态的已知tid每进程最多尝试一次cancel；最终仍为interrupted                    |
 | scanning/planned                | 进程重启                                                                                                  | interrupted              | 旧计划不可执行；pending→skipped（PLAN_INTERRUPTED）                                                        |
 | executing/cancelling/recovering | 进程重启                                                                                                  | recovering               | 只恢复已知远程任务，不派发旧 pending；同一事务将剩余pending标skipped（PLAN_INTERRUPTED）                   |
-| recovering                      | 已知任务均终态或恢复期限届满                                                                              | interrupted              | 未决副作用按 unknown 隔离；stop_reason=PROCESS_RESTART                                                     |
+| recovering                      | 已知任务均终态或持久恢复时钟派生的最终宽限届满                                                            | interrupted              | 未决副作用按 unknown 隔离；stop_reason=PROCESS_RESTART                                                     |
 
 扫描期资源超限指 SCAN_MAX_DIRECTORY_ENTRIES、列表响应超过 OPENLIST_MAX_JSON_BYTES、MAX_OPERATIONS_PER_RUN、MAX_SCAN_ISSUES_PER_RUN：Run failed，不执行部分计划。SCAN_MAX_DEPTH 例外：超过深度的子树记 scan_issue（SCAN_DEPTH_EXCEEDED，protect_subtree=1），按子树读取不完整处理，不使整个 Run 失败。执行期刷新超限只阻断相关动作，见[删除保护](deletion.md#执行时复查)。
 Target 根目录不可用不是 Run 失败：该 Target 记 TARGET_ROOT_UNAVAILABLE，不做新建和删除，Run partial；根目录确认不存在时由 prepare mkdir 创建，见[同步引擎](sync-engine.md#阶段一scan--plan)。
@@ -152,7 +152,7 @@ Quarantine 派生规则（只对 status=unknown 的 Operation）：
 - reobserve_required：已到期或已释放，且 resolution_kind 为空。
 - clear：其他情况。
 
-管理员 abandon 彻底结束该记录：若 quarantine_released_at 为空，abandon 事务同时写入释放时间和原因，之后不再要求重新观察。reobserve_required 的路径在下一次非 dry-run Run 中必须先对全部受影响父目录 refresh=true 读取成功后才能写入；该 Run 写 reobserved_at/reobserved_by_run_id。没有 resolution 的 unknown 每次运行都重新观察，直到出现 observed 或 superseded resolution。
+管理员 abandon 结束该记录的unknown责任：若 quarantine_released_at 为空，abandon 事务同时写入释放时间和原因，之后不再要求重新观察。reobserve_required 的路径在下一次非 dry-run Run 中必须先对全部受影响父目录 refresh=true 读取成功后才能写入；该 Run 写 reobserved_at/reobserved_by_run_id。没有 resolution 的 unknown 每次运行都重新观察，直到出现 observed 或 superseded resolution。
 unknown Operation 保持 unknown。管理员释放只写 quarantineReleasedAt/reason；本次运行刷新许可不持久化为“永远安全”。
 任一 unknown 可由管理员写 resolutionKind=abandoned。后续新 Run 观察目标条件满足可写 observed；均不改 status。自动到期不写 resolutionKind。
 superseded 只在后续同一 instance+target_path 的 succeeded Operation 覆盖了该 unknown 全部受影响路径时写入。

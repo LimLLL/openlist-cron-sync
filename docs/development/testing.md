@@ -141,3 +141,13 @@ supertest验证真实Nest路由、Guard、ValidationPipe、DTO metadata、错误
 relay.int-spec覆盖L1、L2-relay、L3两个方向，每例建立UUID命名的临时根，清理不越出自有根。F1覆盖真实执行链、错误session快照、chunk/complete丢响应、重试cleanup预算、remove/零字节put错误后的观察分类、删除无效确认、源长度与编码异常、Range 206/200/416及validator/总大小变化、签名401只重新读取一次、缺失根刷新、目录非空保护、容量不足和小spool多文件进展。relay-spool-errors在文件系统写入边界注入ENOSPC/EDQUOT，不实际填满宿主磁盘。execution-checkpoints在实际submitting、session、EOF、completed、Operation结果及remove确认检查点的提交前后注入故障，用当时已提交的SQLite页启动新应用，验证恢复不重放旧请求；这不是操作系统SIGKILL测试。execution-recovery补充历史状态组合；execution-lifecycle覆盖取消、SIGTERM、恢复期限、隔离释放和多目标隔离。operations.e2e覆盖新路由、输入验证、OpenAPI、release/abandon幂等及历史unknown不改写。
 
 Phase 5回归增加：取消后再SIGTERM采用较短关机期限；准备失败或等待worker时取消归还spool承诺和连接；部分块清理失败不重复扣额；完整frontier预留先于小额预读、同级FIFO；提前响应等待上传body退出；超长Retry-After不溢出为紧密重试；非法Location按单文件上游错误分类。隔离用例另覆盖无动作空目录的observed和后续mkdir的superseded，保持历史unknown不变。真实拓扑各含10 MiB+4097字节模式数据，并覆盖L3限速上传取消。
+
+## M4–M6合并验收
+
+server-copy组件覆盖有/无task替换、源元数据变化与读取失败、tid404、额度、取消；copy-recovery覆盖恢复超容量、持久最终宽限、关机不cancel/delete及不重放copy。task-maintenance覆盖安全/housekeeping、abandon延迟交接、远程状态边沿、统计不变与异步resolution竞态；history-retention使用真实FK和跨多批数据验证闭包、未解决unknown保留、CHECK-aware删除、停止后重启接续、FK RESTRICT回滚及EXPLAIN查询计划。
+
+copy-cleanup覆盖retry_cleanup中的源缺失、源不可读及目标刷新失败分类，并验证部分文件保留、delete未提交。task-restore覆盖两类责任跨128行分页、重叠候选去重、远程终态排除，以及abandon仍有flag时继续恢复额度。
+
+cron-scheduling/cron-delay锁定Berlin DST、稀疏count前缀、无下一日期、理论scheduledAt、迟到timer与库重挂时双回调合并、旧注册拒绝及重启无补跑。scheduling.e2e验证启停窄更新、活动Run例外、归档404、严格输入及OpenAPI。compiled-smoke包含background-fatal子进程验证cron/maintenance持久化异常以非零状态退出且不泄露原SQL参数。
+
+server-copy.int-spec沿用现有v4.2.7的Local /a与/b，只创建UUID临时根。L1记录并断言实际同步/task分支；L2必须返回task，由生产tracker收敛到state2并清理到info404，同时核对1 MiB+4097字节模式内容。不得把Local的task回退认定为同步reflink已测试。迁移仅由db:generate生成；不执行Docker build、不改变现有容器。

@@ -6,6 +6,7 @@ import type { Environment } from './configuration/validation.js';
 import { InstancesModule } from './instances/instances.module.js';
 import { JobsModule } from './jobs/jobs.module.js';
 import { RunsModule } from './runs/runs.module.js';
+import { MaintenanceModule } from './maintenance/maintenance.module.js';
 import { SystemModule } from './system/system.module.js';
 
 /** 根模块只声明导入，不协调业务初始化。
@@ -15,7 +16,13 @@ import { SystemModule } from './system/system.module.js';
  */
 @Module({
   // 从最深消费模块开始装配，使共享依赖先于其消费方初始化。
-  imports: [RunsModule, JobsModule, InstancesModule, SystemModule],
+  imports: [
+    JobsModule,
+    RunsModule,
+    MaintenanceModule,
+    InstancesModule,
+    SystemModule,
+  ],
 })
 export class AppModule {}
 

@@ -1,5 +1,5 @@
 // 按逻辑动作最后attempt聚合执行结果，传输字节仍累计全部尝试。
-import { and, asc, eq, gt, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, isNull, sql } from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { operations } from '../database/operation-schema.js';
 import { runTargets } from '../database/run-schema.js';
@@ -56,7 +56,11 @@ export function targetResult(
       })
       .from(operations)
       .where(
-        and(eq(operations.runTargetId, target.id), gt(operations.seq, after)),
+        and(
+          eq(operations.runTargetId, target.id),
+          gt(operations.seq, after),
+          isNull(operations.causedByOperationId),
+        ),
       )
       .orderBy(asc(operations.seq))
       .limit(256)

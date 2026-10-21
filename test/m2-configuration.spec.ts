@@ -79,7 +79,7 @@ describe('M2 configuration and persistence', () => {
     const config = new AppConfig(
       new ConfigService({
         environment: environmentFor('/tmp/m2-settings', {
-          RUN_RETENTION_DAYS: 'invalid',
+          RUN_RETENTION_DAYS: '30',
           NOTIFICATION_TIMEOUT_SECONDS: 'invalid',
         }),
       }),

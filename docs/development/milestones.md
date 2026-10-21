@@ -80,7 +80,7 @@ M2预览无跨Run写路径占用；该互斥必须在M3a第一笔真实写入前
 - TTL到期或提前释放后先refresh再写；Run和Operation历史结果不改写。
 - 真实L1/L3拓扑：同实例同storage、同实例跨storage与跨实例relay均通过；跨origin跳转不泄漏token；限速按Job聚合上传payload。
 
-M3a与M3b不拆分交付，同时执行Mirror文件extras、syncEmptyDirs空目录清理、取消/超时、SIGTERM与启动恢复。真实server_copy请求在插入Run之前返回400 VALIDATION_ERROR，dry-run仍支持；server_copy执行及task跟踪留在M6。
+M3a与M3b不拆分交付，同时执行Mirror文件extras、syncEmptyDirs空目录清理、取消/超时、SIGTERM与启动恢复。该阶段最初只开放真实relay；现已与M4–M6合并补齐server_copy执行及task跟踪，dry-run继续支持两种模式。
 
 ## M3b 替换
 
@@ -90,7 +90,7 @@ M3a与M3b不拆分交付，同时执行Mirror文件extras、syncEmptyDirs空目�
 
 验收：
 
-- 源不可用时旧文件不动；原名仍存在不create；无自动rollback；create失败时目标暂缺该文件，下一次Run重新创建。
+- relay在源打开且首块准备成功前不删除旧文件；server_copy在source元数据前提（refresh原名/类型/大小）成立前不删除；原名仍存在不create；无自动rollback；create失败时目标暂缺该文件，下一次Run重新创建。
 - 替换链的全部失败出口按[故障窗口](testing.md#必须覆盖的故障窗口)中“替换链”各项通过：delete超时或丢响应→unknown并隔离原路径；删除前重读或删除确认时刷新失败/视图suspect→不开始create；create重试发现部分目标→refresh后以retry_cleanup删除，绝不overwrite=true；已成功的delete不重复提交。
 - remove得到JSON 500时按M3a的观察规则分类。
 - 真实L1/L3拓扑：delete→refresh→create全链路通过。
@@ -106,7 +106,7 @@ M3a与M3b不拆分交付，同时执行Mirror文件extras、syncEmptyDirs空目�
 
 交付：动态cron、Job启停与next-fire API；复用M3已有触发、队列、期限、占用和恢复。
 
-验收：5段表达式和IANA时区；错过cron不补跑；manual-only重启不自发运行；Europe/Berlin DST行为与固定cron库一致。启停不绕过JOB_BUSY或既有执行保护。
+验收：5段表达式和IANA时区；错过cron不补跑；manual-only重启不自发运行；Europe/Berlin DST行为与固定cron库一致。enable/disable是活动Run编辑限制的明确例外，只改enabled及updatedAt；触发仍执行JOB_BUSY及既有保护。
 
 ## M5 历史保留
 

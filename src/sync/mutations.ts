@@ -109,6 +109,7 @@ export class Mutations {
    * 停止信号只阻止新的提交；已派发请求及删除确认在收尾期限内继续，以取得明确结果而不是直接隔离。
    * @param target 当前目标。
    * @param initial 当前逻辑动作的pending尝试。
+   * @param beforeDelete 源准备检查，每次删除尝试执行。
    * @param deadline 调用方附加的硬期限（例如relay单文件总期限），同时约束提交前检查与在途请求。
    * @returns 最后尝试。
    * @throws Error 本地错误、持久化失败或停止；停止时未派发的尝试保持pending。
@@ -117,6 +118,7 @@ export class Mutations {
     target: RunTargetRecord,
     initial: OperationRecord,
     deadline?: AbortSignal,
+    beforeDelete?: () => Promise<void>,
   ): Promise<OperationRecord> {
     const stop = deadline
       ? AbortSignal.any([this.context.signal, deadline])
@@ -140,6 +142,7 @@ export class Mutations {
       }
       if (op.action === 'delete' && !(await this.precondition(target, op)))
         return this.store.get(op.id);
+      if (op.action === 'delete') await beforeDelete?.();
       let retryable = false;
       try {
         const instance = this.context.instance(op.targetInstanceId);

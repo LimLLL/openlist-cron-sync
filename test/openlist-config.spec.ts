@@ -9,6 +9,9 @@ describe('M1 configuration' /** 注册本组 M1 行为验收用例。
  * @throws 不适用。
  */, () => {
   it.each([
+    ['RUN_RETENTION_DAYS', '0'],
+    ['RUN_RETENTION_DAYS', '3651'],
+    ['RUN_RETENTION_DAYS', 'invalid'],
     ['OPENLIST_CONNECT_TIMEOUT_MS', '999'],
     ['OPENLIST_CONNECT_TIMEOUT_MS', '120001'],
     ['OPENLIST_API_TIMEOUT_MS', '999'],
@@ -58,7 +61,7 @@ describe('M1 configuration' /** 注册本组 M1 行为验收用例。
     const config = new AppConfig(
       new ConfigService({
         environment: environmentFor('/tmp/m1-config', {
-          RUN_RETENTION_DAYS: 'invalid',
+          RUN_RETENTION_DAYS: '30',
           NOTIFICATION_TIMEOUT_SECONDS: 'invalid',
         }),
       }),

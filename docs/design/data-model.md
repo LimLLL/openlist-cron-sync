@@ -81,3 +81,5 @@ Instance 编辑/归档、Job 归档后的引用保留、历史清理都使用同
 历史清理在此基础上额外要求整条引用闭包（后续 Run/Operation 的 retry_of、resolved_by 等引用）全部超期且无责任，见 [维护与历史保留](retention.md#sqlite历史)。
 
 Run路径密码仅服务当前Run扫描、执行和恢复；在终态事务清除，包括interrupted。后续重新观察由新Run使用自己的快照，不回借旧Run密码。M3沿用现有schema，不建立spool表、额外checkpoint列或持久化路径锁。
+
+M4–M6：Run.trigger=cron时scheduled_at为注册记住的理论发生时刻。task本地终态与remote_cleanup_pending同事务写入；维护的安全/housekeeping分类不持久化。abandon只结束unknown责任，flag仍由维护按当前事实处理。历史资格按整组判断，物理删除按有界事务提交，过期历史可暂时不完整。新增expiry、反向引用及责任稀疏索引用于闭包及FK检查，不增加持久锁或cancel字段。

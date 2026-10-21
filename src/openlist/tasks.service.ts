@@ -4,6 +4,7 @@ import type { InstanceRecord } from '../database/schema.js';
 import { OpenListAuth } from './auth.service.js';
 import { integer, object, protocol, string } from './errors.js';
 import { childPath, normalizePath } from './paths.js';
+import type { RequestContext } from './request-context.js';
 
 /** tache v0.2.2 的任务协议事实。 */
 export interface TaskInfo {
@@ -95,6 +96,7 @@ export class OpenListTasks {
    * @param source 源目录。
    * @param destination 目标目录。
    * @param name 原始名称。
+   * @param context 固定设置、停止期限及提交检查点。
    * @returns 上游返回的任务；空数组只表示没有 task。
    * @throws OpenListError 请求或协议失败。
    */
@@ -103,11 +105,13 @@ export class OpenListTasks {
     source: string,
     destination: string,
     name: string,
+    context: RequestContext = {},
   ): Promise<TaskInfo[]> {
     childPath(source, name);
     childPath(destination, name);
     return returnedTasks(
       await this.auth.call(instance, {
+        ...context,
         endpoint: '/api/fs/copy',
         method: 'POST',
         control: false,
@@ -125,12 +129,18 @@ export class OpenListTasks {
   /** 按 ID 读取单任务。
    * @param instance 实例。
    * @param id 任务 ID。
+   * @param context 固定设置和停止期限。
    * @returns 任务事实。
    * @throws OpenListError 请求或协议失败，404 保留为协议事实。
    */
-  async info(instance: InstanceRecord, id: string): Promise<TaskInfo> {
+  async info(
+    instance: InstanceRecord,
+    id: string,
+    context: RequestContext = {},
+  ): Promise<TaskInfo> {
     const result = taskInfo(
       await this.auth.call(instance, {
+        ...context,
         endpoint: `/api/task/copy/info?${new URLSearchParams({ tid: id })}`,
         method: 'POST',
         read: true,
@@ -142,11 +152,17 @@ export class OpenListTasks {
   /** 请求取消，不等同于任务已停止。
    * @param instance 实例。
    * @param id 任务 ID。
+   * @param context 固定设置和停止期限。
    * @returns 不适用。
    * @throws OpenListError 请求失败。
    */
-  async cancel(instance: InstanceRecord, id: string): Promise<void> {
+  async cancel(
+    instance: InstanceRecord,
+    id: string,
+    context: RequestContext = {},
+  ): Promise<void> {
     await this.auth.call(instance, {
+      ...context,
       endpoint: `/api/task/copy/cancel?${new URLSearchParams({ tid: id })}`,
       method: 'POST',
     });
@@ -154,15 +170,18 @@ export class OpenListTasks {
   /** 删除调用方已确认终态的任务记录，保留逐 ID 失败事实。
    * @param instance 实例。
    * @param ids 已终态任务 ID 集合。
+   * @param context 固定设置和停止期限。
    * @returns ID 到安全错误摘要的映射；空对象才表示全部成功。
    * @throws OpenListError 请求或协议失败。
    */
   async deleteSome(
     instance: InstanceRecord,
     ids: string[],
+    context: RequestContext = {},
   ): Promise<Record<string, string>> {
     const data = object(
       await this.auth.call(instance, {
+        ...context,
         endpoint: '/api/task/copy/delete_some',
         method: 'POST',
         json: ids,

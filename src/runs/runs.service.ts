@@ -55,10 +55,11 @@ export class RunsService {
   /** 接受手动运行，事务内固定所有非秘密配置和独立密码快照。
    * @param jobId Job ID。
    * @param input 真实执行或预览参数。
+   * @param scheduledAt cron理论触发UTC毫秒；省略为手动。
    * @returns 已持久化的 queued 公共视图。
    * @throws ApiError 不就绪、忙、队列满或配置错误；Error 数据库失败。
    */
-  trigger(jobId: string, input: TriggerRunDto) {
+  trigger(jobId: string, input: TriggerRunDto, scheduledAt?: number) {
     if (
       !this.readiness.ready ||
       !this.readiness.recovered ||
@@ -74,6 +75,8 @@ export class RunsService {
        */
       () => {
         const { row, targets } = jobRecords(db, jobId);
+        if (scheduledAt !== undefined && (!row.enabled || row.cron === null))
+          throw new ApiError(409, 'INVALID_STATE', 'Job cron is disabled');
         assertJobIdle(db, jobId);
         const queued =
           db
@@ -84,12 +87,6 @@ export class RunsService {
         if (queued >= this.config.maxQueuedRuns)
           throw new ApiError(503, 'QUEUE_FULL', 'Run queue is full');
         const job = jobView(row, targets);
-        if (!input.dryRun && job.createMode === 'server_copy')
-          throw new ApiError(
-            400,
-            'VALIDATION_ERROR',
-            'Real server_copy execution is available in M6',
-          );
         const records = validateEndpoints(db, job, true);
         const snapshots: RunConfig['instances'] = {};
         for (const [id, instance] of records)
@@ -117,7 +114,8 @@ export class RunsService {
           .values({
             id,
             jobId,
-            trigger: 'manual',
+            trigger: scheduledAt === undefined ? 'manual' : 'cron',
+            scheduledAt: scheduledAt ?? null,
             dryRun: input.dryRun ?? false,
             confirmDeletes: input.confirmDeletes,
             status: 'queued',

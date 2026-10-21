@@ -34,9 +34,9 @@
 
 M1 的 `InstanceAuthState` 位于 Security，直接使用 Database 持久化认证事实；OpenListAuth 对所有调用方统一执行阻断检查、单次登录和身份核对。实例连接配置仍由调用方提供，OpenList 不导入 Instances 或 Database。凭据更新/归档后旧在途响应不能覆盖新配置；比较使用已有地址、认证方式、用户名和密文字段，不增加指纹、版本列或持久化锁。
 
-AppModule 仅导入顶层消费模块（当前按 Runs、Jobs、Instances、System 排列），Instances 先导入 OpenList，再导入共享 Security/Database。Nest 12 的共享依赖拓扑重挂接会受首次遍历顺序影响；从最深消费链开始装配，确保 Config → Database → Security 的初始化顺序。生产初始化路径、完整 API e2e 与编译产物重启测试覆盖这一顺序，不增加根模块协调器。
+AppModule 仅导入顶层消费模块（当前按 Jobs、Runs、Maintenance、Instances、System 排列），Instances 先导入 OpenList，再导入共享 Security/Database。Nest 12 的共享依赖拓扑重挂接会受首次遍历顺序影响；从最深消费链开始装配，确保 Config → Database → Security 的初始化顺序。生产初始化路径、完整 API e2e 与编译产物重启测试覆盖这一顺序，不增加根模块协调器。
 
-当前Jobs不导入Scheduling，Runs不导入Notifications；不为后续里程碑建立占位hook。Sync导入Relay，文件协调器拥有删除前准备、结果分类与持久化。Relay不反向导入Sync/Runs，通过具体的submitting、session、EOF检查点等待事务提交。关闭信号区分数据工作停止与有界控制请求清理。
+Jobs导入Scheduling并在事务提交后更新动态cron；Maintenance导入Database/OpenList/Coordination并串行运行小时task维护及每日历史清理。Runs尚不导入M7 Notifications。Sync导入Relay，文件协调器拥有删除前准备、结果分类与持久化。Relay不反向导入Sync/Runs，通过具体的submitting、session、EOF检查点等待事务提交。关闭信号区分数据工作停止与有界控制请求清理。
 
 纯 planner/filter 函数不依赖 Nest、HTTP、数据库；仓储只提供数据访问，不承载同步业务决策。使用具体 service 即可，不为了单一实现引入工厂/策略接口。
 
@@ -73,8 +73,8 @@ flowchart TD
 
 1. Config 校验环境并准备数据目录与 spool 目录（权限见[安全](security.md)）；Database 打开 SQLite，设置 foreign_keys、WAL、FULL、busy_timeout，应用随发行版附带的结构迁移。此时不初始化管理员、不写入 ENC、不开放 HTTP 或后台工作；迁移不得自行生成密钥或重加密业务数据。
 2. Security 按数据库中是否已有 ENC 读取或生成密钥（规则见[配置](../reference/configuration.md)），逐批试解密已有密文。缺密钥或密钥不匹配直接失败，不写入任何新密文；校验通过后才初始化管理员及其他秘密。
-3. Runs 执行启动恢复：先在 Coordination 中重建全部未决路径责任（非终态 Run 的路径占用，以及从数据库读取的 unknown 隔离），再按[启动恢复](scheduling-recovery.md#启动恢复)处理旧 Run。queued 重新入队；scanning/planned 转为 interrupted；executing/cancelling/recovering 转为 recovering，后台有界跟踪已知 task，最终 interrupted（stopReason=PROCESS_RESTART）。recovery_deadline_at 只在首次进入 recovering 时写入，后续重启沿用。
-4. 启动 HTTP；迁移完成且未决责任重建完毕后，Coordination 置 ready=true。恢复中的 Run 继续占用路径，但不占新 Run 执行位。
+3. Runs 执行启动恢复：先在 Coordination 中重建全部未决task额度和路径责任（非终态 Run 的路径占用，以及从数据库读取的 unknown 隔离），再按[启动恢复](scheduling-recovery.md#启动恢复)处理旧 Run。queued 重新入队；scanning/planned 转为 interrupted；executing/cancelling/recovering 转为 recovering，后台有界跟踪已知 task，最终 interrupted（stopReason=PROCESS_RESTART）。recovery_deadline_at 只在首次进入 recovering 时写入，后续重启沿用。
+4. 启动 HTTP；迁移完成且未决责任重建完毕后，Coordination 置 ready=true。恢复中的Run继续占用路径与已知非终态task额度，但不占新Run执行位。任务额度可恢复到高于当前容量，控制请求不等待task位。
 5. Coordination 在第 3 步的责任重建完成前，不为新 Run 或维护发放执行位与路径占用。重建完成后，Runs 开始派发 queued Run，Scheduling 注册 enabled Job 的 cron，Maintenance 启动定时器。
 
 第 1、2 步由各模块的初始化钩子按导入依赖顺序执行，生产入口与 e2e 测试共用同一初始化路径。任一步失败即关闭已打开的资源并以非零码退出；日志只记录错误码、异常名与系统/SQLite 错误码，不记录可能含路径或 SQL 参数的原始 message。

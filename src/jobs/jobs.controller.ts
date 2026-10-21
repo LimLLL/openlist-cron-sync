@@ -21,6 +21,7 @@ import {
   ApiOkResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { NextFireQueryDto } from './schedule.dto.js';
 import { JobsService } from './jobs.service.js';
 import { JobInputDto } from './input.dto.js';
 import { InstanceQueryDto } from '../instances/input.dto.js';
@@ -119,5 +120,65 @@ export class JobsController {
     @Query() _query: EmptyQueryDto,
   ): void {
     this.jobs.archive(id);
+  }
+  /** 启用Job，活动Run快照不变。
+   * @param id 未归档Job ID。
+   * @param _body 空对象。
+   * @param _query 空查询。
+   * @returns 当前Job。
+   * @throws ApiError 配置不合法或404。
+   */
+  @Post(':id/enable')
+  @HttpCode(200)
+  @ApiOkResponse({ schema: jobViewSchema })
+  enable(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Body() _body: EmptyQueryDto,
+    @Query() _query: EmptyQueryDto,
+  ) {
+    return this.jobs.setEnabled(id, true);
+  }
+  /** 禁用cron，不取消已接受Run或手动触发能力。
+   * @param id 未归档Job ID。
+   * @param _body 空对象。
+   * @param _query 空查询。
+   * @returns 当前Job。
+   * @throws ApiError 404。
+   */
+  @Post(':id/disable')
+  @HttpCode(200)
+  @ApiOkResponse({ schema: jobViewSchema })
+  disable(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Body() _body: EmptyQueryDto,
+    @Query() _query: EmptyQueryDto,
+  ) {
+    return this.jobs.setEnabled(id, false);
+  }
+  /** 查询UTC未来时刻；禁用或manual-only返回空数组，归档404。
+   * @param id 未归档Job ID。
+   * @param query 最大数量。
+   * @returns timezone及UTC时间前缀。
+   * @throws ApiError 查询不合法或404。
+   */
+  @Get(':id/next-fire-times')
+  @ApiOkResponse({
+    schema: {
+      type: 'object',
+      required: ['timezone', 'times'],
+      properties: {
+        timezone: { type: 'string' },
+        times: {
+          type: 'array',
+          items: { type: 'string', format: 'date-time' },
+        },
+      },
+    },
+  })
+  nextFireTimes(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Query() query: NextFireQueryDto,
+  ) {
+    return this.jobs.nextFireTimes(id, query.count);
   }
 }

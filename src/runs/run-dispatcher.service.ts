@@ -18,6 +18,8 @@ import { PathOccupancy } from '../coordination/path-occupancy.js';
 import { SyncService } from '../sync/sync.service.js';
 import { Executor } from '../sync/executor.service.js';
 import { PlanError } from '../sync/stats.js';
+import { FatalError } from '../coordination/fatal-error.js';
+import { TaskResources } from '../coordination/task-resources.js';
 import { errorTraits, ApiError } from '../common/errors.js';
 import { finishRun, recoveringRun, TERMINAL_RUNS } from './run-finalizer.js';
 
@@ -53,6 +55,8 @@ export class RunDispatcher
    * @param sync 扫描规划。
    * @param executor 执行和已知副作用恢复。
    * @param adapter HTTP监听生命周期。
+   * @param fatalError 共享不可恢复错误出口。
+   * @param tasks task额度重建。
    * @returns 不适用。
    * @throws 不适用。
    */
@@ -65,6 +69,8 @@ export class RunDispatcher
     @Inject(SyncService) private readonly sync: SyncService,
     @Inject(Executor) private readonly executor: Executor,
     @Inject(HttpAdapterHost) private readonly adapter: HttpAdapterHost,
+    @Inject(FatalError) private readonly fatalError: FatalError,
+    @Inject(TaskResources) private readonly tasks: TaskResources,
   ) {}
   /** 先重建责任，再清spool、重排queued并开放HTTP派发。
    * @param 不适用。
@@ -87,6 +93,7 @@ export class RunDispatcher
       )
       .all();
     for (const run of old) this.paths.restore(run);
+    this.tasks.restore();
     for (const run of old) {
       if (run.status === 'scanning' || run.status === 'planned') {
         finishRun(db, run.id, 'interrupted', 'PROCESS_RESTART');
@@ -295,8 +302,8 @@ export class RunDispatcher
         (entry) => entry.id === id,
       );
       if (index >= 0) this.queue.waiting.splice(index, 1);
-    } else if (row.status !== 'recovering')
-      this.workers.get(id)?.controller.abort(new PlanError(reason));
+    } else if (row.status === 'recovering') this.tasks.notifyCancel(id);
+    else this.workers.get(id)?.controller.abort(new PlanError(reason));
     const current = db.select().from(runs).where(eq(runs.id, id)).get();
     if (!current) throw new Error('Cancelled run missing');
     return current;
@@ -392,9 +399,6 @@ export class RunDispatcher
     const signal = AbortSignal.any([
       controller.signal,
       this.readiness.shutdown.signal,
-      AbortSignal.timeout(
-        Math.max(0, (run.recoveryDeadlineAt ?? Date.now()) - Date.now()),
-      ),
     ]);
     try {
       await this.executor.recover(run, signal);
@@ -402,6 +406,7 @@ export class RunDispatcher
         finishRun(this.database.db, run.id, 'interrupted', 'PROCESS_RESTART');
     } finally {
       this.workers.delete(run.id);
+      this.tasks.forgetRun(run.id);
       this.paths.release(run.id);
       if (!this.readiness.stopping) this.schedule();
     }
@@ -468,20 +473,7 @@ export class RunDispatcher
    * @throws Error 下一事件循环抛出固定错误。
    */
   private fatal(error: unknown): void {
-    this.logger.error('Run persistence failed', {
-      errorCode: 'INTERNAL_ERROR',
-      ...errorTraits(error),
-    });
     this.onModuleDestroy();
-    setImmediate(
-      /** 以固定摘要终止无法继续保存责任的进程。
-       * @param 不适用。
-       * @returns 不返回。
-       * @throws Error 固定持久化失败摘要。
-       */
-      () => {
-        throw new Error('Run persistence failed');
-      },
-    );
+    this.fatalError.fail(error);
   }
 }

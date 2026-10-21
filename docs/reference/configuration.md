@@ -7,7 +7,7 @@
 ## 解析和优先级
 
 启动参数读取process.env；.env仅本地开发通过@nestjs/config加载。启动环境决定服务级设置及新配置对象默认值；已保存Job/Instance值优先，Run采用固定后的值。
-数字只接受十进制整数，拒绝NaN、小数、负值和单位字符串。BOOL环境只接受true/false。空字符串不是未设置；非法配置启动失败并指明字段，不输出值中的秘密。各变量由使用它的模块校验。M2 起运行快照消费本文 ExecutionSettings 固定映射中的全部变量，因此这些变量即使对应执行器尚未实现也在启动时读取并校验。M3另消费relay worker数、spool保留量和关机宽限；保留期、通知等尚未实现的进程参数仍不读取。ADMIN_USERNAME/ADMIN_PASSWORD只在数据库没有管理员时读取并校验，已有管理员后两者完全忽略。
+数字只接受十进制整数，拒绝NaN、小数、负值和单位字符串。BOOL环境只接受true/false。空字符串不是未设置；非法配置启动失败并指明字段，不输出值中的秘密。各变量由使用它的模块校验。M2 起运行快照消费本文 ExecutionSettings 固定映射中的全部变量，因此这些变量即使对应执行器尚未实现也在启动时读取并校验。另消费relay worker数、spool保留量、关机宽限及RUN_RETENTION_DAYS；通知等M7进程参数仍不读取。ADMIN_USERNAME/ADMIN_PASSWORD只在数据库没有管理员时读取并校验，已有管理员后两者完全忽略。
 时间内部用UTC；毫秒/秒按本表，不隐式混用。API以camelCase字段映射数据库。
 
 ## 环境变量
@@ -63,7 +63,7 @@
 扫描/规划期的资源上限（SCAN_MAX_DIRECTORY_ENTRIES、扫描列表响应的OPENLIST_MAX_JSON_BYTES、MAX_OPERATIONS_PER_RUN、MAX_SCAN_ISSUES_PER_RUN）超限时Run failed（RESOURCE_LIMIT），不执行任何计划动作。SCAN_MAX_DEPTH例外：只保护超深子树，因此该Target（源侧超深时为所有Target）的删除禁止，其他create继续。执行期refresh读取超限只阻断相关动作。
 退避：delay=min(RETRY_MAX_MS, RETRY_BASE_MS×2^(attempt-1)×U[0.5,1.5])，attempt为刚失败的尝试序号（从1起），因此RETRY_MAX_MS是含抖动的真实上限；最终截到剩余deadline。Retry-After若有效且更长使用它，超出deadline则失败，不提前撞限流。
 OpenList task info轮询：单次info请求的网络错误、5xx、JSON500按RETRY_*重试；重试耗尽不改变Operation状态，继续按OPENLIST_TASK_POLL_MS轮询，直到Run的deadlineAt（随后进入取消流程，CANCEL_GRACE_SECONDS后仍无终态则unknown），恢复期间则到recoveryDeadlineAt。task not found（JSON404）立即unknown。MVP不设单独的info失败次数上限。
-内部维护默认每小时、历史UTC03:00、启动后30s，单批100；测试delivery（run_id为NULL）保留30天，Run关联的delivery随所属Run按RUN_RETENTION_DAYS清理。这些作为实现常量集中声明，MVP不增加额外运行时开关。
+内部远程维护启动后30s、此后每小时，历史UTC03:00；共用串行runner。候选每页100个Run，引用及子记录每批256条并在提交后yield；小时周期不保证一小时内处理完每行。测试delivery（run_id为NULL）保留30天，Run关联的delivery随所属Run按RUN_RETENTION_DAYS清理。这些作为实现常量集中声明，MVP不增加额外运行时开关。
 SQLite busy_timeout=5000ms、WAL/FULL/foreign_keys、令牌桶单次取用64KiB、spool块1MiB、每session chunk并发2、session status心跳60s、redirect上限5为固定基线；变更需更新设计与测试。
 
 ## Instance默认值

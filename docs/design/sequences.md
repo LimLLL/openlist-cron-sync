@@ -55,7 +55,7 @@ API查询展示预算、冲突、保护原因。下一次实跑是新Run，不�
 
 cancel API持久化cancelRequestedAt → Run cancelling → 停止新派发 → pending cancelled → 中止本地下载并对已记录的multipart session发abort → cancel已知tid → 轮询至终态/宽限。
 已成功动作保留；无终止证据的已提交动作unknown+隔离；Run cancelled（stopReason=USER_CANCEL）。再次cancel返回现状，不删除运行中的远程任务来伪造停止。
-queued Run直接cancelled。recovering Run只记录cancelRequestedAt并对未终态的已知tid最多cancel一次，终态仍为interrupted（见[取消与超时](scheduling-recovery.md#取消与超时)）。
+queued Run直接cancelled。recovering Run只记录cancelRequestedAt并对未终态的已知tid每进程最多尝试cancel一次，崩溃后可重复，终态仍为interrupted（见[取消与超时](scheduling-recovery.md#取消与超时)）。
 
 ## 提交响应丢失
 

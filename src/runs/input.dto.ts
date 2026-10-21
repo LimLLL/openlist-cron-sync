@@ -26,7 +26,7 @@ function booleanQuery(input: { value: unknown }): unknown {
       ? false
       : input.value;
 }
-/** 执行触发契约；server_copy真实执行在M6开放。
+/** 两种创建方式共用的执行触发契约。
  * @param 不适用。
  * @returns 不适用。
  * @throws 不适用。
@@ -36,7 +36,7 @@ export class TriggerRunDto {
   @ApiPropertyOptional({
     type: Boolean,
     default: false,
-    description: 'true只预览；false真实relay执行，server_copy真实执行在M6开放',
+    description: 'true只预览；false按Job的relay/server_copy创建方式真实执行',
   })
   @Optional()
   @IsBoolean()
@@ -89,7 +89,7 @@ export class OperationQueryDto extends PageQueryDto {
   @Optional()
   @IsIn(['mkdir', 'create', 'delete'])
   action?: 'mkdir' | 'create' | 'delete';
-  /** 是否显示维护操作；M2 不会产生维护操作。 */
+  /** 是否显示REMOTE_TASK_CHANGED维护操作，默认false。 */
   @ApiPropertyOptional({ default: false })
   @Optional()
   @Transform(booleanQuery)

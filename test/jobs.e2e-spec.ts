@@ -230,12 +230,12 @@ describe('M2 Jobs and Runs API', () => {
       expect(object(object(result.body).error).code).toBe('INVALID_CRON');
     },
   );
-  /** 接受并保存五字段 cron 与合法时区，但不产生调度 Run，也不提供下次触发时间端点。
+  /** 保存五字段cron并提供未来时刻，保存本身不立即触发Run。
    * @param 不适用。
    * @returns 完成 Promise。
    * @throws Error 断言或请求失败。
    */
-  it('accepts stored five-field cron without scheduling and validates timezone for manual jobs', async () => {
+  it('accepts five-field cron and exposes future occurrences without immediate execution', async () => {
     const id = f.job().id;
     await request(base)
       .patch(`/api/v1/jobs/${id}`)
@@ -246,7 +246,7 @@ describe('M2 Jobs and Runs API', () => {
     await request(base)
       .get(`/api/v1/jobs/${id}/next-fire-times`)
       .auth(token, { type: 'bearer' })
-      .expect(404);
+      .expect(200);
   });
   /** 非法的 dryRun 被拒绝且不创建 Run；未启用的 Job 仍可手动预览，Run 查询端点可分页并校验查询参数。
    * @param 不适用。

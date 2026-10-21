@@ -36,19 +36,20 @@ describe('M3 operations and execution API', () => {
   afterEach(async () => {
     await f.close();
   });
-  /** 默认请求必须真实执行；server_copy在建Run之前拒绝。
+  /** 默认请求必须真实执行；server_copy同样被接受。
    * @param 不适用。
    * @returns 验证完成。
    * @throws Error 断言失败。
    */
-  it('defaults to real relay and rejects real server_copy before insertion', async () => {
+  it('defaults to real execution and accepts server_copy', async () => {
     const copy = f.job({ createMode: 'server_copy' });
-    await request(base)
+    const copied = await request(base)
       .post(`/api/v1/jobs/${copy.id}/runs`)
       .auth(token, { type: 'bearer' })
       .send({})
-      .expect(400);
-    expect(f.runs().list({ page: 1, pageSize: 50 }).total).toBe(0);
+      .expect(202);
+    await terminal(f, copied.body.id as string);
+    expect(f.runs().list({ page: 1, pageSize: 50 }).total).toBe(1);
     const job = f.job();
     const accepted = await request(base)
       .post(`/api/v1/jobs/${job.id}/runs`)

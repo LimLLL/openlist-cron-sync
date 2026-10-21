@@ -1,5 +1,5 @@
 // 运行终态事务统一收尾未派发动作、统计和路径密码，不改写历史终态。
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { runs, runTargets } from '../database/run-schema.js';
 import { operations } from '../database/operation-schema.js';
@@ -56,6 +56,7 @@ export function finishRun(
         db.update(operations)
           .set({
             status: 'unknown',
+            remoteCleanupPending: sql`CASE WHEN openlist_task_id IS NOT NULL THEN 1 ELSE 0 END`,
             errorCode: 'OPENLIST_ERROR',
             errorMessage: 'Stopped without completion evidence',
             endedAt: now,

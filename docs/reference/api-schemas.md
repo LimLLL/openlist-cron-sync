@@ -35,7 +35,7 @@ TargetInput=EndpointInput+{id?:Id,mode?:'incremental'|'mirror',deleteLimits?:Del
 JobCreate={name:string,source:EndpointInput,targets:TargetInput[],createMode?:'relay'|'server_copy',enabled?:boolean,cron?:string|null,timezone?:string,filters?:Filters,allowEmptySource?:boolean,syncEmptyDirs?:boolean,relayBandwidthLimit?:integer,timeoutSeconds?:integer,notificationChannelIds?:Id[]}。
 JobPatch顶层字段任选且至少一项；source为EndpointInput各字段均可省略的补丁，filters按字段合并，合并后验证完整对象。targets数组决定完整目标集合：已有target用{id,...可选字段补丁}按字段合并，deleteLimits也按字段合并；新target不带id且必须提供instanceId/path。JobCreate的targets禁止指定id。外Job或归档target id拒绝。删除target归档旧行，不能重用id。
 JobView=Entity+{name,source:EndpointView,targets:(EndpointView+{id,position,mode,deleteLimits:完整值})[],createMode,enabled,cron,timezone,filters:完整值,allowEmptySource,syncEmptyDirs,relayBandwidthLimit,timeoutSeconds,notificationChannelIds:Id[],archivedAt:Time|null}。
-M2的notificationChannelIds仅接受省略或[]，JobView固定返回[]。enabled只保存和校验，不注册cron。enabled=true要求所有实例/渠道secret齐全，endpoint身份已测试；不能通过enabled开启无法解析的路径。manual run也检查必要secret，但允许Job.enabled=false。
+notificationChannelIds当前仅接受省略或[]，JobView固定返回[]，通知随M7接入。enabled控制动态cron，注册只在提交后更新。enabled=true要求所有实例/渠道secret齐全，endpoint身份已测试；不能通过enabled开启无法解析的路径。manual run也检查必要secret，但允许Job.enabled=false。
 
 ## Stats
 

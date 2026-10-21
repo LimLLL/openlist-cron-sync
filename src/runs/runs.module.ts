@@ -25,5 +25,6 @@ import { RunsController } from './runs.controller.js';
   ],
   providers: [RunsService, RunDispatcher, OperationsService],
   controllers: [RunsController, OperationsController],
+  exports: [RunsService],
 })
 export class RunsModule {}
