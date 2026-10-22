@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" role="img" aria-label="openlist-cron-sync">
+<defs>
+  <mask id="s-cut" maskUnits="userSpaceOnUse" x="0" y="0" width="64" height="64">
+    <rect width="64" height="64" fill="#fff"/><path d="M55.383 18.5 A27 10.5 -30 0 1 8.617 45.5" stroke="#000" stroke-width="6.6" stroke-linecap="round"/>
+  </mask>
+  <mask id="s-lit" maskUnits="userSpaceOnUse" x="0" y="0" width="64" height="64">
+    <rect width="64" height="64" fill="#fff"/><circle cx="45" cy="44" r="18.5" fill="#000"/>
+  </mask>
+  <linearGradient id="s-ring-color" x1="55.383" y1="18.5" x2="8.617" y2="45.5" gradientUnits="userSpaceOnUse">
+    <stop offset="0" stop-color="#ecedde"/><stop offset="1" stop-color="#d9efd6"/>
+  </linearGradient>
+  <linearGradient id="s-ring-depth" x1="26.75" y1="22.907" x2="37.25" y2="41.093" gradientUnits="userSpaceOnUse">
+    <stop offset="0" stop-color="#6a6a6a"/><stop offset="0.3" stop-color="#6a6a6a"/>
+    <stop offset="0.7" stop-color="#fff"/><stop offset="1" stop-color="#fff"/>
+  </linearGradient>
+  <clipPath id="s-ring-backside"><polygon points="-37.282,72.0 101.282,-8.0 61.282,-77.282 -77.282,2.718"/></clipPath>
+  <mask id="s-ring-mask" maskUnits="userSpaceOnUse" x="0" y="0" width="64" height="64">
+    <rect width="64" height="64" fill="url(#s-ring-depth)"/>
+    <circle cx="32" cy="32" r="17" fill="#000" clip-path="url(#s-ring-backside)"/>
+  </mask>
+</defs><rect x="1" y="1" width="62" height="62" rx="14.5" fill="#090b0a"/><rect x="1.5" y="1.5" width="61" height="61" rx="14" stroke="#ecedde" stroke-opacity="0.12"/>
+  <g transform="translate(32 32) scale(0.84) translate(-32 -32)">
+  <g mask="url(#s-cut)">
+    <circle cx="32" cy="32" r="17" fill="#3a5641"/>
+    <circle cx="32" cy="32" r="17" fill="#b9edbc" mask="url(#s-lit)"/>
+  </g>
+  <g mask="url(#s-ring-mask)"><ellipse cx="32" cy="32" rx="27" ry="10.5" transform="rotate(-30 32 32)" stroke="url(#s-ring-color)" stroke-width="3.2"/></g>
+  <circle cx="55.11" cy="24.349" r="4.4" fill="#e2ae73"/></g>
+</svg>

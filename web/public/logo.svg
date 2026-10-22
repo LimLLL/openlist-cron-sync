@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" role="img" aria-label="openlist-cron-sync">
+<defs>
+  <radialGradient id="sphere" cx="0.3" cy="0.26" r="0.92">
+    <stop offset="0" stop-color="#e3f8df"/><stop offset="0.22" stop-color="#b9edbc"/>
+    <stop offset="0.5" stop-color="#6f9670"/><stop offset="0.78" stop-color="#22332a"/><stop offset="1" stop-color="#121b15"/>
+  </radialGradient>
+  <radialGradient id="rim" cx="0.5" cy="0.5" r="0.5">
+    <stop offset="0.86" stop-color="#b9edbc" stop-opacity="0"/><stop offset="0.985" stop-color="#b9edbc" stop-opacity="0.5"/><stop offset="1" stop-color="#b9edbc" stop-opacity="0"/>
+  </radialGradient>
+  <radialGradient id="halo" cx="0.5" cy="0.5" r="0.5">
+    <stop offset="0.35" stop-color="#b9edbc" stop-opacity="0.16"/><stop offset="1" stop-color="#b9edbc" stop-opacity="0"/>
+  </radialGradient>
+  <filter id="glow" x="-200%" y="-200%" width="500%" height="500%">
+    <feGaussianBlur stdDeviation="1.6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+  <mask id="cut" maskUnits="userSpaceOnUse" x="0" y="0" width="64" height="64">
+    <rect width="64" height="64" fill="#fff"/><path d="M58.947 22.721 A28.5 7.4 -19 0 1 5.053 41.279" stroke="#000" stroke-width="3.35" stroke-linecap="round"/>
+  </mask>
+  <linearGradient id="ring-color" x1="58.947" y1="22.721" x2="5.053" y2="41.279" gradientUnits="userSpaceOnUse">
+    <stop offset="0" stop-color="#ecedde"/><stop offset="1" stop-color="#b9edbc"/>
+  </linearGradient>
+  <linearGradient id="ring-depth" x1="29.591" y1="25.003" x2="34.409" y2="38.997" gradientUnits="userSpaceOnUse">
+    <stop offset="0" stop-color="#3a3a3a"/><stop offset="0.3" stop-color="#3a3a3a"/>
+    <stop offset="0.7" stop-color="#fff"/><stop offset="1" stop-color="#fff"/>
+  </linearGradient>
+  <clipPath id="ring-backside"><polygon points="-43.641,58.045 107.641,5.955 81.596,-69.686 -69.686,-17.596"/></clipPath>
+  <mask id="ring-mask" maskUnits="userSpaceOnUse" x="0" y="0" width="64" height="64">
+    <rect width="64" height="64" fill="url(#ring-depth)"/>
+    <circle cx="32" cy="32" r="14.2" fill="#000" clip-path="url(#ring-backside)"/>
+  </mask>
+  <radialGradient id="tileglow" cx="0.42" cy="0.4" r="0.7"><stop offset="0" stop-color="#b9edbc" stop-opacity="0.12"/><stop offset="1" stop-color="#b9edbc" stop-opacity="0"/></radialGradient>
+</defs><rect x="1" y="1" width="62" height="62" rx="14.5" fill="#090b0a"/><rect x="1" y="1" width="62" height="62" rx="14.5" fill="url(#tileglow)"/><rect x="1.5" y="1.5" width="61" height="61" rx="14" stroke="#ecedde" stroke-opacity="0.09"/>
+  <g transform="translate(32 32) scale(0.86) translate(-32 -32)">
+  <circle cx="32" cy="32" r="23.2" fill="url(#halo)"/>
+  <g mask="url(#cut)">
+    <circle cx="32" cy="32" r="14.2" fill="url(#sphere)"/>
+    <circle cx="32" cy="32" r="14.2" fill="url(#rim)"/>
+  </g>
+  <g mask="url(#ring-mask)"><ellipse cx="32" cy="32" rx="28.5" ry="7.4" transform="rotate(-19 32 32)" stroke="url(#ring-color)" stroke-width="1.15"/></g>
+  <circle cx="12.178" cy="33.009" r="1.25" fill="#b9edbc" fill-opacity="0.7"/>
+  <circle cx="56.924" cy="27.092" r="2.1" fill="#e2ae73" filter="url(#glow)"/>
+  <circle cx="56.924" cy="27.092" r="1.1" fill="#fff3e2"/></g>
+</svg>

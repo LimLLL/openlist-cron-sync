@@ -1,4 +1,28 @@
-# openlist-cron-sync
+<div align="center">
+  <a href="https://github.com/LimLLL/openlist-cron-sync">
+    <img height="64" alt="openlist-cron-sync" src="./web/public/logo.svg"/>
+  </a>
+  <p><em>Openlist-Cron-Sync是一个适用于OpenList v4.2.5+的自动化同步工具。</em></p>
+  <div>
+    <a href="https://github.com/LimLLL/openlist-cron-sync/blob/main/LICENSE">
+      <img src="https://img.shields.io/github/license/LimLLL/openlist-cron-sync" alt="License" />
+    </a>
+    <a href="https://nestjs.com/">
+      <img src="https://img.shields.io/badge/backend-nestjs-e0234e.svg" alt="NestJS" />
+    </a>
+    <a href="https://react.dev/">
+      <img src="https://img.shields.io/badge/frontend-react-61dafb.svg" alt="React" />
+    </a>
+    <a href="https://github.com/LimLLL/openlist-cron-sync/releases">
+      <img src="https://img.shields.io/github/release/LimLLL/openlist-cron-sync" alt="latest version" />
+    </a>
+    <a href="https://github.com/LimLLL/openlist-cron-sync/pkgs/container/openlist-cron-sync">
+      <img src="https://img.shields.io/badge/image-ghcr.io-2496ed?logo=docker&logoColor=white" alt="GHCR" />
+    </a>
+  </div>
+</div>
+
+---
 
 基于 [OpenList](https://github.com/OpenListTeam/OpenList) API 的自托管定时同步服务：按计划把一个 OpenList 目录中的文件同步到一个或多个目标目录，目标可以和源在同一个 OpenList 实例上，也可以在另一个实例上。
 
