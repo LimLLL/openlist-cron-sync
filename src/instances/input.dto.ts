@@ -107,52 +107,77 @@ export class AuthInputDto {
  * @throws 不适用。
  */
 export class InstanceLimitsDto {
-  /** API 并发，默认 4，范围 1–32。 */
-  @ApiPropertyOptional({ type: 'integer', default: 4, minimum: 1, maximum: 32 })
-  @Optional()
-  @IsInt()
-  @Min(1)
-  @Max(32)
-  maxApiConcurrency?: number;
-  /** 每秒 API 请求数，默认 5，范围 1–100。 */
+  /** API 并发，默认 4，0 表示不限。 */
   @ApiPropertyOptional({
     type: 'integer',
-    default: 5,
-    minimum: 1,
-    maximum: 100,
+    default: 4,
+    minimum: 0,
+    maximum: Number.MAX_SAFE_INTEGER,
   })
   @Optional()
   @IsInt()
-  @Min(1)
-  @Max(100)
+  @Min(0)
+  @Max(Number.MAX_SAFE_INTEGER)
+  maxApiConcurrency?: number;
+  /** 每秒 API 请求数，默认 5，0 表示不限。 */
+  @ApiPropertyOptional({
+    type: 'integer',
+    default: 5,
+    minimum: 0,
+    maximum: Number.MAX_SAFE_INTEGER,
+  })
+  @Optional()
+  @IsInt()
+  @Min(0)
+  @Max(Number.MAX_SAFE_INTEGER)
   apiRequestsPerSecond?: number;
-  /** 未完成复制任务数，默认 4，范围 1–64。 */
-  @ApiPropertyOptional({ type: 'integer', default: 4, minimum: 1, maximum: 64 })
+  /** 未完成复制任务数，默认 4，0 表示不限。 */
+  @ApiPropertyOptional({
+    type: 'integer',
+    default: 4,
+    minimum: 0,
+    maximum: Number.MAX_SAFE_INTEGER,
+  })
   @Optional()
   @IsInt()
-  @Min(1)
-  @Max(64)
+  @Min(0)
+  @Max(Number.MAX_SAFE_INTEGER)
   maxOutstandingTasks?: number;
-  /** 下载连接，默认 2，范围 1–16。 */
-  @ApiPropertyOptional({ type: 'integer', default: 2, minimum: 1, maximum: 16 })
+  /** 下载连接，默认 2，0 表示不限。 */
+  @ApiPropertyOptional({
+    type: 'integer',
+    default: 2,
+    minimum: 0,
+    maximum: Number.MAX_SAFE_INTEGER,
+  })
   @Optional()
   @IsInt()
-  @Min(1)
-  @Max(16)
+  @Min(0)
+  @Max(Number.MAX_SAFE_INTEGER)
   maxDownloadConnections?: number;
-  /** 上传会话，默认 2，范围 1–16。 */
-  @ApiPropertyOptional({ type: 'integer', default: 2, minimum: 1, maximum: 16 })
+  /** 上传会话，默认 2，0 表示不限。 */
+  @ApiPropertyOptional({
+    type: 'integer',
+    default: 2,
+    minimum: 0,
+    maximum: Number.MAX_SAFE_INTEGER,
+  })
   @Optional()
   @IsInt()
-  @Min(1)
-  @Max(16)
+  @Min(0)
+  @Max(Number.MAX_SAFE_INTEGER)
   maxUploadSessions?: number;
-  /** 分片并发，默认 4，范围 1–32。 */
-  @ApiPropertyOptional({ type: 'integer', default: 4, minimum: 1, maximum: 32 })
+  /** 分片并发，默认 4，0 表示不限。 */
+  @ApiPropertyOptional({
+    type: 'integer',
+    default: 4,
+    minimum: 0,
+    maximum: Number.MAX_SAFE_INTEGER,
+  })
   @Optional()
   @IsInt()
-  @Min(1)
-  @Max(32)
+  @Min(0)
+  @Max(Number.MAX_SAFE_INTEGER)
   maxChunkConcurrency?: number;
 }
 /** 实例创建输入。

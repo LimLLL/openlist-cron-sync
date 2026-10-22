@@ -7,23 +7,53 @@ import { ApiProperty } from '@nestjs/swagger';
  * @throws 不适用。
  */
 export class LimitsView {
-  /** 有效值，默认 4，范围 1–32。 */
-  @ApiProperty({ type: 'integer', default: 4, minimum: 1, maximum: 32 })
+  /** 有效值，默认 4，0 表示不限。 */
+  @ApiProperty({
+    type: 'integer',
+    default: 4,
+    minimum: 0,
+    maximum: Number.MAX_SAFE_INTEGER,
+  })
   maxApiConcurrency: number;
-  /** 有效值，默认 5，范围 1–100。 */
-  @ApiProperty({ type: 'integer', default: 5, minimum: 1, maximum: 100 })
+  /** 有效值，默认 5，0 表示不限。 */
+  @ApiProperty({
+    type: 'integer',
+    default: 5,
+    minimum: 0,
+    maximum: Number.MAX_SAFE_INTEGER,
+  })
   apiRequestsPerSecond: number;
-  /** 有效值，默认 4，范围 1–64。 */
-  @ApiProperty({ type: 'integer', default: 4, minimum: 1, maximum: 64 })
+  /** 有效值，默认 4，0 表示不限。 */
+  @ApiProperty({
+    type: 'integer',
+    default: 4,
+    minimum: 0,
+    maximum: Number.MAX_SAFE_INTEGER,
+  })
   maxOutstandingTasks: number;
-  /** 有效值，默认 2，范围 1–16。 */
-  @ApiProperty({ type: 'integer', default: 2, minimum: 1, maximum: 16 })
+  /** 有效值，默认 2，0 表示不限。 */
+  @ApiProperty({
+    type: 'integer',
+    default: 2,
+    minimum: 0,
+    maximum: Number.MAX_SAFE_INTEGER,
+  })
   maxDownloadConnections: number;
-  /** 有效值，默认 2，范围 1–16。 */
-  @ApiProperty({ type: 'integer', default: 2, minimum: 1, maximum: 16 })
+  /** 有效值，默认 2，0 表示不限。 */
+  @ApiProperty({
+    type: 'integer',
+    default: 2,
+    minimum: 0,
+    maximum: Number.MAX_SAFE_INTEGER,
+  })
   maxUploadSessions: number;
-  /** 有效值，默认 4，范围 1–32。 */
-  @ApiProperty({ type: 'integer', default: 4, minimum: 1, maximum: 32 })
+  /** 有效值，默认 4，0 表示不限。 */
+  @ApiProperty({
+    type: 'integer',
+    default: 4,
+    minimum: 0,
+    maximum: Number.MAX_SAFE_INTEGER,
+  })
   maxChunkConcurrency: number;
 }
 

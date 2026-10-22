@@ -34,7 +34,7 @@
 | OPENLIST_CONNECT_TIMEOUT_MS    | 10000          | 1000–120000                                                                                                 |
 | OPENLIST_API_TIMEOUT_MS        | 30000          | 1000–300000；控制请求超时，不用于chunk请求与complete等待                                                    |
 | OPENLIST_TASK_POLL_MS          | 3000           | 500–60000；请求均匀加±20%抖动                                                                               |
-| RETRY_MAX_ATTEMPTS             | 3              | 1–10，含首次；不含OpenList内部重试                                                                          |
+| RETRY_MAX_ATTEMPTS             | 3              | 1–10，含首次；未设置Job重试次数时使用，不含OpenList内部重试                                                  |
 | RETRY_BASE_MS                  | 1000           | 100–60000                                                                                                   |
 | RETRY_MAX_MS                   | 30000          | base–300000；含抖动在内的退避上限                                                                           |
 | OPENLIST_AUTH_COOLDOWN_SECONDS | 600            | 600–86400；避免延长共享IP锁定                                                                               |
@@ -70,12 +70,12 @@ SQLite busy_timeout=5000ms、WAL/FULL/foreign_keys、令牌桶单次取用64KiB�
 
 | API字段                       | 默认 | 范围/理由                                        |
 | ----------------------------- | ---- | ------------------------------------------------ |
-| limits.maxApiConcurrency      | 4    | 1–32；一个位置优先留给控制请求                   |
-| limits.maxOutstandingTasks    | 4    | 1–64；仅server_copy，限制OpenList未完任务        |
-| limits.maxDownloadConnections | 2    | 1–16；作为relay源时打开的GET数（含因背压暂停的） |
-| limits.maxUploadSessions      | 2    | 1–16；作为relay目标时的分片上传session数         |
-| limits.maxChunkConcurrency    | 4    | 1–32；作为relay目标时同时进行的chunk请求         |
-| limits.apiRequestsPerSecond   | 5    | 1–100；并发不替代速率限制                        |
+| limits.maxApiConcurrency      | 4    | 0–安全整数；0不限，正数限制并发并为控制请求保留位置 |
+| limits.maxOutstandingTasks    | 4    | 0–安全整数；0不限，仅server_copy                 |
+| limits.maxDownloadConnections | 2    | 0–安全整数；0不限，作为relay源时打开的GET数       |
+| limits.maxUploadSessions      | 2    | 0–安全整数；0不限，作为relay目标时的上传session数 |
+| limits.maxChunkConcurrency    | 4    | 0–安全整数；0不限，作为relay目标时的chunk请求数   |
+| limits.apiRequestsPerSecond   | 5    | 0–安全整数；0不限，正数按间隔限速                 |
 | downloadMode                  | d    | d/p；p须OpenList允许                             |
 
 ## Job与Target默认值
@@ -91,6 +91,7 @@ SQLite busy_timeout=5000ms、WAL/FULL/foreign_keys、令牌桶单次取用64KiB�
 | allowEmptySource                    | false       | 防止空视图清空目标                                                                                                     |
 | syncEmptyDirs                       | false       | false只建create所需父目录，从不删除目标目录；true同步目录结构，见[空目录](../design/filters-paths.md#空目录)           |
 | targets[].createMode                | relay       | relay/server_copy；server_copy要求该Target与source使用同一Instance ID，见[创建方式](../design/sync-engine.md#创建方式) |
+| retryCount                          | null        | null继承RETRY_MAX_ATTEMPTS；0–9表示失败后的重试次数，Run按值+1计算尝试次数                                      |
 | relayBandwidthLimit                 | 0           | 0不限；正数1–安全整数bytes/s，聚合该Job所有relay Target的上传payload                                                   |
 | timeoutSeconds                      | 86400       | 60–604800；默认最长一天                                                                                                |
 | targets[].mode                      | incremental | incremental/mirror                                                                                                     |
@@ -99,6 +100,8 @@ SQLite busy_timeout=5000ms、WAL/FULL/foreign_keys、令牌桶单次取用64KiB�
 | targets[].deleteLimits.maxPercent   | 50          | null或0–100整数；超过一半视作异常规模                                                                                  |
 
 每Job 1–32个Target；每endpoint path≤4096 UTF-8字节，名称≤1024字节；超过限制返回400，不截断。API管理JSON上限1MiB，import上限10MiB；分页默认50、最大200。
+
+Job 的 retryCount 只影响接受该 Job 后的 Run；Run 在接受时冻结有效尝试次数。每个 Run 内的外层文件、分片、下载、完成、读取和 task-info 重试循环各自使用该预算，因此总请求次数可能相乘。进程维护遗留远程任务时仍使用当前环境配置，不读取历史 Run 快照。
 阈值enabled=true时两项不能同时null。保留值0的含义：count=0禁止任何文件删除；percent=0同理；bandwidth=0才代表不限，不能通用转换。
 
 ## 通知渠道默认值

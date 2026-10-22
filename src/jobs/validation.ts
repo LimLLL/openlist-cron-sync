@@ -279,6 +279,7 @@ export function mergeJob(
       'allowEmptySource',
       'syncEmptyDirs',
       'relayBandwidthLimit',
+      'retryCount',
       'timeoutSeconds',
       'notificationChannelIds',
     ],
@@ -419,6 +420,12 @@ export function mergeJob(
         : v.relayBandwidthLimit,
       'relayBandwidthLimit',
     ),
+    retryCount:
+      v.retryCount === undefined
+        ? (previous?.retryCount ?? null)
+        : v.retryCount === null
+          ? null
+          : number(v.retryCount, 'retryCount', 0, 9),
     timeoutSeconds: number(
       v.timeoutSeconds === undefined
         ? (previous?.timeoutSeconds ?? 86400)

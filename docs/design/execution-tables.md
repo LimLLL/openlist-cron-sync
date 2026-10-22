@@ -109,4 +109,4 @@ CHECK约束补充：Run终态须ended_at非NULL；Operation终态须ended_at非N
 seq、attempt_no必须≥1；caused_by_operation_id仅在error_code=REMOTE_TASK_CHANGED时非NULL，且此类行必须引用原Operation，tid为NULL。reobserved_by_run_id写实际完成重新观察的Run。
 Stats和公共JSON形状见[API schemas](../reference/api-schemas.md)。枚举、数据约束与DTO均需行为测试，不能只测试SQL字符串。
 
-MAX_OPERATIONS_PER_RUN只限制初始计划。每个逻辑动作最多RETRY_MAX_ATTEMPTS次；每个额外create attempt最多引入一个retry_cleanup逻辑动作，该清理自身有同样的attempt上限且不生成其它清理。清理预算按逻辑动作累计预留，同一清理的重试不重复占额。
+MAX_OPERATIONS_PER_RUN只限制初始计划。每个逻辑动作最多Run快照中retryMaxAttempts次；每个额外create attempt最多引入一个retry_cleanup逻辑动作，该清理自身有同样的attempt上限且不生成其它清理。chunk、下载、读取、完成和task-info循环也分别使用该预算，因此不同循环的总请求次数可能相乘。清理预算按逻辑动作累计预留，同一清理的重试不重复占额。

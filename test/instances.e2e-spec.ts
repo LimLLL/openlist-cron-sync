@@ -143,6 +143,36 @@ describe('M1 instances API', /** 注册本组 M1 行为验收用例。
       items: [{ id, auth: { hasSecret: false } }, { id: fixture.id }],
     });
   });
+  it('accepts zero and the safe-integer ceiling for every instance quota', /** 0 表示不限，正数没有产品上限，只受安全整数约束。
+   * @param 不适用。
+   * @returns 断言完成；异步用例返回完成 Promise。
+   * @throws Error 断言或测试资源操作失败。
+   */
+  async () => {
+    const limits = {
+      maxApiConcurrency: 0,
+      apiRequestsPerSecond: 0,
+      maxOutstandingTasks: 0,
+      maxDownloadConnections: 0,
+      maxUploadSessions: 0,
+      maxChunkConcurrency: 0,
+    };
+    const zero = await request(base)
+      .patch('/api/v1/instances/' + fixture.id)
+      .auth(token, { type: 'bearer' })
+      .send({ limits })
+      .expect(200);
+    expect(zero.body.limits).toEqual(limits);
+    const ceiling = Object.fromEntries(
+      Object.keys(limits).map((key) => [key, Number.MAX_SAFE_INTEGER]),
+    );
+    const max = await request(base)
+      .patch('/api/v1/instances/' + fixture.id)
+      .auth(token, { type: 'bearer' })
+      .send({ limits: ceiling })
+      .expect(200);
+    expect(max.body.limits).toEqual(ceiling);
+  });
   it('rejects invalid, unknown, null and discriminator inputs without contacting OpenList', /** 验证当前场景的协议输入、输出与副作用。
    * @param 不适用。
    * @returns 断言完成；异步用例返回完成 Promise。
@@ -160,7 +190,8 @@ describe('M1 instances API', /** 注册本组 M1 行为验收用例。
       { auth: { mode: 'token', secret: '***' } },
       { auth: { mode: 'token', secret: 'x\r\ny' } },
       { limits: null },
-      { limits: { maxApiConcurrency: 0 } },
+      { limits: { maxApiConcurrency: -1 } },
+      { limits: { maxApiConcurrency: 1.5 } },
       { limits: { apiRequestsPerSecond: '5' } },
       { limits: { unknown: 1 } },
       { downloadMode: null },

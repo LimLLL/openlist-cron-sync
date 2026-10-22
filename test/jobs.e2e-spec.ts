@@ -178,6 +178,38 @@ describe('M2 Jobs and Runs API', () => {
         .expect(400);
     },
   );
+  /** Job 重试覆盖值只改变新 Run 的有效尝试数，清除后回到环境默认值。 */
+  it('stores per-Job retries and freezes effective attempts in the Run settings', async () => {
+    const created = await request(base)
+      .post('/api/v1/jobs')
+      .auth(token, { type: 'bearer' })
+      .send({
+        name: 'Retries',
+        retryCount: 2,
+        source: { instanceId: f.id, path: '/source' },
+        targets: [{ instanceId: f.id, path: '/target' }],
+      })
+      .expect(201);
+    expect(created.body.retryCount).toBe(2);
+    const run = f.runs().trigger(created.body.id, {
+      dryRun: true,
+      confirmDeletes: false,
+    });
+    expect(f.runs().get(run.id).config.settings.retryMaxAttempts).toBe(3);
+    await terminal(f, run.id);
+    await request(base)
+      .patch(`/api/v1/jobs/${created.body.id}`)
+      .auth(token, { type: 'bearer' })
+      .send({ retryCount: null })
+      .expect(200);
+    expect(f.jobs().get(created.body.id).retryCount).toBeNull();
+    for (const retryCount of [-1, 10, 1.5, '2'])
+      await request(base)
+        .patch(`/api/v1/jobs/${created.body.id}`)
+        .auth(token, { type: 'bearer' })
+        .send({ retryCount })
+        .expect(400);
+  });
   /** 目标空密码在创建和稳定 ID 补丁中均被拒绝，拒绝后保留旧密码，只有 null 清除。
    * @param 不适用。
    * @returns HTTP 校验及密码标志断言完成。

@@ -117,7 +117,7 @@ describe('Target create mode form', () => {
    * @returns 不适用。
    * @throws Error 断言失败。
    */
-  it('submits a valid mixed configuration and leaves unselected Instances to required validation', () => {
+  it('submits a valid mixed configuration and flags server copy once the source Instance is unselected', () => {
     const job = mixedJobFixture();
     const element = JobForm({ existing: job });
     const form = findForm(element);
@@ -133,8 +133,8 @@ describe('Target create mode form', () => {
     const markup = renderToStaticMarkup(
       createElement(MemoryRouter, null, JobForm({ existing: job })),
     );
-    expect(markup).not.toContain('role="alert"');
-    expect(markup).not.toContain(
+    expect(markup).toContain('role="alert"');
+    expect(markup).toContain(
       i18n.t('jobs:validation.serverCopySameInstance'),
     );
   });

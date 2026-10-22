@@ -1,4 +1,4 @@
-// 目录浏览对话框：精致的文件浏览器——面包屑路径、跳转栏、整行可点的文件夹与跟随指针的柔光。
+// 目录浏览对话框：精致的文件浏览器——面包屑路径、跳转栏、整行可点的文件夹与跟随指针的柔光；可选“选择目录”模式供任务表单复用。
 import { useEffect, useState } from 'react';
 import type { PointerEvent } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
@@ -36,6 +36,12 @@ interface BrowseDialogProps {
   open: boolean;
   /** 关闭回调。 */
   onOpenChange: (open: boolean) => void;
+  /** 打开时的起始目录，默认根目录。 */
+  initialPath?: string;
+  /** 打开时预填的路径密码，只保存在对话框内存中。 */
+  initialPassword?: string;
+  /** 提供时进入选择模式：返回当前已成功列出的服务端规范化目录与路径密码。 */
+  onSelect?: (path: string, password: string) => void;
 }
 
 /** 把指针位置写入 CSS 变量，驱动行内柔光。
@@ -49,8 +55,8 @@ function trackPointer(event: PointerEvent<HTMLElement>): void {
   event.currentTarget.style.setProperty('--my', `${event.clientY - rect.top}px`);
 }
 
-/** 渲染目录浏览对话框，支持路径导航、路径密码和分页。
- * @param props 实例信息和对话框状态。
+/** 渲染目录浏览对话框，支持路径导航、路径密码、分页与可选的目录选择。
+ * @param props 实例信息、对话框状态、起始路径与密码、可选的选择回调。
  * @returns 目录浏览对话框。
  * @throws 不适用。
  */
@@ -59,21 +65,27 @@ export function InstanceBrowseDialog({
   instanceName,
   open,
   onOpenChange,
+  initialPath = '/',
+  initialPassword = '',
+  onSelect,
 }: BrowseDialogProps) {
   const { t } = useTranslation(['instances', 'common']);
   const errorText = useErrorText();
-  const [currentPath, setCurrentPath] = useState('/');
+  const [currentPath, setCurrentPath] = useState(initialPath);
   const [page, setPage] = useState(1);
-  const [password, setPassword] = useState('');
-  const [pathInput, setPathInput] = useState('/');
+  const [password, setPassword] = useState(initialPassword);
+  const [pathInput, setPathInput] = useState(initialPath);
   const browse = useInstanceBrowse(instanceId);
   const { mutate } = browse;
   const result = browse.data;
+  // 只有当前目录已成功列出且没有进行中的请求时才能选择，避免选中失败或过期的路径。
+  const selectable = !!result && !browse.isPending && !browse.isError;
 
-  // 父组件通过受控 open 打开对话框时不会触发 Radix onOpenChange，在这里加载根目录。
+  // 父组件通过受控 open 打开对话框时不会触发 Radix onOpenChange，在这里加载起始目录（带上预填密码）。
   useEffect(() => {
-    if (open) mutate({ path: '/', page: 1, pageSize: PAGE_SIZE });
-  }, [open, instanceId, mutate]);
+    if (open)
+      mutate({ path: initialPath, password: initialPassword || undefined, page: 1, pageSize: PAGE_SIZE });
+  }, [open, instanceId, initialPath, initialPassword, mutate]);
 
   /** 加载指定路径；请求进行中时忽略，避免乱序覆盖。
    * @param path 目标路径。
@@ -245,9 +257,9 @@ export function InstanceBrowseDialog({
             )}
           </div>
 
-          {result && (result.total > result.pageSize || result.warnings.length > 0) && (
+          {(onSelect || (result && (result.total > result.pageSize || result.warnings.length > 0))) && (
             <footer className="space-y-3 border-t border-hairline px-6 py-3">
-              {result.total > result.pageSize && (
+              {result && result.total > result.pageSize && (
                 <Pagination
                   page={result.page}
                   pageSize={result.pageSize}
@@ -255,7 +267,7 @@ export function InstanceBrowseDialog({
                   onPageChange={(next) => loadPath(currentPath, next)}
                 />
               )}
-              {result.warnings.length > 0 && (
+              {result && result.warnings.length > 0 && (
                 <ul className="space-y-1 text-xs text-signal">
                   {result.warnings.map((warning, position) => (
                     <li key={position} title={`${warning.code} · ${warning.message}`}>
@@ -263,6 +275,15 @@ export function InstanceBrowseDialog({
                     </li>
                   ))}
                 </ul>
+              )}
+              {onSelect && (
+                <Button
+                  className="w-full"
+                  onClick={() => result && onSelect(result.path, password)}
+                  disabled={!selectable}
+                >
+                  {t('browse.selectFolder')}
+                </Button>
               )}
             </footer>
           )}

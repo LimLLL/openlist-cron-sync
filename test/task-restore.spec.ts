@@ -4,6 +4,7 @@ import { copyFixture } from './copy-fixture.js';
 import { preview } from './m2-fixture.js';
 import { DatabaseService } from '../src/database/database.service.js';
 import { operations } from '../src/database/operation-schema.js';
+import { instances } from '../src/database/schema.js';
 import { TaskResources } from '../src/coordination/task-resources.js';
 
 /** 两类索引候选跨越128行分页边界，重叠行只占一个名额。
@@ -76,6 +77,33 @@ it('restores paged task responsibility once and excludes released occupancy', as
     resources.release('restore-260');
     resources.release('restore-393');
     expect(resources.count(f.id)).toBe(387);
+  } finally {
+    await f.close();
+  }
+});
+
+/** 零表示不限制提交数量，但仍保留内存中的ownership计数。 */
+it('admits unlimited server-copy reservations when the snapshot quota is zero', async () => {
+  const f = await copyFixture();
+  try {
+    const database = f.app.get(DatabaseService);
+    database.db
+      .update(instances)
+      .set({ maxOutstandingTasks: 0 })
+      .where(eq(instances.id, f.id))
+      .run();
+    const resources = new TaskResources(database);
+    const instance = f.record();
+    const reservations = await Promise.all(
+      ['zero-1', 'zero-2', 'zero-3'].map((id) =>
+        resources.reserve(instance, id, new AbortController().signal),
+      ),
+    );
+    expect(reservations).toHaveLength(3);
+    expect(resources.count(f.id)).toBe(3);
+    resources.release('zero-1');
+    resources.release('zero-2');
+    resources.release('zero-3');
   } finally {
     await f.close();
   }

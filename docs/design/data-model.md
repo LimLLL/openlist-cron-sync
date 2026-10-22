@@ -42,7 +42,7 @@ erDiagram
 run_config_json 持久化规范化后的 Job 公共字段、Target完整列表、目标稳定UUID、Instance id/baseUrl/authMode/username/accountBasePath、全部有效默认值、通知channel id、snapshotVersion=1。
 不存解密secret、JWT、sign、storage.addition、下载URL、Webhook URL。source/target路径密码放 runs.secret_snapshot_enc，内容仅为按endpoint id键控的密码；没有路径密码时为NULL。
 
-run_config_json的精确形状为{snapshotVersion:1,job:JobView,instances:Record<instanceId,InstanceSnapshot>,settings:ExecutionSettings}。JobView为当时的完整公共形状，每个targets[]对象包含必填createMode，Job本身不含该字段；InstanceSnapshot={id,name,baseUrl,authMode,username:string|null,accountUsername:string|null,accountBasePath,accountRole,accountPermissions,limits,downloadMode}，不含authState、error或secret。run_targets.target_snapshot_json={target:JobView.targets中对应对象,instance:对应InstanceSnapshot}。
+run_config_json的精确形状为{snapshotVersion:1,job:JobView,instances:Record<instanceId,InstanceSnapshot>,settings:ExecutionSettings}。JobView为当时的完整公共形状，每个targets[]对象包含必填createMode；retryCount在迁移中对历史Run补为null，settings.retryMaxAttempts仍保留接受Run时的有效尝试次数。Job本身不含Target级createMode；InstanceSnapshot={id,name,baseUrl,authMode,username:string|null,accountUsername:string|null,accountBasePath,accountRole,accountPermissions,limits,downloadMode}，不含authState、error或secret。run_targets.target_snapshot_json={target:JobView.targets中对应对象,instance:对应InstanceSnapshot}。
 ExecutionSettings使用[配置](../reference/configuration.md)定义的映射。secret_snapshot_enc解密形状为{sourcePassword:string|null,targetPasswords:Record<targetId,string|null>}，无任何路径密码时整个字段NULL。
 Instance 的连接配置在[未决责任](#responsibility)引用它时禁止修改地址/账号/删除；允许原地址同账号更新token/password恢复认证。账号是否相同以 /api/me 返回的 username 与 base_path 为准，见[OpenList集成](openlist-integration.md#认证与实例身份)。
 Instance.limits/downloadMode在被非终态Run引用时也禁止修改；name允许修改但不回写旧snapshot。全局执行位/队列容量为进程级配置，不是每个Run各自建立一套配额。

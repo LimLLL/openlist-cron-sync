@@ -7,7 +7,7 @@ import { InputField } from '../../components/ui/input-field';
 import { SelectField } from '../../components/ui/select-field';
 import { Button } from '../../components/ui/button';
 import { cn } from '../../lib/utils';
-import { SwitchRow } from './job-ui';
+import { BrowseButton, SwitchRow } from './job-ui';
 import type { Instance } from '../instances/instance-contract';
 import type { JobFormValues } from './job-form-model';
 
@@ -49,7 +49,7 @@ export function BasicsFields({ values, update }: SectionProps) {
 }
 
 /** 渲染源分节：实例、路径、路径密码与刷新开关。
- * @param props 表单值、更新函数、实例列表与是否编辑。
+ * @param props 表单值、更新函数、实例列表、是否编辑与打开目录选择器的回调。
  * @returns 分节。
  * @throws 不适用。
  */
@@ -58,7 +58,8 @@ export function SourceFields({
   update,
   instances,
   isEdit,
-}: SectionProps & { instances: Instance[]; isEdit: boolean }) {
+  onBrowse,
+}: SectionProps & { instances: Instance[]; isEdit: boolean; onBrowse: () => void }) {
   const { t } = useTranslation('jobs');
   return (
     <EditorialSection index="02" title={t('form.source')} description={t('form.sourceDesc')}>
@@ -87,6 +88,7 @@ export function SourceFields({
           required
           placeholder="/"
           hint={t('form.pathHint')}
+          action={<BrowseButton disabled={!values.sourceInstanceId} onClick={onBrowse} />}
         />
         <InputField
           id="source-password"
@@ -276,6 +278,16 @@ export function AdvancedFields({ values, update }: SectionProps) {
             value={values.relayBandwidthLimit}
             onChange={(event) => update('relayBandwidthLimit', event.target.value)}
             hint={t('form.bandwidthHint')}
+          />
+          <InputField
+            id="retry-count"
+            label={t('form.retryCount')}
+            type="number"
+            min={0}
+            max={9}
+            value={values.retryCount}
+            onChange={(event) => update('retryCount', event.target.value)}
+            hint={t('form.retryCountHint')}
           />
           <InputField
             id="timeout"

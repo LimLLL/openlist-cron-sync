@@ -116,27 +116,27 @@ export const instances = sqliteTable(
     check('instances_download_mode', sql`${table.downloadMode} IN ('d','p')`),
     check(
       'instances_api_concurrency',
-      sql`${table.maxApiConcurrency} BETWEEN 1 AND 32`,
+      sql`${table.maxApiConcurrency} BETWEEN 0 AND 9007199254740991`,
     ),
     check(
       'instances_task_limit',
-      sql`${table.maxOutstandingTasks} BETWEEN 1 AND 64`,
+      sql`${table.maxOutstandingTasks} BETWEEN 0 AND 9007199254740991`,
     ),
     check(
       'instances_download_limit',
-      sql`${table.maxDownloadConnections} BETWEEN 1 AND 16`,
+      sql`${table.maxDownloadConnections} BETWEEN 0 AND 9007199254740991`,
     ),
     check(
       'instances_upload_limit',
-      sql`${table.maxUploadSessions} BETWEEN 1 AND 16`,
+      sql`${table.maxUploadSessions} BETWEEN 0 AND 9007199254740991`,
     ),
     check(
       'instances_chunk_limit',
-      sql`${table.maxChunkConcurrency} BETWEEN 1 AND 32`,
+      sql`${table.maxChunkConcurrency} BETWEEN 0 AND 9007199254740991`,
     ),
     check(
       'instances_api_rate',
-      sql`${table.apiRequestsPerSecond} BETWEEN 1 AND 100`,
+      sql`${table.apiRequestsPerSecond} BETWEEN 0 AND 9007199254740991`,
     ),
     check(
       'instances_multipart',

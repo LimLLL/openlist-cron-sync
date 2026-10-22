@@ -5,6 +5,7 @@ import type {
   InstanceLimits,
 } from './instance-contract';
 import type en from '../../i18n/locales/en/instances';
+import { LIMIT_FIELDS } from './instance-display';
 
 /** instances 命名空间 validation 下的文案键。 */
 export type InstanceValidationKey = keyof (typeof en)['validation'];
@@ -13,13 +14,13 @@ export type InstanceValidationKey = keyof (typeof en)['validation'];
 export class InstanceFormError extends Error {
   /** 创建带文案键与插值参数的校验错误。
    * @param key validation 文案键。
-   * @param limit 配额越界时的字段与上限。
+   * @param limit 配额非法时的字段。
    * @returns 不适用。
    * @throws 不适用。
    */
   constructor(
     readonly key: InstanceValidationKey,
-    readonly limit?: { field: keyof InstanceLimits; max: number },
+    readonly limit?: { field: keyof InstanceLimits },
   ) {
     super(key);
     this.name = 'InstanceFormError';
@@ -101,20 +102,13 @@ export function buildInstanceInput(
       secret: values.secret,
       ...(values.authMode === 'password' ? { username: values.username } : {}),
     };
-  const maxima: Record<keyof InstanceLimits, number> = {
-    maxApiConcurrency: 32,
-    apiRequestsPerSecond: 100,
-    maxOutstandingTasks: 64,
-    maxDownloadConnections: 16,
-    maxUploadSessions: 16,
-    maxChunkConcurrency: 32,
-  };
   const limits: Partial<InstanceLimits> = {};
-  for (const key of Object.keys(maxima) as (keyof InstanceLimits)[]) {
-    const value = values.limits[key];
+  for (const { key, defaultValue } of LIMIT_FIELDS) {
+    // 编辑时清空表示恢复默认值；新建时留空交给后端默认值。
+    const value = values.limits[key] ?? (existing ? defaultValue : undefined);
     if (value === undefined) continue;
-    if (!Number.isSafeInteger(value) || value < 1 || value > maxima[key])
-      throw new InstanceFormError('limit', { field: key, max: maxima[key] });
+    if (!Number.isSafeInteger(value) || value < 0)
+      throw new InstanceFormError('limit', { field: key });
     if (!existing || value !== existing.limits[key]) limits[key] = value;
   }
   if (Object.keys(limits).length) body.limits = limits;

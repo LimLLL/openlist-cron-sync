@@ -38,8 +38,8 @@ describe('M6 recovery task ownership', () => {
    * @returns Run ID和Operation ID。
    * @throws Error SQL失败。
    */
-  async function recovering(deadline: number) {
-    const run = await preview(f, f.copyJob());
+  async function recovering(deadline: number, job = f.copyJob()) {
+    const run = await preview(f, job);
     const id = plan(f, run.id)[0].id;
     const db = f.app.get(DatabaseService).db;
     db.update(operations)
@@ -62,6 +62,42 @@ describe('M6 recovery task ownership', () => {
     });
     return { runId: run.id, id };
   }
+  /** 恢复轮询使用接受时的Job重试预算，即使进程默认值更小。
+   * @param 不适用。
+   * @returns 验证完成。
+   * @throws Error 断言失败。
+   */
+  it('keeps the frozen retry budget across recovery', async () => {
+    const job = f.copyJob({ retryCount: 2 });
+    const old = await recovering(Date.now() + 5000, job);
+    f.fault =
+      /** 返回合法JSON但错误task身份，制造可计数的协议失败。
+       * @param call 捕获请求。
+       * @param response 默认响应。
+       * @returns 故障或默认响应。
+       * @throws 不适用。
+       */
+      (call, response) =>
+        call.url.includes('/copy/info')
+          ? envelope({
+              id: 'wrong-task-id',
+              name: 'fixture copy',
+              state: 1,
+              status: '',
+              progress: 0,
+              error: '',
+              start_time: null,
+              end_time: null,
+              total_bytes: 12,
+            })
+          : response;
+    await f.restart();
+    await terminal(f, old.runId);
+    expect(f.runs().get(old.runId).config.settings.retryMaxAttempts).toBe(3);
+    expect(
+      f.server.calls.filter((call) => call.url.includes('/copy/info')),
+    ).toHaveLength(3);
+  });
   /** 多个恢复tid先计额度；恢复中的取消与期限到达共用一次cancel。
    * @param 不适用。
    * @returns 验证完成。

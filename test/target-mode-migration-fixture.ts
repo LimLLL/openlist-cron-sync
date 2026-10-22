@@ -95,8 +95,9 @@ export function seedLegacyRun(
       }),
     ),
   }).job;
+  const { retryCount: _retryCount, ...jobWithoutRetryCount } = job;
   const historicalJob = {
-    ...job,
+    ...jobWithoutRetryCount,
     createMode: historicalMode,
     targets: job.targets.map(
       /** 生成旧数据库实际存储的 Target 形状。

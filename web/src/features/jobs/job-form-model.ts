@@ -111,6 +111,8 @@ export interface JobFormValues {
   allowEmptySource: boolean;
   /** 同步空目录。 */
   syncEmptyDirs: boolean;
+  /** 失败后的重试次数；空字符串继承进程默认值。 */
+  retryCount: string;
   /** 此 Job 所有 relay Target 的聚合上传字节每秒。 */
   relayBandwidthLimit: string;
   /** 超时秒数。 */
@@ -157,6 +159,7 @@ export function targetsFromJob(job: JobView): TargetInput[] {
 }
 
 /** 根据当前实例选择计算创建方式状态，不修改用户选值或保存位置相关的错误。
+ * 只有源与目标都已选择且为同一实例时，server_copy 才可选。
  * @param sourceInstanceId 当前源实例；未选择时为空字符串。
  * @param target 当前目标。
  * @returns server_copy 是否不可选，以及现有选择是否无效。
@@ -167,12 +170,37 @@ export function targetCreateModeState(
   target: Pick<TargetInput, 'instanceId' | 'createMode'>,
 ): { unavailable: boolean; invalid: boolean } {
   const unavailable =
-    sourceInstanceId !== '' &&
-    target.instanceId !== '' &&
+    sourceInstanceId === '' ||
+    target.instanceId === '' ||
     target.instanceId !== sourceInstanceId;
   return {
     unavailable,
     invalid: unavailable && target.createMode === 'server_copy',
+  };
+}
+
+/** 把目录选择器的结果写回对应端点，其余字段与目标顺序保持不变。
+ * @param values 当前表单值。
+ * @param endpoint 'source' 表示源，数字表示目标位置。
+ * @param path 服务端规范化后的目录路径。
+ * @param password 选择器中填写的路径密码。
+ * @returns 新表单值；目标位置已不存在时原样返回。
+ * @throws 不适用。
+ */
+export function applyBrowsedPath(
+  values: JobFormValues,
+  endpoint: 'source' | number,
+  path: string,
+  password: string,
+): JobFormValues {
+  if (endpoint === 'source')
+    return { ...values, sourcePath: path, sourcePassword: password };
+  if (!values.targets[endpoint]) return values;
+  return {
+    ...values,
+    targets: values.targets.map((target, position) =>
+      position === endpoint ? { ...target, path, password } : target,
+    ),
   };
 }
 
@@ -334,6 +362,10 @@ export function buildJobInput(values: JobFormValues) {
     },
     allowEmptySource: values.allowEmptySource,
     syncEmptyDirs: values.syncEmptyDirs,
+    retryCount:
+      values.retryCount === ''
+        ? null
+        : integer(values.retryCount, 'retryCount', 0, 9),
     relayBandwidthLimit: integer(values.relayBandwidthLimit, 'bandwidth'),
     timeoutSeconds: integer(values.timeoutSeconds, 'timeout', 60, 604800),
   };

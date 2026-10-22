@@ -98,10 +98,7 @@ export function InstanceForm({
     if (!(failure instanceof InstanceFormError)) return failure;
     if (failure.key === 'limit' && failure.limit)
       return new Error(
-        t('validation.limit', {
-          field: t(`limits.${failure.limit.field}`),
-          max: failure.limit.max,
-        }),
+        t('validation.limit', { field: t(`limits.${failure.limit.field}`) }),
       );
     return failure.key === 'limit'
       ? new Error(t('validation.invalid'))
@@ -235,12 +232,11 @@ export function InstanceForm({
               label={t(`limits.${field.key}`)}
               type="number"
               inputMode="numeric"
-              min={1}
-              max={field.max}
+              min={0}
               value={limits[field.key] ?? ''}
               onChange={(e) => setLimit(field.key, e.target.value)}
               placeholder={String(field.defaultValue)}
-              hint={t('form.limitHint', { value: field.defaultValue, max: field.max })}
+              hint={t('form.limitHint', { value: field.defaultValue })}
             />
           ))}
         </div>

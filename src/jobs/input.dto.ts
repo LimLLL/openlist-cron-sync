@@ -27,6 +27,8 @@ export class JobInputDto {
   @Allow() syncEmptyDirs?: unknown;
   /** 此 Job 所有 relay Target 的聚合上传 bytes/s。 */
   @Allow() relayBandwidthLimit?: unknown;
+  /** 失败后的重试次数；null 继承进程默认值。 */
+  @Allow() retryCount?: unknown;
   /** 扫描及规划总秒数。 */
   @Allow() timeoutSeconds?: unknown;
   /** 通知尚未接入，只能省略或为空。 */

@@ -23,7 +23,7 @@ cron使用直接依赖cron的CronJob，由@nestjs/schedule的SchedulerRegistry�
 
 1. Run执行位：含扫描及执行，恢复中的Run只保留路径占用，不占新Run执行位。
 2. 路径占用：真实Run的source只读、targets写；dry-run全部endpoint只读；read/read可并行，write/write和write/read的相等/祖先后代关系互斥。
-3. 每Instance API并发和请求速率；其中至少一个API位优先服务认证/轮询/取消，maxApiConcurrency=1时控制请求先于新提交。
+3. 每Instance API并发和请求速率；其中至少一个API位优先服务认证/轮询/取消，正数配额下控制请求先于新提交；maxApiConcurrency=0时不设实例并发上限。
 4. 每Instance outstanding task额度（仅server_copy）从提交预留到终态释放，不等于正在运行线程数。
 5. relay名额：源Instance下载连接与目标Instance上传session在文件开始前按instance id排序获取，chunk请求另受全局与每实例chunk并发约束，见[Relay](relay.md#资源)；失败/取消释放已取得名额。
 6. Job聚合带宽bucket只影响relay上传。

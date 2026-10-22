@@ -16,7 +16,7 @@ RunView/OperationView的error.code、stopReason、RunTargetView.blockReasons、S
 
 InstanceCreate={name:string,baseUrl:string,auth:AuthInput,limits?:InstanceLimits,downloadMode?:'d'|'p'}。
 AuthInput为判别联合：{mode:'token',secret:string}或{mode:'password',username:string,secret:string}。只有import可创建缺secret对象。
-InstanceLimits={maxApiConcurrency?:integer,apiRequestsPerSecond?:integer,maxOutstandingTasks?:integer,maxDownloadConnections?:integer,maxUploadSessions?:integer,maxChunkConcurrency?:integer}。
+InstanceLimits={maxApiConcurrency?:integer,apiRequestsPerSecond?:integer,maxOutstandingTasks?:integer,maxDownloadConnections?:integer,maxUploadSessions?:integer,maxChunkConcurrency?:integer}；各字段为0–JS安全整数，0表示该项实例级不限，省略表示保留或使用默认值。
 InstancePatch={name?:string,baseUrl?:string,auth?:AuthInput,limits?:InstanceLimits,downloadMode?:'d'|'p'}，至少一个字段；嵌套limits按字段合并。auth整体替换，不接受掩码或secret:null。
 InstanceView=Entity+{name,baseUrl,auth:{mode,username:string|null,hasSecret:boolean},limits:所有有效值,downloadMode,authState,authBlockReason:string|null,authBlockedUntil:Time|null,accountUsername:string|null,accountBasePath:string|null,accountRole:integer|null,accountPermissions:integer|null,lastTestAt:Time|null,openlistVersion:string|null,multipartEnabled:boolean|null,lastError:{code,message}|null,archivedAt:Time|null}。
 M1 中 AuthInput 的 username 仅 password 模式允许，token 模式提供它返回400；可选字段的 null 不等于省略。
@@ -32,9 +32,9 @@ EndpointInput={instanceId:Id,path:string,password?:string|null,refresh?:boolean}
 Filters={include?:string[],exclude?:string[],minSizeBytes?:Size|null,maxSizeBytes?:Size|null}。省略字段使用默认；完整View返回全部字段。
 DeleteLimits={enabled?:boolean,maxCount?:integer|null,maxPercent?:integer|null}。
 TargetInput=EndpointInput+{id?:Id,mode?:'incremental'|'mirror',createMode?:'relay'|'server_copy',deleteLimits?:DeleteLimits}。
-JobCreate={name:string,source:EndpointInput,targets:TargetInput[],enabled?:boolean,cron?:string|null,timezone?:string,filters?:Filters,allowEmptySource?:boolean,syncEmptyDirs?:boolean,relayBandwidthLimit?:integer,timeoutSeconds?:integer,notificationChannelIds?:Id[]}。
+JobCreate={name:string,source:EndpointInput,targets:TargetInput[],enabled?:boolean,cron?:string|null,timezone?:string,filters?:Filters,allowEmptySource?:boolean,syncEmptyDirs?:boolean,retryCount?:integer|null,relayBandwidthLimit?:integer,timeoutSeconds?:integer,notificationChannelIds?:Id[]}。
 JobPatch顶层字段任选且至少一项；source为EndpointInput各字段均可省略的补丁，filters按字段合并，合并后验证完整对象。targets数组决定完整目标集合：已有target用{id,...可选字段补丁}按字段合并，deleteLimits也按字段合并；新target不带id且必须提供instanceId/path。createMode省略时，已有目标按稳定id保留值，新目标默认relay；null和非法枚举拒绝。source与targets完整合并后校验，每个server_copy Target必须与source使用同一Instance ID（相同URL不等于同一Instance），错误定位targets[index].createMode。Job顶层createMode属于未知字段。JobCreate的targets禁止指定id。外Job或归档target id拒绝。删除target归档旧行，不能重用id。
-JobView=Entity+{name,source:EndpointView,targets:(EndpointView+{id,position,mode,createMode,deleteLimits:完整值})[],enabled,cron,timezone,filters:完整值,allowEmptySource,syncEmptyDirs,relayBandwidthLimit,timeoutSeconds,notificationChannelIds:Id[],archivedAt:Time|null}。
+JobView=Entity+{name,source:EndpointView,targets:(EndpointView+{id,position,mode,createMode,deleteLimits:完整值})[],enabled,cron,timezone,filters:完整值,allowEmptySource,syncEmptyDirs,retryCount:integer|null,relayBandwidthLimit,timeoutSeconds,notificationChannelIds:Id[],archivedAt:Time|null}。
 notificationChannelIds当前仅接受省略或[]，JobView固定返回[]，通知随M7接入。enabled控制动态cron，注册只在提交后更新。enabled=true要求所有实例/渠道secret齐全，endpoint身份已测试；不能通过enabled开启无法解析的路径。manual run也检查必要secret，但允许Job.enabled=false。
 
 ## Stats

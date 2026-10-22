@@ -252,6 +252,7 @@ export class JobsService {
       maxSizeBytes: job.filters.maxSizeBytes,
       allowEmptySource: job.allowEmptySource,
       syncEmptyDirs: job.syncEmptyDirs,
+      retryCount: job.retryCount,
       relayBandwidthLimit: job.relayBandwidthLimit,
       timeoutSeconds: job.timeoutSeconds,
       createdAt: Date.parse(job.createdAt),

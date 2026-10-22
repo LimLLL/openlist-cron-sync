@@ -157,7 +157,10 @@ export class TaskResources {
   private drain(): void {
     for (let index = 0; index < this.waiting.length;) {
       const entry = this.waiting[index];
-      if (this.count(entry.instance.id) >= entry.instance.maxOutstandingTasks) {
+      if (
+        entry.instance.maxOutstandingTasks !== 0 &&
+        this.count(entry.instance.id) >= entry.instance.maxOutstandingTasks
+      ) {
         index++;
         continue;
       }

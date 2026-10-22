@@ -39,8 +39,8 @@ describe('M6 task maintenance responsibility', () => {
    * @returns 原行ID和Run。
    * @throws Error 数据库失败。
    */
-  async function flagged(unknown: boolean, state: number) {
-    const run = await preview(f, f.copyJob());
+  async function flagged(unknown: boolean, state: number, job = f.copyJob()) {
+    const run = await preview(f, job);
     const id = plan(f, run.id)[0].id;
     f.app
       .get(DatabaseService)
@@ -64,6 +64,30 @@ describe('M6 task maintenance responsibility', () => {
     if (![2, 4, 7].includes(state)) f.app.get(TaskResources).hold(id, f.id);
     return { id, run };
   }
+  /** Detached maintenance deliberately uses the process-current retry budget, not a Run snapshot.
+   * @param 不适用。
+   * @returns 验证完成。
+   * @throws Error 断言失败。
+   */
+  it('uses process-current attempts for detached cleanup', async () => {
+    const { id } = await flagged(false, 2, f.copyJob({ retryCount: 2 }));
+    f.fault =
+      /** 让删除结果保持未知，观察维护使用环境默认的一次尝试。
+       * @param call 捕获请求。
+       * @param response 默认响应。
+       * @returns 故障或默认响应。
+       * @throws 不适用。
+       */
+      (call, response) =>
+        call.url.includes('/copy/delete_some')
+          ? envelope({ [id]: 'still-present' })
+          : response;
+    await f.app.get(RemoteTaskMaintenance).one(id);
+    expect(
+      f.server.calls.filter((call) => call.url.includes('/copy/delete_some')),
+    ).toHaveLength(1);
+    expect(record(id).remoteCleanupPending).toBe(false);
+  });
   /** 安全未知不可因网络错误清理，abandon只改resolution，下轮才可放弃housekeeping。
    * @param 不适用。
    * @returns 验证完成。

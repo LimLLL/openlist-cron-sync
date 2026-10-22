@@ -82,6 +82,37 @@ describe('M1 per-instance quota', /** 注册本组 M1 行为验收用例。
     );
     other();
   });
+  it('drains a large backlog at once after the limits become unlimited', /** 先在并发 1 下积压大量请求，再以 0/0 配额一次派发，防止逐个递归派发撑爆调用栈。
+   * @param 不适用。
+   * @returns 断言完成。
+   * @throws Error 断言失败。
+   */
+  async () => {
+    const quota = new ApiQuota();
+    const signal = new AbortController().signal;
+    const finite = {
+      id: 'backlog',
+      maxApiConcurrency: 1,
+      apiRequestsPerSecond: 1000,
+    };
+    const holder = await quota.acquire(finite, true, signal);
+    // 每个请求独立的取消信号，与真实调用一致；共用一个信号会让监听器登记本身变成平方级。
+    const backlog = Array.from({ length: 20_000 }, () =>
+      quota.acquire(finite, true, new AbortController().signal),
+    );
+    const unlimited = {
+      id: 'backlog',
+      maxApiConcurrency: 0,
+      apiRequestsPerSecond: 0,
+    };
+    const releases = await Promise.all([
+      ...backlog,
+      quota.acquire(unlimited, false, signal),
+    ]);
+    expect(releases).toHaveLength(20_001);
+    for (const release of releases) release();
+    holder();
+  });
   it('login, me, settings and admin browse share the same request rate', /** 记录上游实际收到请求的时间。
    * @param 不适用。
    * @returns undefined，使用默认上游响应。

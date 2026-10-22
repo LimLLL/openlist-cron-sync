@@ -10,6 +10,7 @@ import { Button } from '../../components/ui/button';
 import { ErrorState, LoadingState } from '../../components/states';
 import { useCreateJob, usePatchJob, useInstanceOptions } from './job-queries';
 import {
+  applyBrowsedPath,
   buildJobInput,
   emptyTarget,
   JobFormError,
@@ -22,6 +23,7 @@ import { AdvancedFields, BasicsFields, FilterFields, ScheduleFields, SourceField
 import type { UpdateField } from './job-form-sections';
 import { TargetsFields } from './job-target-fields';
 import type { JobView } from './job-contract';
+import { InstanceBrowseDialog } from '../instances/instance-browse-dialog';
 
 const FORM_ID = 'job-form';
 
@@ -46,6 +48,7 @@ function initialValues(existing?: JobView): JobFormValues {
     maxSizeBytes: existing?.filters.maxSizeBytes?.toString() ?? '',
     allowEmptySource: existing?.allowEmptySource ?? false,
     syncEmptyDirs: existing?.syncEmptyDirs ?? false,
+    retryCount: existing?.retryCount?.toString() ?? '',
     relayBandwidthLimit: existing?.relayBandwidthLimit?.toString() ?? '0',
     timeoutSeconds: existing?.timeoutSeconds?.toString() ?? '86400',
   };
@@ -88,6 +91,8 @@ export function JobForm({ existing }: { existing?: JobView }) {
   const mutation = isEdit ? patch : create;
   const [values, setValues] = useState<JobFormValues>(() => initialValues(existing));
   const [validationError, setValidationError] = useState<Error | null>(null);
+  // 目录选择器当前服务的端点：'source' 为源，数字为目标位置，null 为关闭。
+  const [browsing, setBrowsing] = useState<'source' | number | null>(null);
   const invalidTargetMode = values.targets.some(
     (target) => targetCreateModeState(values.sourceInstanceId, target).invalid,
   );
@@ -122,6 +127,14 @@ export function JobForm({ existing }: { existing?: JobView }) {
       ? new Error(jobValidationText(validationError.key, validationError.params, t))
       : validationError;
   const submitDisabled = mutation.isPending || !instances.data || invalidTargetMode;
+  // 选择器的实例、起始路径与密码都取自该端点在表单中的当前值。
+  const browseEndpoint =
+    browsing === 'source'
+      ? { instanceId: values.sourceInstanceId, path: values.sourcePath, password: values.sourcePassword }
+      : browsing === null
+        ? undefined
+        : values.targets[browsing];
+  const browseInstance = browseEndpoint && instanceList.find((item) => item.id === browseEndpoint.instanceId);
 
   return (
     <section>
@@ -162,12 +175,19 @@ export function JobForm({ existing }: { existing?: JobView }) {
 
       <form id={FORM_ID} onSubmit={handleSubmit} aria-label={t('form.formLabel')}>
         <BasicsFields values={values} update={update} />
-        <SourceFields values={values} update={update} instances={instanceList} isEdit={isEdit} />
+        <SourceFields
+          values={values}
+          update={update}
+          instances={instanceList}
+          isEdit={isEdit}
+          onBrowse={() => setBrowsing('source')}
+        />
         <TargetsFields
           sourceInstanceId={values.sourceInstanceId}
           targets={values.targets}
           instances={instanceList}
           onChange={(targets) => update('targets', targets)}
+          onBrowse={(index) => setBrowsing(index)}
         />
         <ScheduleFields values={values} update={update} />
         <FilterFields values={values} update={update} />
@@ -189,6 +209,22 @@ export function JobForm({ existing }: { existing?: JobView }) {
           </div>
         </div>
       </form>
+      {browsing !== null && browseEndpoint && browseInstance && (
+        <InstanceBrowseDialog
+          instanceId={browseInstance.id}
+          instanceName={browseInstance.name}
+          open
+          onOpenChange={(open) => {
+            if (!open) setBrowsing(null);
+          }}
+          initialPath={browseEndpoint.path || '/'}
+          initialPassword={browseEndpoint.password}
+          onSelect={(path, password) => {
+            setValues((previous) => applyBrowsedPath(previous, browsing, path, password));
+            setBrowsing(null);
+          }}
+        />
+      )}
     </section>
   );
 }

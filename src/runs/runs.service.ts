@@ -95,7 +95,13 @@ export class RunsService {
           snapshotVersion: 1,
           job,
           instances: snapshots,
-          settings: { ...this.config.execution },
+          settings: {
+            ...this.config.execution,
+            retryMaxAttempts:
+              job.retryCount === null
+                ? this.config.execution.retryMaxAttempts
+                : job.retryCount + 1,
+          },
         };
         const id = randomUUID();
         const now = Date.now();

@@ -189,6 +189,11 @@ export function AdvancedSection({ job, index }: { job: JobView; index: string })
             value: job.relayBandwidthLimit === 0 ? t('detail.unlimited') : t('detail.bandwidthValue', { value: formatBytes(job.relayBandwidthLimit) }),
             mono: job.relayBandwidthLimit !== 0,
           },
+          {
+            label: t('detail.retryCount'),
+            value: job.retryCount === null ? t('detail.retryInherited') : String(job.retryCount),
+            mono: job.retryCount !== null,
+          },
           { label: t('detail.timeout'), value: formatDuration(job.timeoutSeconds), mono: true },
           { label: t('detail.sourcePassword'), value: job.source.hasPassword ? t('detail.passwordSet') : t('detail.passwordNone') },
         ]}

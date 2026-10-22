@@ -5,6 +5,7 @@ import {
   expectString,
   expectNumber,
   expectBoolean,
+  nullableNumber,
   stringArray,
 } from '../../lib/parsers';
 import type { Page } from '../../lib/parsers';
@@ -79,6 +80,8 @@ export interface JobView {
   allowEmptySource: boolean;
   /** 是否同步目录结构。 */
   syncEmptyDirs: boolean;
+  /** 失败后的重试次数；null 表示继承进程默认值。 */
+  retryCount: number | null;
   /** 此 Job 所有 relay Target 的聚合上传 bytes/s。 */
   relayBandwidthLimit: number;
   /** 超时秒数。 */
@@ -228,6 +231,7 @@ export function parseJob(value: unknown): JobView {
     filters: parseFilters(value.filters),
     allowEmptySource: expectBoolean(value.allowEmptySource, 'allowEmptySource'),
     syncEmptyDirs: expectBoolean(value.syncEmptyDirs, 'syncEmptyDirs'),
+    retryCount: nullableNumber(value.retryCount, 'retryCount'),
     relayBandwidthLimit: expectNumber(
       value.relayBandwidthLimit,
       'relayBandwidthLimit',

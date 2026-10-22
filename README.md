@@ -104,7 +104,7 @@ curl -X POST http://localhost:3000/api/v1/auth/login \
 | `ENCRYPTION_MASTER_KEY`          | 自动生成         | 凭据加密主密钥：32 字节，标准 base64 编码                 |
 | `OPENLIST_CONNECT_TIMEOUT_MS`    | `10000`          | 连接 OpenList 的建连超时，单位为毫秒                      |
 | `OPENLIST_API_TIMEOUT_MS`        | `30000`          | 一次 OpenList 管理请求（含读取重试）的期限，单位为毫秒    |
-| `RETRY_MAX_ATTEMPTS`             | `3`              | 读取请求遇到网络错误、5xx 或限流时的总尝试次数（含首次）  |
+| `RETRY_MAX_ATTEMPTS`             | `3`              | 失败时的总尝试次数（含首次）；任务可单独设置              |
 | `RETRY_BASE_MS` / `RETRY_MAX_MS` | `1000` / `30000` | 读取重试的指数退避基数与上限，单位为毫秒                  |
 | `OPENLIST_AUTH_COOLDOWN_SECONDS` | `600`            | OpenList 登录被限流（429）后暂停登录的时长，单位为秒      |
 | `OPENLIST_MAX_JSON_BYTES`        | `33554432`       | 单个 OpenList 响应允许的最大字节数                        |
@@ -112,6 +112,8 @@ curl -X POST http://localhost:3000/api/v1/auth/login \
 
 - `ADMIN_USERNAME` 和 `ADMIN_PASSWORD` 只在首次启动、数据库中还没有管理员时使用；之后以数据库中保存的账号为准。
 - 配置值不合法时，服务拒绝启动并报告是哪个字段，但不会打印该字段的值。
+- 实例的六项资源配额都可以填 `0`，表示不限；中转仍受进程级总上限 `RELAY_DOWNLOAD_WORKERS` / `RELAY_UPLOAD_WORKERS` 约束。
+- 任务可设置“失败后的重试次数”（0–9），留空时使用 `RETRY_MAX_ATTEMPTS`；运行开始时固定有效次数，退避间隔仍由全局配置决定。
 - 完整说明见[配置参考](docs/reference/configuration.md)。
 
 ## 数据与备份

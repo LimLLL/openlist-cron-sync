@@ -103,62 +103,73 @@ export class ApiQuota {
   private drain(pool: Pool): void {
     if (pool.timer) clearTimeout(pool.timer);
     pool.timer = undefined;
-    const controlIndex = pool.queue.findIndex(isControl);
-    const index = controlIndex < 0 ? 0 : controlIndex;
-    const waiter = pool.queue[index];
-    if (!waiter) {
-      if (pool.active === 0) {
-        const remaining = pool.nextAt - performance.now();
-        if (remaining <= 0) this.pools.delete(pool.limits.id);
-        else
-          pool.timer = setTimeout(
-            /** 速率窗口结束后释放空闲实例，不让短时重建绕过限速。
-             * @param 不适用。
-             * @returns 不适用。
-             * @throws 不适用。
-             */
-            () => this.drain(pool),
-            remaining,
-          ).unref();
+    for (;;) {
+      const controlIndex = pool.queue.findIndex(isControl);
+      const index = controlIndex < 0 ? 0 : controlIndex;
+      const waiter = pool.queue[index];
+      if (!waiter) {
+        if (pool.active === 0) {
+          const remaining =
+            pool.limits.apiRequestsPerSecond === 0
+              ? 0
+              : pool.nextAt - performance.now();
+          if (remaining <= 0) this.pools.delete(pool.limits.id);
+          else
+            pool.timer = setTimeout(
+              /** 速率窗口结束后释放空闲实例，不让短时重建绕过限速。
+               * @param 不适用。
+               * @returns 不适用。
+               * @throws 不适用。
+               */
+              () => this.drain(pool),
+              remaining,
+            ).unref();
+        }
+        return;
       }
-      return;
-    }
-    const capacity = waiter.control
-      ? pool.limits.maxApiConcurrency
-      : Math.max(1, pool.limits.maxApiConcurrency - 1);
-    if (pool.active >= capacity) return;
-    const delay = pool.nextAt - performance.now();
-    if (delay > 0) {
-      pool.timer = setTimeout(
-        /** 到达速率窗口后重新派发。
+      const capacity = waiter.control
+        ? pool.limits.maxApiConcurrency
+        : Math.max(1, pool.limits.maxApiConcurrency - 1);
+      if (pool.limits.maxApiConcurrency !== 0 && pool.active >= capacity)
+        return;
+      const delay =
+        pool.limits.apiRequestsPerSecond === 0
+          ? 0
+          : pool.nextAt - performance.now();
+      if (delay > 0) {
+        pool.timer = setTimeout(
+          /** 到达速率窗口后重新派发。
+           * @param 不适用。
+           * @returns 不适用。
+           * @throws 不适用。
+           */
+          () => this.drain(pool),
+          delay,
+        );
+        return;
+      }
+      pool.queue.splice(index, 1);
+      waiter.cleanup();
+      pool.active++;
+      pool.nextAt =
+        pool.limits.apiRequestsPerSecond === 0
+          ? 0
+          : performance.now() + 1000 / pool.limits.apiRequestsPerSecond;
+      let released = false;
+      waiter.resolve(
+        /** 释放一次持有的并发位。
          * @param 不适用。
          * @returns 不适用。
          * @throws 不适用。
          */
-        () => this.drain(pool),
-        delay,
+        () => {
+          if (released) return;
+          released = true;
+          pool.active--;
+          this.drain(pool);
+        },
       );
-      return;
     }
-    pool.queue.splice(index, 1);
-    waiter.cleanup();
-    pool.active++;
-    pool.nextAt = performance.now() + 1000 / pool.limits.apiRequestsPerSecond;
-    let released = false;
-    waiter.resolve(
-      /** 释放一次持有的并发位。
-       * @param 不适用。
-       * @returns 不适用。
-       * @throws 不适用。
-       */
-      () => {
-        if (released) return;
-        released = true;
-        pool.active--;
-        this.drain(pool);
-      },
-    );
-    this.drain(pool);
   }
 }
 /** 判断控制队列项。

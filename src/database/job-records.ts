@@ -87,6 +87,7 @@ export function jobView(row: JobRecord, targets: TargetRecord[]): Job {
     },
     allowEmptySource: row.allowEmptySource,
     syncEmptyDirs: row.syncEmptyDirs,
+    retryCount: row.retryCount,
     relayBandwidthLimit: row.relayBandwidthLimit,
     timeoutSeconds: row.timeoutSeconds,
     notificationChannelIds: [],

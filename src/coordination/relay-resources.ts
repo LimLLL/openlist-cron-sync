@@ -52,6 +52,10 @@ export class RelayResources {
         : kind === 'session'
           ? instance.maxUploadSessions
           : instance.maxChunkConcurrency;
+    if (capacity === 0) {
+      signal.throwIfAborted();
+      return () => undefined;
+    }
     let pool = this.pools.get(key);
     if (!pool) {
       pool = { permits: new Permits(capacity), references: 0 };

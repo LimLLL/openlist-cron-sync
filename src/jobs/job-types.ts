@@ -67,6 +67,8 @@ export interface Job {
   syncEmptyDirs: boolean;
   /** 此 Job 所有 relay Target 的聚合上传 bytes/s；0 不限。 */
   relayBandwidthLimit: number;
+  /** 失败后的重试次数；null 继承进程默认尝试次数。 */
+  retryCount: number | null;
   /** 从扫描开始计的秒数。 */
   timeoutSeconds: number;
   /** 通知随M7接入，当前固定为空。 */

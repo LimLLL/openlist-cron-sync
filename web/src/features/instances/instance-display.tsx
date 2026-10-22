@@ -42,16 +42,15 @@ export function shortVersion(version: string | null): string | null {
   return /^v?\d+(\.\d+)*/.exec(version.trim())?.[0] ?? version;
 }
 
-/** 配额字段及其后端默认值与上限，顺序即展示顺序。 */
+/** 配额字段及其后端默认值，顺序即展示顺序；取值为 0（不限）或正整数，无上限。 */
 export const LIMIT_FIELDS: ReadonlyArray<{
   key: keyof InstanceLimits;
   defaultValue: number;
-  max: number;
 }> = [
-  { key: 'maxApiConcurrency', defaultValue: 4, max: 32 },
-  { key: 'apiRequestsPerSecond', defaultValue: 5, max: 100 },
-  { key: 'maxOutstandingTasks', defaultValue: 4, max: 64 },
-  { key: 'maxDownloadConnections', defaultValue: 2, max: 16 },
-  { key: 'maxUploadSessions', defaultValue: 2, max: 16 },
-  { key: 'maxChunkConcurrency', defaultValue: 4, max: 32 },
+  { key: 'maxApiConcurrency', defaultValue: 4 },
+  { key: 'apiRequestsPerSecond', defaultValue: 5 },
+  { key: 'maxOutstandingTasks', defaultValue: 4 },
+  { key: 'maxDownloadConnections', defaultValue: 2 },
+  { key: 'maxUploadSessions', defaultValue: 2 },
+  { key: 'maxChunkConcurrency', defaultValue: 4 },
 ];

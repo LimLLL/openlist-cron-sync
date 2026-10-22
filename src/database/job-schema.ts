@@ -48,6 +48,7 @@ export const jobs = sqliteTable(
     syncEmptyDirs: integer('sync_empty_dirs', { mode: 'boolean' })
       .notNull()
       .default(false),
+    retryCount: integer('retry_count'),
     relayBandwidthLimit: integer('relay_bandwidth_limit').notNull().default(0),
     timeoutSeconds: integer('timeout_seconds').notNull().default(86400),
     archivedAt: integer('archived_at'),
@@ -78,6 +79,10 @@ export const jobs = sqliteTable(
     check(
       'jobs_limits',
       sql`${t.timeoutSeconds} BETWEEN 60 AND 604800 AND ${t.relayBandwidthLimit} BETWEEN 0 AND 9007199254740991`,
+    ),
+    check(
+      'jobs_retry_count',
+      sql`${t.retryCount} IS NULL OR ${t.retryCount} BETWEEN 0 AND 9`,
     ),
     check(
       'jobs_times',

@@ -1,8 +1,10 @@
-// 任务模块内共享的小部件：实例名查询、定时状态标签、开关行与等宽标签。
+// 任务模块内共享的小部件：实例名查询、定时状态标签、开关行、等宽标签与路径浏览按钮。
 import { useCallback, useId, useMemo } from 'react';
 import type { ReactNode } from 'react';
+import { FolderSearch } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Badge } from '../../components/ui/badge';
+import { Button } from '../../components/ui/button';
 import { cn } from '../../lib/utils';
 import { useInstanceOptions } from './job-queries';
 import type { JobView } from './job-contract';
@@ -101,5 +103,20 @@ export function MonoChip({ children }: { children: ReactNode }) {
     <span className="inline-flex max-w-full items-center rounded-full border border-hairline bg-white/[0.025] px-2.5 py-1 font-mono text-[12px] break-all">
       {children}
     </span>
+  );
+}
+
+/** 路径输入框右侧的“浏览”按钮，源与目标共用；未选实例时禁用。
+ * @param props disabled 是否禁用；onClick 打开目录选择器。
+ * @returns 按钮元素。
+ * @throws 不适用。
+ */
+export function BrowseButton({ disabled, onClick }: { disabled: boolean; onClick: () => void }) {
+  const { t } = useTranslation('jobs');
+  return (
+    <Button variant="secondary" className="min-h-12 shrink-0" onClick={onClick} disabled={disabled}>
+      <FolderSearch size={15} aria-hidden="true" />
+      {t('form.browse')}
+    </Button>
   );
 }

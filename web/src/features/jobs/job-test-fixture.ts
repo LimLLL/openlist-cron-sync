@@ -50,6 +50,7 @@ export function mixedJobFixture(): JobView {
     },
     allowEmptySource: false,
     syncEmptyDirs: false,
+    retryCount: null,
     relayBandwidthLimit: 12,
     timeoutSeconds: 86400,
     notificationChannelIds: [],

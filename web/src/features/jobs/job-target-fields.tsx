@@ -9,7 +9,7 @@ import { Segmented } from '../../components/ui/segmented';
 import { Button } from '../../components/ui/button';
 import { cn } from '../../lib/utils';
 import { emptyTarget, targetCreateModeState } from './job-form-model';
-import { SwitchRow } from './job-ui';
+import { BrowseButton, SwitchRow } from './job-ui';
 import type { Instance } from '../instances/instance-contract';
 import type { TargetInput } from './job-form-model';
 
@@ -30,6 +30,8 @@ interface TargetBlockProps {
   canRemove: boolean;
   /** 更新字段。 */
   onChange: <K extends keyof TargetInput>(field: K, value: TargetInput[K]) => void;
+  /** 打开此目标的目录选择器。 */
+  onBrowse: () => void;
   /** 移除此目标。 */
   onRemove: () => void;
 }
@@ -39,7 +41,7 @@ interface TargetBlockProps {
  * @returns 目标子块。
  * @throws 不适用。
  */
-function TargetBlock({ sourceInstanceId, target, index, instances, canRemove, onChange, onRemove }: TargetBlockProps) {
+function TargetBlock({ sourceInstanceId, target, index, instances, canRemove, onChange, onBrowse, onRemove }: TargetBlockProps) {
   const { t } = useTranslation('jobs');
   const label = t('form.target', { index: index + 1 });
   const createMode = targetCreateModeState(sourceInstanceId, target);
@@ -89,6 +91,7 @@ function TargetBlock({ sourceInstanceId, target, index, instances, canRemove, on
           onChange={(event) => onChange('path', event.target.value)}
           required
           placeholder="/"
+          action={<BrowseButton disabled={!target.instanceId} onClick={onBrowse} />}
         />
         <div className="space-y-2">
           <p className="field-label">{t('form.mode')}</p>
@@ -121,7 +124,7 @@ function TargetBlock({ sourceInstanceId, target, index, instances, canRemove, on
             role={createMode.invalid ? 'alert' : undefined}
             className={cn('text-xs leading-5', createMode.invalid ? 'text-danger' : 'text-muted-foreground')}
           >
-            {createMode.unavailable ? t('validation.serverCopySameInstance') : t('form.createModeHint')}
+            {createMode.invalid ? t('validation.serverCopySameInstance') : t('form.createModeHint')}
           </p>
         </div>
         <InputField
@@ -173,7 +176,7 @@ function TargetBlock({ sourceInstanceId, target, index, instances, canRemove, on
 }
 
 /** 渲染目标分节：编号子块列表与“添加目标”。
- * @param props sourceInstanceId 当前源实例；targets 当前目标集合；instances 可选实例；onChange 整体替换目标集合。
+ * @param props sourceInstanceId 当前源实例；targets 当前目标集合；instances 可选实例；onChange 整体替换目标集合；onBrowse 按位置打开目录选择器。
  * @returns 分节。
  * @throws 不适用。
  */
@@ -182,11 +185,13 @@ export function TargetsFields({
   targets,
   instances,
   onChange,
+  onBrowse,
 }: {
   sourceInstanceId: string;
   targets: TargetInput[];
   instances: Instance[];
   onChange: (targets: TargetInput[]) => void;
+  onBrowse: (index: number) => void;
 }) {
   const { t } = useTranslation('jobs');
   return (
@@ -208,6 +213,7 @@ export function TargetsFields({
                 index={index}
                 instances={instances}
                 canRemove={targets.length > 1}
+                onBrowse={() => onBrowse(index)}
                 onChange={(field, value) =>
                   onChange(targets.map((item, position) => (position === index ? { ...item, [field]: value } : item)))
                 }

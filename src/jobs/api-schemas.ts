@@ -98,6 +98,14 @@ const jobFields = {
   filters: objectSchema(filterFields, []),
   allowEmptySource: { type: 'boolean', default: false } as SchemaObject,
   syncEmptyDirs: { type: 'boolean', default: false } as SchemaObject,
+  retryCount: {
+    type: 'integer',
+    minimum: 0,
+    maximum: 9,
+    nullable: true,
+    default: null,
+    description: '失败后的重试次数；null 继承 RETRY_MAX_ATTEMPTS',
+  } as SchemaObject,
   relayBandwidthLimit: {
     ...sizeSchema,
     default: 0,

@@ -196,7 +196,11 @@ export function InstanceDetailView({
                 label: t(`limits.${field.key}`),
                 value: (
                   <span className="font-display text-3xl font-medium tracking-tight">
-                    <CountUp value={instance.limits[field.key]} />
+                    {instance.limits[field.key] === 0 ? (
+                      t('detail.unlimited')
+                    ) : (
+                      <CountUp value={instance.limits[field.key]} />
+                    )}
                   </span>
                 ),
               })),

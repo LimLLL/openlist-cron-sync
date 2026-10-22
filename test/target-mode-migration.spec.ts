@@ -6,6 +6,7 @@ import { eq, sql } from 'drizzle-orm';
 import { AppConfig } from '../src/configuration/app-config.js';
 import { DatabaseService } from '../src/database/database.service.js';
 import { jobTargets, jobs } from '../src/database/job-schema.js';
+import { instances } from '../src/database/schema.js';
 import { runs, runTargets } from '../src/database/run-schema.js';
 import { temporaryDirectory, environmentFor } from './helpers.js';
 import type { TestDirectory } from './helpers.js';
@@ -87,7 +88,11 @@ describe('per-Target create mode migration', () => {
       old.close();
       service.onModuleInit();
       for (const sample of samples) {
-        const { createMode, ...historicalJob } = sample.snapshot.job;
+        const {
+          createMode,
+          retryCount: _retryCount,
+          ...historicalJob
+        } = sample.snapshot.job;
         const expectedTargets = historicalJob.targets.map(
           /** 只为历史目标增加其 Run 的原始创建方式。
            * @param target 原目标。
@@ -103,7 +108,7 @@ describe('per-Target create mode migration', () => {
           .get();
         expect(run?.config).toEqual({
           ...sample.snapshot,
-          job: { ...historicalJob, targets: expectedTargets },
+          job: { ...historicalJob, retryCount: null, targets: expectedTargets },
         });
         expect(run).toMatchObject({
           createdAt: 1,
@@ -153,6 +158,60 @@ describe('per-Target create mode migration', () => {
       expect(service.db.get(sql`PRAGMA foreign_keys`)).toEqual({
         foreign_keys: 1,
       });
+      expect(
+        service.db
+          .select()
+          .from(instances)
+          .where(eq(instances.id, samples[0].snapshot.job.source.instanceId))
+          .get(),
+      ).toMatchObject({
+        secretEnc: 'instance-ciphertext',
+        baseUrl: 'http://fixture',
+      });
+      expect(
+        service.db.all(
+          sql`SELECT name FROM pragma_index_list('instances') ORDER BY name`,
+        ),
+      ).toEqual([
+        { name: 'instances_archive_created_id' },
+        { name: 'sqlite_autoindex_instances_1' },
+      ]);
+      expect(
+        service.db.all(
+          sql`SELECT name FROM pragma_index_list('jobs') ORDER BY name`,
+        ),
+      ).toEqual([
+        { name: 'jobs_enabled_archive' },
+        { name: 'jobs_source' },
+        { name: 'sqlite_autoindex_jobs_1' },
+      ]);
+      const instanceId = service.db
+        .select({ id: instances.id })
+        .from(instances)
+        .get()?.id;
+      if (!instanceId) throw new Error('Missing migrated instance');
+      service.db
+        .update(instances)
+        .set({
+          maxApiConcurrency: 0,
+          apiRequestsPerSecond: Number.MAX_SAFE_INTEGER,
+          maxOutstandingTasks: 0,
+          maxDownloadConnections: 0,
+          maxUploadSessions: 0,
+          maxChunkConcurrency: 0,
+        })
+        .where(eq(instances.id, instanceId))
+        .run();
+      expect(
+        service.db
+          .select()
+          .from(instances)
+          .where(eq(instances.id, instanceId))
+          .get(),
+      ).toMatchObject({
+        maxApiConcurrency: 0,
+        apiRequestsPerSecond: Number.MAX_SAFE_INTEGER,
+      });
       expect(() =>
         service.db.run(sql`UPDATE job_targets SET instance_id = 'missing'`),
       ).toThrow();
@@ -178,6 +237,7 @@ describe('per-Target create mode migration', () => {
       .where(eq(runs.id, sample.runId))
       .get();
     expect(run?.config.job).not.toHaveProperty('createMode');
+    expect(run?.config.job.retryCount).toBeNull();
     expect(run?.config.job.targets).toEqual(
       sample.snapshot.job.targets.map(
         /** 仅转换剩余的完整历史配置，不重建被保留策略删除的子记录。
@@ -206,6 +266,7 @@ describe('per-Target create mode migration', () => {
     "UPDATE runs SET run_config_json = json_remove(run_config_json, '$.job.targets[0].path')",
     "UPDATE run_targets SET target_snapshot_json = json_remove(target_snapshot_json, '$.target.deleteLimits')",
     "UPDATE runs SET run_config_json = json_set(run_config_json, '$.job.targets[0].createMode', 'relay')",
+    "UPDATE runs SET run_config_json = json_set(run_config_json, '$.job.retryCount', 2)",
     "UPDATE run_targets SET target_snapshot_json = json_remove(target_snapshot_json, '$.target')",
     "UPDATE run_targets SET target_snapshot_json = json_set(target_snapshot_json, '$.target.id', 'wrong')",
     "UPDATE job_targets SET instance_id = 'missing'",

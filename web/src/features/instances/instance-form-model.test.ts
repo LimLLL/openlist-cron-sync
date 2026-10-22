@@ -87,6 +87,44 @@ describe('instance editing', () => {
       ),
     ).toThrow('limit');
   });
+  it('accepts zero as unlimited and resets a cleared edit field to its default', () => {
+    expect(
+      buildInstanceInput(
+        { ...fixture(), limits: { ...fixture().limits, maxApiConcurrency: 0 } },
+        existing,
+      ).limits,
+    ).toEqual({ maxApiConcurrency: 0 });
+    const edited = {
+      ...existing,
+      limits: { ...existing.limits, maxApiConcurrency: 8 },
+    };
+    expect(
+      buildInstanceInput(
+        {
+          ...fixture(),
+          limits: { ...fixture().limits, maxApiConcurrency: undefined },
+        },
+        edited,
+      ).limits,
+    ).toEqual({ maxApiConcurrency: 4 });
+  });
+  it('treats clearing an already-default field as no change and rejects negatives', () => {
+    expect(() =>
+      buildInstanceInput(
+        {
+          ...fixture(),
+          limits: { ...fixture().limits, maxApiConcurrency: undefined },
+        },
+        existing,
+      ),
+    ).toThrow('noChanges');
+    expect(() =>
+      buildInstanceInput(
+        { ...fixture(), limits: { ...fixture().limits, maxApiConcurrency: -1 } },
+        existing,
+      ),
+    ).toThrow('limit');
+  });
   it('honours optional secret fields while keeping login passwords required', () => {
     expect(
       renderToStaticMarkup(

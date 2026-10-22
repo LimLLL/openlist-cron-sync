@@ -1,6 +1,7 @@
 // 验证 Job 表单请求语义，重点覆盖 PATCH 的空阈值和数值边界。
 import { describe, expect, it } from 'vitest';
 import {
+  applyBrowsedPath,
   buildJobInput,
   emptyTarget,
   targetsFromJob,
@@ -36,6 +37,7 @@ function fixture(): JobFormValues {
     maxSizeBytes: '',
     allowEmptySource: false,
     syncEmptyDirs: false,
+    retryCount: '',
     relayBandwidthLimit: '0',
     timeoutSeconds: '86400',
   };
@@ -86,13 +88,13 @@ describe('job form payload', () => {
       targetCreateModeState(job.source.instanceId, targets[0]).invalid,
     ).toBe(true);
     expect(targetCreateModeState('', targets[0])).toEqual({
-      unavailable: false,
-      invalid: false,
+      unavailable: true,
+      invalid: true,
     });
     targets[0].instanceId = '';
     expect(
       targetCreateModeState(job.source.instanceId, targets[0]).invalid,
-    ).toBe(false);
+    ).toBe(true);
   });
   it('clears a threshold with null while preserving target identity and passwords', () => {
     const values = fixture();
@@ -118,6 +120,25 @@ describe('job form payload', () => {
     expect(() => buildJobInput(values)).toThrow('Delete count');
     values.targets[0].maxCount = '1.5';
     expect(() => buildJobInput(values)).toThrow('Delete count');
+  });
+  it('serializes retry count as retries after failure', () => {
+    const values = fixture();
+    values.retryCount = '0';
+    expect(buildJobInput(values).retryCount).toBe(0);
+    values.retryCount = '';
+    expect(buildJobInput(values).retryCount).toBeNull();
+    values.retryCount = '10';
+    expect(() => buildJobInput(values)).toThrow('Retries after failure');
+  });
+  it('writes a browsed path and password back to the chosen endpoint only', () => {
+    const values = fixture();
+    values.targets = [emptyTarget(), emptyTarget()];
+    const source = applyBrowsedPath(values, 'source', '/media', 'secret');
+    expect(source).toMatchObject({ sourcePath: '/media', sourcePassword: 'secret' });
+    expect(source.targets).toBe(values.targets);
+    const target = applyBrowsedPath(values, 1, '/backup', '');
+    expect(target.targets.map((item) => item.path)).toEqual(['/', '/backup']);
+    expect(applyBrowsedPath(values, 5, '/gone', '')).toBe(values);
   });
   it('requires an effective threshold when deletion protection is enabled', () => {
     const values = fixture();

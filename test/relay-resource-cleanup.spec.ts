@@ -2,6 +2,7 @@
 import { randomUUID } from 'node:crypto';
 import { AppConfig } from '../src/configuration/app-config.js';
 import { RelayResources } from '../src/coordination/relay-resources.js';
+import { InstancesService } from '../src/instances/instances.service.js';
 import { RelayService } from '../src/relay/relay.service.js';
 import type { RelayInput, PreparedTransfer } from '../src/relay/relay-types.js';
 import { RelayError } from '../src/relay/errors.js';
@@ -66,6 +67,24 @@ describe('relay failure cleanup', () => {
    * @throws 不适用。
    */
   function progress(_downloaded: number, _transferred: number): void {}
+  /** 每实例资源为零时跳过本地permit，但仍返回幂等释放函数。 */
+  it('bypasses zero per-instance relay permits', async () => {
+    f.app.get(InstancesService).patch(f.id, {
+      limits: {
+        maxDownloadConnections: 0,
+        maxUploadSessions: 0,
+        maxChunkConcurrency: 0,
+      },
+    });
+    const resources = f.app.get(RelayResources);
+    const signal = new AbortController().signal;
+    const releases = await Promise.all([
+      resources.acquire(f.record(), 'download', signal),
+      resources.acquire(f.record(), 'session', signal),
+      resources.acquire(f.record(), 'chunk', signal),
+    ]);
+    for (const release of releases) release();
+  });
   /** 在预留已成功、worker尚未取得时取消，下一文件仍可使用全部容量。
    * @param 不适用。
    * @returns 容量回收验证。
