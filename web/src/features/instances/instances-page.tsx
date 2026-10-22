@@ -13,7 +13,11 @@ import { usePageParams } from '../../lib/hooks';
 import { formatRelative, formatTimeFull } from '../../lib/format';
 import { useErrorText } from '../../i18n/error-text';
 import { useInstances } from './instance-queries';
-import { instanceStatus, InstanceStatusBadge, shortVersion } from './instance-display';
+import {
+  instanceStatus,
+  InstanceStatusBadge,
+  shortVersion,
+} from './instance-display';
 import type { Instance } from './instance-contract';
 
 /** 渲染新建实例按钮；同一元素同时用于顶栏和空状态。
@@ -48,14 +52,23 @@ function StatStrip({ items, total }: { items: Instance[]; total: number }) {
     ...(complete
       ? [
           { label: t('list.stats.ready'), value: ready, tone: 'text-accent' },
-          { label: t('list.stats.attention'), value: total - ready, tone: total - ready > 0 ? 'text-signal' : 'text-muted-foreground' },
+          {
+            label: t('list.stats.attention'),
+            value: total - ready,
+            tone: total - ready > 0 ? 'text-signal' : 'text-muted-foreground',
+          },
         ]
       : []),
   ];
   return (
     <dl className="mb-12 grid grid-cols-3 border-y border-hairline">
       {stats.map((stat, position) => (
-        <div key={stat.label} className={position > 0 ? 'border-l border-hairline py-6 pl-6' : 'py-6'}>
+        <div
+          key={stat.label}
+          className={
+            position > 0 ? 'border-l border-hairline py-6 pl-6' : 'py-6'
+          }
+        >
           <dt className="eyebrow">{stat.label}</dt>
           <dd className={`stat-figure mt-3 ${stat.tone}`}>
             <CountUp value={stat.value} />
@@ -71,7 +84,13 @@ function StatStrip({ items, total }: { items: Instance[]; total: number }) {
  * @returns 编号行。
  * @throws 不适用。
  */
-function InstanceRow({ instance, index }: { instance: Instance; index: number }) {
+function InstanceRow({
+  instance,
+  index,
+}: {
+  instance: Instance;
+  index: number;
+}) {
   const { t } = useTranslation('instances');
   const errorText = useErrorText();
   return (
@@ -97,7 +116,9 @@ function InstanceRow({ instance, index }: { instance: Instance; index: number })
           : `${t('form.modePassword')} · ${instance.auth.username ?? ''}`,
         shortVersion(instance.openlistVersion) ?? '—',
         <span key="tested" title={formatTimeFull(instance.lastTestAt)}>
-          {instance.lastTestAt ? formatRelative(instance.lastTestAt) : t('list.neverTested')}
+          {instance.lastTestAt
+            ? formatRelative(instance.lastTestAt)
+            : t('list.neverTested')}
         </span>,
       ]}
       status={<InstanceStatusBadge instance={instance} />}
@@ -157,7 +178,11 @@ export function InstancesPage() {
           <StatStrip items={data.items} total={data.total} />
           <IndexHead
             title={t('list.columns.name')}
-            cells={[t('list.columns.auth'), t('list.columns.version'), t('list.columns.tested')]}
+            cells={[
+              t('list.columns.auth'),
+              t('list.columns.version'),
+              t('list.columns.tested'),
+            ]}
             status={t('list.columns.status')}
           />
           <IndexList>

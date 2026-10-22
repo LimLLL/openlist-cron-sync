@@ -134,7 +134,10 @@ describe('job form payload', () => {
     const values = fixture();
     values.targets = [emptyTarget(), emptyTarget()];
     const source = applyBrowsedPath(values, 'source', '/media', 'secret');
-    expect(source).toMatchObject({ sourcePath: '/media', sourcePassword: 'secret' });
+    expect(source).toMatchObject({
+      sourcePath: '/media',
+      sourcePassword: 'secret',
+    });
     expect(source.targets).toBe(values.targets);
     const target = applyBrowsedPath(values, 1, '/backup', '');
     expect(target.targets.map((item) => item.path)).toEqual(['/', '/backup']);

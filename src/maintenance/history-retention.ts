@@ -70,8 +70,7 @@ export class HistoryRetention {
           try {
             await this.remove([...group.members], signal);
           } catch (error) {
-            if (!foreignKeyRestriction(error))
-              throw error;
+            if (!foreignKeyRestriction(error)) throw error;
             this.logger.warn('History group retained after FK restriction', {
               runId: row.id,
               ...errorTraits(error),

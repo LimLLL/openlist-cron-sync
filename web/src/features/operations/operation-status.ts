@@ -4,7 +4,8 @@ import type { LucideIcon } from 'lucide-react';
 import type { OperationView } from './operation-contract';
 
 /** Badge 支持的语义变体。 */
-export type BadgeVariant = 'success' | 'danger' | 'warning' | 'default' | 'info' | 'active';
+export type BadgeVariant =
+  'success' | 'danger' | 'warning' | 'default' | 'info' | 'active';
 
 /** 把操作状态映射为 Badge 变体与是否呼吸。
  * @param status 操作状态。

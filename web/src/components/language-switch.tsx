@@ -27,7 +27,11 @@ export function LanguageSwitch({ className }: { className?: string }) {
         className,
       )}
     >
-      <Languages size={13} className="mx-1.5 text-muted-foreground" aria-hidden="true" />
+      <Languages
+        size={13}
+        className="mx-1.5 text-muted-foreground"
+        aria-hidden="true"
+      />
       {OPTIONS.map((option) => (
         <button
           key={option.value}

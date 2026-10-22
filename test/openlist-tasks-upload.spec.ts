@@ -40,12 +40,11 @@ function snapshot(state = 'receiving'): Record<string, unknown> {
   };
 }
 
-describe('M1 task and multipart protocols', /** 注册本组 M1 行为验收用例。
+describe('M1 task and multipart protocols' /** 注册本组 M1 行为验收用例。
  * @param 不适用。
  * @returns 不适用。
  * @throws 不适用。
- */
-() => {
+ */, () => {
   let fixture: ComponentFixture;
   afterEach(
     /** 恢复测试状态并释放本用例拥有的资源。
@@ -57,12 +56,11 @@ describe('M1 task and multipart protocols', /** 注册本组 M1 行为验收用�
       if (fixture) await fixture.close();
     },
   );
-  it('preserves tasks, all tache states, no-task copy, cancellation and per-id cleanup errors', /** 验证当前场景的协议输入、输出与副作用。
+  it('preserves tasks, all tache states, no-task copy, cancellation and per-id cleanup errors' /** 验证当前场景的协议输入、输出与副作用。
    * @param 不适用。
    * @returns 断言完成；异步用例返回完成 Promise。
    * @throws Error 断言或测试资源操作失败。
-   */
-  async () => {
+   */, async () => {
     fixture = await componentFixture();
     const tasks = fixture.app.get(OpenListTasks);
     const instance = fixture.record();
@@ -123,12 +121,11 @@ describe('M1 task and multipart protocols', /** 注册本组 M1 行为验收用�
       ),
     ).toBe(false);
   });
-  it('implements all five multipart endpoints with exact headers and no automatic replay', /** 验证当前场景的协议输入、输出与副作用。
+  it('implements all five multipart endpoints with exact headers and no automatic replay' /** 验证当前场景的协议输入、输出与副作用。
    * @param 不适用。
    * @returns 断言完成；异步用例返回完成 Promise。
    * @throws Error 断言或测试资源操作失败。
-   */
-  async () => {
+   */, async () => {
     fixture = await componentFixture();
     fixture.server.responder =
       /** 根据请求端点返回本场景的可控上游响应。
@@ -236,12 +233,11 @@ describe('M1 task and multipart protocols', /** 注册本组 M1 行为验收用�
       ),
     ).toHaveLength(2);
   });
-  it('retains unexpected put tasks so the executor can record the remote tid', /** 验证当前场景的协议输入、输出与副作用。
+  it('retains unexpected put tasks so the executor can record the remote tid' /** 验证当前场景的协议输入、输出与副作用。
    * @param 不适用。
    * @returns 断言完成；异步用例返回完成 Promise。
    * @throws Error 断言或测试资源操作失败。
-   */
-  async () => {
+   */, async () => {
     fixture = await componentFixture();
     fixture.server.responder =
       /** 根据请求端点返回本场景的可控上游响应。

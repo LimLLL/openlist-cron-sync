@@ -45,10 +45,7 @@ export function LoginPage() {
     event.preventDefault();
     const length = [...username].length;
     const invalidPassword = passwordError(password);
-    const validation =
-      length < 1 || length > 64
-        ? 'username'
-        : invalidPassword;
+    const validation = length < 1 || length > 64 ? 'username' : invalidPassword;
     void submit((signal) => login(username, password, signal), validation);
   }
 

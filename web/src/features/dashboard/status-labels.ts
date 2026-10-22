@@ -9,7 +9,8 @@ type RunStatusKey = keyof typeof enCommon.runStatus;
 /** 共享文案中已有译文的操作动作。 */
 type OperationActionKey = keyof typeof enCommon.operationAction;
 /** Badge 可用的语义变体。 */
-export type BadgeTone = 'default' | 'success' | 'warning' | 'danger' | 'info' | 'active';
+export type BadgeTone =
+  'default' | 'success' | 'warning' | 'danger' | 'info' | 'active';
 /** 实例在星图与列表中的健康分类。 */
 export type InstanceHealth = 'ready' | 'blocked' | 'error' | 'untested';
 
@@ -48,7 +49,9 @@ function isOperationAction(value: string): value is OperationActionKey {
  */
 export function runTone(status: string): BadgeTone {
   if (ACTIVE_RUN_STATES.has(status))
-    return status === 'cancelling' || status === 'recovering' ? 'warning' : 'active';
+    return status === 'cancelling' || status === 'recovering'
+      ? 'warning'
+      : 'active';
   if (status === 'succeeded') return 'success';
   if (status === 'failed') return 'danger';
   if (status === 'partial') return 'warning';
@@ -78,7 +81,8 @@ export function failingJobIds(runs: DashboardRun[]): Set<string> {
   for (const run of runs) {
     if (seen.has(run.jobId) || ACTIVE_RUN_STATES.has(run.status)) continue;
     seen.add(run.jobId);
-    if (run.status === 'failed' || run.status === 'partial') failing.add(run.jobId);
+    if (run.status === 'failed' || run.status === 'partial')
+      failing.add(run.jobId);
   }
   return failing;
 }

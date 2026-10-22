@@ -61,32 +61,57 @@ export function DashboardPage() {
   const jobs = useAllJobs();
   const health = useHealth();
 
-  const instanceItems = useMemo(() => instances.data?.items ?? [], [instances.data]);
+  const instanceItems = useMemo(
+    () => instances.data?.items ?? [],
+    [instances.data],
+  );
   const jobItems = useMemo(() => jobs.data?.items ?? [], [jobs.data]);
-  const recentItems = useMemo(() => recentRuns.data?.items ?? [], [recentRuns.data]);
+  const recentItems = useMemo(
+    () => recentRuns.data?.items ?? [],
+    [recentRuns.data],
+  );
   const scheduledJobIds = useMemo(
-    () => jobItems.filter((job) => job.enabled && job.cron).slice(0, 6).map((job) => job.id),
+    () =>
+      jobItems
+        .filter((job) => job.enabled && job.cron)
+        .slice(0, 6)
+        .map((job) => job.id),
     [jobItems],
   );
   const nextFire = useNextFireTimes(scheduledJobIds);
   const failedRuns = useMemo(
-    () => recentItems.filter((run) => run.status === 'failed' || run.status === 'partial'),
+    () =>
+      recentItems.filter(
+        (run) => run.status === 'failed' || run.status === 'partial',
+      ),
     [recentItems],
   );
   const failing = useMemo(() => failingJobIds(recentItems), [recentItems]);
-  const jobNames = useMemo(() => new Map(jobItems.map((job) => [job.id, job.name])), [jobItems]);
+  const jobNames = useMemo(
+    () => new Map(jobItems.map((job) => [job.id, job.name])),
+    [jobItems],
+  );
 
   const primaryError =
-    instances.isError && jobs.isError && recentRuns.isError ? instances.error : null;
+    instances.isError && jobs.isError && recentRuns.isError
+      ? instances.error
+      : null;
   const attentionError = unresolvedOps.error ?? recentRuns.error;
   const activityError = activeRuns.error ?? recentRuns.error;
   const fleetError = instances.error ?? jobs.error;
   const fleetLoaded = !instances.isPending && !jobs.isPending;
-  const firstRun = fleetLoaded && !fleetError && instanceItems.length === 0 && jobItems.length === 0;
+  const firstRun =
+    fleetLoaded &&
+    !fleetError &&
+    instanceItems.length === 0 &&
+    jobItems.length === 0;
 
   const systemMeta = health.data ? (
     <span className="inline-flex items-center gap-2">
-      <StatusDot tone={health.data.status === 'ok' ? 'success' : 'warning'} pulse={health.data.status === 'ok'} />
+      <StatusDot
+        tone={health.data.status === 'ok' ? 'success' : 'warning'}
+        pulse={health.data.status === 'ok'}
+      />
       {health.data.status === 'ok' ? t('system.ok') : t('system.notReady')}
     </span>
   ) : health.isError ? (
@@ -111,7 +136,8 @@ export function DashboardPage() {
     );
 
   // 首次使用时插入引导分节，其余分节编号顺延。
-  const number = (position: number) => String(position + (firstRun ? 3 : 2)).padStart(2, '0');
+  const number = (position: number) =>
+    String(position + (firstRun ? 3 : 2)).padStart(2, '0');
 
   return (
     <div>
@@ -140,7 +166,11 @@ export function DashboardPage() {
         }
       />
 
-      <ObservatoryViz instances={instanceItems} jobs={jobItems} failing={failing} />
+      <ObservatoryViz
+        instances={instanceItems}
+        jobs={jobItems}
+        failing={failing}
+      />
 
       <Reveal>
         {fleetError ? (
@@ -164,7 +194,11 @@ export function DashboardPage() {
       <div className="mt-16">
         {firstRun && (
           <Reveal>
-            <EditorialSection index="02" title={t('onboarding.title')} description={t('onboarding.description')}>
+            <EditorialSection
+              index="02"
+              title={t('onboarding.title')}
+              description={t('onboarding.description')}
+            >
               <Onboarding hasInstances={instanceItems.length > 0} />
             </EditorialSection>
           </Reveal>
@@ -217,7 +251,11 @@ export function DashboardPage() {
             ) : activeRuns.isPending || recentRuns.isPending ? (
               <LoadingState label={t('loading.activity')} />
             ) : (
-              <ActivitySection activeRuns={activeRuns.data ?? []} recentRuns={recentItems} jobNames={jobNames} />
+              <ActivitySection
+                activeRuns={activeRuns.data ?? []}
+                recentRuns={recentItems}
+                jobNames={jobNames}
+              />
             )}
           </EditorialSection>
         </Reveal>

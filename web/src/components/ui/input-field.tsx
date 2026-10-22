@@ -18,7 +18,14 @@ type InputFieldProps = Omit<ComponentProps<'input'>, 'className'> & {
  * @returns 表单字段。
  * @throws 不适用。
  */
-export function InputField({ id, label, hint, error, action, ...props }: InputFieldProps) {
+export function InputField({
+  id,
+  label,
+  hint,
+  error,
+  action,
+  ...props
+}: InputFieldProps) {
   const input = (
     <input
       {...props}
@@ -30,7 +37,9 @@ export function InputField({ id, label, hint, error, action, ...props }: InputFi
   );
   return (
     <div className="space-y-2">
-      <label className="field-label" htmlFor={id}>{label}</label>
+      <label className="field-label" htmlFor={id}>
+        {label}
+      </label>
       {action ? (
         <div className="flex items-center gap-2">
           <div className="min-w-0 flex-1">{input}</div>
@@ -40,11 +49,11 @@ export function InputField({ id, label, hint, error, action, ...props }: InputFi
         input
       )}
       {hint && !error && (
-        <p id={`${id}-hint`} className="text-xs text-muted-foreground">{hint}</p>
+        <p id={`${id}-hint`} className="text-xs text-muted-foreground">
+          {hint}
+        </p>
       )}
-      {error && (
-        <p className="text-xs text-danger">{error}</p>
-      )}
+      {error && <p className="text-xs text-danger">{error}</p>}
     </div>
   );
 }

@@ -63,13 +63,16 @@ export function formatRelative(iso: string | null | undefined): string {
   const date = parseDate(iso);
   if (!date) return '—';
   const seconds = Math.round((date.getTime() - Date.now()) / 1000);
-  const formatter = new Intl.RelativeTimeFormat(intlLocale(), { numeric: 'auto' });
+  const formatter = new Intl.RelativeTimeFormat(intlLocale(), {
+    numeric: 'auto',
+  });
   const absolute = Math.abs(seconds);
   // 一分钟内统一显示“刚刚/now”，避免秒数跳动。
   if (absolute < 60) return formatter.format(0, 'second');
   let divisor = 1;
   for (const [limit, unit] of RELATIVE_STEPS) {
-    if (absolute < limit) return formatter.format(Math.trunc(seconds / divisor), unit);
+    if (absolute < limit)
+      return formatter.format(Math.trunc(seconds / divisor), unit);
     divisor = limit;
   }
   return formatter.format(Math.trunc(seconds / 86400), 'day');

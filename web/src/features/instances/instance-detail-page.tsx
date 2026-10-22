@@ -41,7 +41,8 @@ export function InstanceDetailPage() {
   const { id } = useParams<{ id: string }>();
   const query = useInstance(id!);
 
-  if (query.isPending) return <LoadingState label={t('detail.loading')} rows={6} />;
+  if (query.isPending)
+    return <LoadingState label={t('detail.loading')} rows={6} />;
   if (query.isError)
     return (
       <ErrorState
@@ -72,13 +73,25 @@ function InstanceDetail({ instance }: { instance: Instance }) {
   const viewActions = (
     <>
       <Magnetic>
-        <Button size="sm" onClick={() => test.mutate(blocked)} disabled={test.isPending}>
+        <Button
+          size="sm"
+          onClick={() => test.mutate(blocked)}
+          disabled={test.isPending}
+        >
           {test.isPending ? (
-            <LoaderCircle size={15} className="motion-safe:animate-spin" aria-hidden="true" />
+            <LoaderCircle
+              size={15}
+              className="motion-safe:animate-spin"
+              aria-hidden="true"
+            />
           ) : (
             <Plug size={15} aria-hidden="true" />
           )}
-          {test.isPending ? t('detail.testing') : blocked ? t('detail.retryAuth') : t('detail.test')}
+          {test.isPending
+            ? t('detail.testing')
+            : blocked
+              ? t('detail.retryAuth')
+              : t('detail.test')}
         </Button>
       </Magnetic>
       <Button size="sm" variant="secondary" onClick={() => setBrowseOpen(true)}>
@@ -104,13 +117,27 @@ function InstanceDetail({ instance }: { instance: Instance }) {
 
   const editActions = (
     <>
-      <Button size="sm" variant="ghost" onClick={() => setEditing(false)} disabled={update.isPending}>
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={() => setEditing(false)}
+        disabled={update.isPending}
+      >
         {t('common:actions.cancel')}
       </Button>
       <Magnetic>
-        <Button size="sm" type="submit" form={EDIT_FORM_ID} disabled={update.isPending}>
+        <Button
+          size="sm"
+          type="submit"
+          form={EDIT_FORM_ID}
+          disabled={update.isPending}
+        >
           {update.isPending ? (
-            <LoaderCircle size={15} className="motion-safe:animate-spin" aria-hidden="true" />
+            <LoaderCircle
+              size={15}
+              className="motion-safe:animate-spin"
+              aria-hidden="true"
+            />
           ) : (
             <Save size={15} aria-hidden="true" />
           )}
@@ -128,14 +155,19 @@ function InstanceDetail({ instance }: { instance: Instance }) {
         title={instance.name}
         description={
           <div className="space-y-2">
-            <p className="font-mono text-[13px] break-all text-foreground/80">{instance.baseUrl}</p>
+            <p className="font-mono text-[13px] break-all text-foreground/80">
+              {instance.baseUrl}
+            </p>
             <p className="font-mono text-[11px] text-muted-foreground">
               ID <ScrambleText text={instance.id} playOnMount />
             </p>
           </div>
         }
         meta={
-          <Link to="/instances" className="inline-flex items-center gap-1.5 hover:text-foreground">
+          <Link
+            to="/instances"
+            className="inline-flex items-center gap-1.5 hover:text-foreground"
+          >
             <ArrowLeft size={12} aria-hidden="true" />
             {t('detail.back')}
           </Link>
@@ -153,11 +185,15 @@ function InstanceDetail({ instance }: { instance: Instance }) {
             <Pencil size={14} className="text-accent" aria-hidden="true" />
             {t('detail.editing')}
           </p>
-          <p className="mb-6 text-[13px] text-muted-foreground">{t('detail.editHint')}</p>
+          <p className="mb-6 text-[13px] text-muted-foreground">
+            {t('detail.editHint')}
+          </p>
           <InstanceForm
             formId={EDIT_FORM_ID}
             instance={instance}
-            onSubmit={(data) => update.mutate(data, { onSuccess: () => setEditing(false) })}
+            onSubmit={(data) =>
+              update.mutate(data, { onSuccess: () => setEditing(false) })
+            }
             onCancel={() => setEditing(false)}
             pending={update.isPending}
             error={update.error}

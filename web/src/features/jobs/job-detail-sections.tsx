@@ -4,7 +4,12 @@ import { EditorialSection } from '../../components/ui/editorial-section';
 import { Badge } from '../../components/ui/badge';
 import { SpecGrid } from '../../components/ui/spec-grid';
 import { ErrorState } from '../../components/states';
-import { formatBytes, formatDuration, formatRelative, formatTimeFull } from '../../lib/format';
+import {
+  formatBytes,
+  formatDuration,
+  formatRelative,
+  formatTimeFull,
+} from '../../lib/format';
 import { useNextFireTimes } from './job-queries';
 import { MonoChip, useInstanceName } from './job-ui';
 import type { JobView } from './job-contract';
@@ -14,12 +19,22 @@ import type { JobView } from './job-contract';
  * @returns 分节。
  * @throws 不适用。
  */
-export function ScheduleSection({ job, index }: { job: JobView; index: string }) {
+export function ScheduleSection({
+  job,
+  index,
+}: {
+  job: JobView;
+  index: string;
+}) {
   const { t } = useTranslation('jobs');
   const scheduled = !!job.cron && job.enabled && !job.archivedAt;
   const fireTimes = useNextFireTimes(job.id, scheduled);
   return (
-    <EditorialSection index={index} title={t('detail.schedule')} description={t('detail.scheduleDesc')}>
+    <EditorialSection
+      index={index}
+      title={t('detail.schedule')}
+      description={t('detail.scheduleDesc')}
+    >
       <SpecGrid
         columns={3}
         className="grid-cols-2"
@@ -36,13 +51,22 @@ export function ScheduleSection({ job, index }: { job: JobView; index: string })
           },
         ]}
       />
-      {!job.cron && <p className="mt-5 text-sm text-muted-foreground">{t('detail.manualHint')}</p>}
+      {!job.cron && (
+        <p className="mt-5 text-sm text-muted-foreground">
+          {t('detail.manualHint')}
+        </p>
+      )}
       {job.cron && !job.enabled && (
-        <p className="mt-5 text-sm text-muted-foreground">{t('detail.scheduleOff')}</p>
+        <p className="mt-5 text-sm text-muted-foreground">
+          {t('detail.scheduleOff')}
+        </p>
       )}
       {scheduled && fireTimes.error && (
         <div className="mt-5">
-          <ErrorState error={fireTimes.error} onRetry={() => void fireTimes.refetch()} />
+          <ErrorState
+            error={fireTimes.error}
+            onRetry={() => void fireTimes.refetch()}
+          />
         </div>
       )}
       {scheduled && fireTimes.data && fireTimes.data.times.length > 0 && (
@@ -54,9 +78,13 @@ export function ScheduleSection({ job, index }: { job: JobView; index: string })
                 key={time}
                 className="flex items-baseline gap-4 border-b border-hairline py-3 font-mono text-[12.5px]"
               >
-                <span className="w-6 text-accent">{String(position + 1).padStart(2, '0')}</span>
+                <span className="w-6 text-accent">
+                  {String(position + 1).padStart(2, '0')}
+                </span>
                 <span className="flex-1">{formatTimeFull(time)}</span>
-                <span className="text-muted-foreground">{formatRelative(time)}</span>
+                <span className="text-muted-foreground">
+                  {formatRelative(time)}
+                </span>
               </li>
             ))}
           </ol>
@@ -71,11 +99,21 @@ export function ScheduleSection({ job, index }: { job: JobView; index: string })
  * @returns 分节。
  * @throws 不适用。
  */
-export function TargetsSection({ job, index }: { job: JobView; index: string }) {
+export function TargetsSection({
+  job,
+  index,
+}: {
+  job: JobView;
+  index: string;
+}) {
   const { t } = useTranslation('jobs');
   const instanceName = useInstanceName();
   return (
-    <EditorialSection index={index} title={t('detail.targets')} description={t('detail.targetsDesc')}>
+    <EditorialSection
+      index={index}
+      title={t('detail.targets')}
+      description={t('detail.targetsDesc')}
+    >
       <div className="space-y-8">
         {job.targets.map((target, position) => (
           <div key={target.id}>
@@ -91,28 +129,51 @@ export function TargetsSection({ job, index }: { job: JobView; index: string }) 
               </span>
             </div>
             <div className="mb-4 flex flex-wrap gap-2">
-              <Badge plain variant={target.mode === 'mirror' ? 'warning' : 'default'}>
+              <Badge
+                plain
+                variant={target.mode === 'mirror' ? 'warning' : 'default'}
+              >
                 {t(`mode.${target.mode}`)}
               </Badge>
-              <Badge plain variant="info">{t(`createMode.${target.createMode}`)}</Badge>
+              <Badge plain variant="info">
+                {t(`createMode.${target.createMode}`)}
+              </Badge>
             </div>
             <SpecGrid
               columns={3}
               className="grid-cols-2"
               items={[
-                { label: t('detail.deleteLimits'), value: target.deleteLimits.enabled ? t('detail.limitsEnabled') : t('detail.limitsDisabled') },
+                {
+                  label: t('detail.deleteLimits'),
+                  value: target.deleteLimits.enabled
+                    ? t('detail.limitsEnabled')
+                    : t('detail.limitsDisabled'),
+                },
                 {
                   label: t('detail.maxCount'),
-                  value: target.deleteLimits.maxCount?.toString() ?? t('detail.unlimited'),
+                  value:
+                    target.deleteLimits.maxCount?.toString() ??
+                    t('detail.unlimited'),
                   mono: target.deleteLimits.maxCount !== null,
                 },
                 {
                   label: t('detail.maxPercent'),
-                  value: target.deleteLimits.maxPercent !== null ? `${target.deleteLimits.maxPercent}%` : t('detail.unlimited'),
+                  value:
+                    target.deleteLimits.maxPercent !== null
+                      ? `${target.deleteLimits.maxPercent}%`
+                      : t('detail.unlimited'),
                   mono: target.deleteLimits.maxPercent !== null,
                 },
-                { label: t('detail.refresh'), value: target.refresh ? t('detail.yes') : t('detail.no') },
-                { label: t('detail.password'), value: target.hasPassword ? t('detail.passwordSet') : t('detail.passwordNone') },
+                {
+                  label: t('detail.refresh'),
+                  value: target.refresh ? t('detail.yes') : t('detail.no'),
+                },
+                {
+                  label: t('detail.password'),
+                  value: target.hasPassword
+                    ? t('detail.passwordSet')
+                    : t('detail.passwordNone'),
+                },
               ]}
             />
           </div>
@@ -127,12 +188,26 @@ export function TargetsSection({ job, index }: { job: JobView; index: string }) 
  * @returns 分节。
  * @throws 不适用。
  */
-export function FiltersSection({ job, index }: { job: JobView; index: string }) {
+export function FiltersSection({
+  job,
+  index,
+}: {
+  job: JobView;
+  index: string;
+}) {
   const { t } = useTranslation('jobs');
   const { include, exclude, minSizeBytes, maxSizeBytes } = job.filters;
-  const empty = include.length === 0 && exclude.length === 0 && minSizeBytes === null && maxSizeBytes === null;
+  const empty =
+    include.length === 0 &&
+    exclude.length === 0 &&
+    minSizeBytes === null &&
+    maxSizeBytes === null;
   return (
-    <EditorialSection index={index} title={t('detail.filters')} description={t('detail.filtersDesc')}>
+    <EditorialSection
+      index={index}
+      title={t('detail.filters')}
+      description={t('detail.filtersDesc')}
+    >
       {empty ? (
         <p className="text-sm text-muted-foreground">{t('detail.noFilters')}</p>
       ) : (
@@ -157,8 +232,22 @@ export function FiltersSection({ job, index }: { job: JobView; index: string }) 
               columns={2}
               className="grid-cols-2"
               items={[
-                { label: t('detail.minSize'), value: minSizeBytes === null ? t('detail.unlimited') : formatBytes(minSizeBytes), mono: minSizeBytes !== null },
-                { label: t('detail.maxSize'), value: maxSizeBytes === null ? t('detail.unlimited') : formatBytes(maxSizeBytes), mono: maxSizeBytes !== null },
+                {
+                  label: t('detail.minSize'),
+                  value:
+                    minSizeBytes === null
+                      ? t('detail.unlimited')
+                      : formatBytes(minSizeBytes),
+                  mono: minSizeBytes !== null,
+                },
+                {
+                  label: t('detail.maxSize'),
+                  value:
+                    maxSizeBytes === null
+                      ? t('detail.unlimited')
+                      : formatBytes(maxSizeBytes),
+                  mono: maxSizeBytes !== null,
+                },
               ]}
             />
           )}
@@ -173,29 +262,59 @@ export function FiltersSection({ job, index }: { job: JobView; index: string }) 
  * @returns 分节。
  * @throws 不适用。
  */
-export function AdvancedSection({ job, index }: { job: JobView; index: string }) {
+export function AdvancedSection({
+  job,
+  index,
+}: {
+  job: JobView;
+  index: string;
+}) {
   const { t } = useTranslation('jobs');
   const yesNo = (value: boolean) => (value ? t('detail.yes') : t('detail.no'));
   return (
-    <EditorialSection index={index} title={t('detail.advanced')} description={t('detail.advancedDesc')}>
+    <EditorialSection
+      index={index}
+      title={t('detail.advanced')}
+      description={t('detail.advancedDesc')}
+    >
       <SpecGrid
         columns={3}
         className="grid-cols-2"
         items={[
-          { label: t('detail.allowEmptySource'), value: yesNo(job.allowEmptySource) },
+          {
+            label: t('detail.allowEmptySource'),
+            value: yesNo(job.allowEmptySource),
+          },
           { label: t('detail.syncEmptyDirs'), value: yesNo(job.syncEmptyDirs) },
           {
             label: t('detail.bandwidth'),
-            value: job.relayBandwidthLimit === 0 ? t('detail.unlimited') : t('detail.bandwidthValue', { value: formatBytes(job.relayBandwidthLimit) }),
+            value:
+              job.relayBandwidthLimit === 0
+                ? t('detail.unlimited')
+                : t('detail.bandwidthValue', {
+                    value: formatBytes(job.relayBandwidthLimit),
+                  }),
             mono: job.relayBandwidthLimit !== 0,
           },
           {
             label: t('detail.retryCount'),
-            value: job.retryCount === null ? t('detail.retryInherited') : String(job.retryCount),
+            value:
+              job.retryCount === null
+                ? t('detail.retryInherited')
+                : String(job.retryCount),
             mono: job.retryCount !== null,
           },
-          { label: t('detail.timeout'), value: formatDuration(job.timeoutSeconds), mono: true },
-          { label: t('detail.sourcePassword'), value: job.source.hasPassword ? t('detail.passwordSet') : t('detail.passwordNone') },
+          {
+            label: t('detail.timeout'),
+            value: formatDuration(job.timeoutSeconds),
+            mono: true,
+          },
+          {
+            label: t('detail.sourcePassword'),
+            value: job.source.hasPassword
+              ? t('detail.passwordSet')
+              : t('detail.passwordNone'),
+          },
         ]}
       />
     </EditorialSection>
@@ -207,16 +326,40 @@ export function AdvancedSection({ job, index }: { job: JobView; index: string })
  * @returns 分节。
  * @throws 不适用。
  */
-export function TimelineSection({ job, index }: { job: JobView; index: string }) {
+export function TimelineSection({
+  job,
+  index,
+}: {
+  job: JobView;
+  index: string;
+}) {
   const { t } = useTranslation('jobs');
   return (
-    <EditorialSection index={index} title={t('detail.timeline')} description={t('detail.timelineDesc')}>
+    <EditorialSection
+      index={index}
+      title={t('detail.timeline')}
+      description={t('detail.timelineDesc')}
+    >
       <SpecGrid
         columns={3}
         items={[
-          { label: t('detail.created'), value: formatTimeFull(job.createdAt), mono: true },
-          { label: t('detail.updated'), value: formatTimeFull(job.updatedAt), mono: true },
-          { label: t('detail.archived'), value: job.archivedAt ? formatTimeFull(job.archivedAt) : t('detail.active'), mono: !!job.archivedAt },
+          {
+            label: t('detail.created'),
+            value: formatTimeFull(job.createdAt),
+            mono: true,
+          },
+          {
+            label: t('detail.updated'),
+            value: formatTimeFull(job.updatedAt),
+            mono: true,
+          },
+          {
+            label: t('detail.archived'),
+            value: job.archivedAt
+              ? formatTimeFull(job.archivedAt)
+              : t('detail.active'),
+            mono: !!job.archivedAt,
+          },
         ]}
       />
     </EditorialSection>

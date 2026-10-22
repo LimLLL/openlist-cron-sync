@@ -64,7 +64,9 @@ export function Segmented<T extends string>({
             onClick={() => onChange(option.value)}
             className={cn(
               'relative isolate rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50',
-              selected ? 'text-accent-foreground' : 'text-muted-foreground hover:text-foreground',
+              selected
+                ? 'text-accent-foreground'
+                : 'text-muted-foreground hover:text-foreground',
             )}
           >
             {selected && (

@@ -9,7 +9,10 @@ import type { RunDetail, RunTargetView, RunView } from './run-contract';
  * @returns 秒数或 null。
  * @throws 不适用。
  */
-export function runDurationSeconds(run: RunView, now = Date.now()): number | null {
+export function runDurationSeconds(
+  run: RunView,
+  now = Date.now(),
+): number | null {
   if (!run.startedAt) return null;
   const start = Date.parse(run.startedAt);
   const end = run.endedAt
@@ -50,7 +53,10 @@ export interface TargetLabel {
  */
 export function targetLabel(target: RunTargetView): TargetLabel {
   const { instance, target: config } = target.config;
-  const mode = config.mode === 'incremental' || config.mode === 'mirror' ? config.mode : null;
+  const mode =
+    config.mode === 'incremental' || config.mode === 'mirror'
+      ? config.mode
+      : null;
   return {
     instanceName: typeof instance.name === 'string' ? instance.name : null,
     path: typeof config.path === 'string' ? config.path : null,
@@ -64,7 +70,9 @@ export function targetLabel(target: RunTargetView): TargetLabel {
  * @returns 是否为已知统计字段。
  * @throws 不适用。
  */
-export function isStatKey(key: string): key is keyof typeof enRuns.detail.stats {
+export function isStatKey(
+  key: string,
+): key is keyof typeof enRuns.detail.stats {
   return Object.hasOwn(enRuns.detail.stats, key);
 }
 

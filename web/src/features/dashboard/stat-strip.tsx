@@ -6,7 +6,11 @@ import { useTranslation } from 'react-i18next';
 import { CountUp } from '../../components/motion/count-up';
 import { StatusDot } from '../../components/ui/status-dot';
 import { cn } from '../../lib/utils';
-import type { DashboardInstance, DashboardJob, HealthView } from './dashboard-contract';
+import type {
+  DashboardInstance,
+  DashboardJob,
+  HealthView,
+} from './dashboard-contract';
 
 /** 统计条属性。 */
 interface StatStripProps {
@@ -86,10 +90,19 @@ function StatCell({
  * @returns 统计条。
  * @throws 不适用。
  */
-export function StatStrip({ instances, jobs, instanceTotal, jobTotal, health, healthFailed }: StatStripProps) {
+export function StatStrip({
+  instances,
+  jobs,
+  instanceTotal,
+  jobTotal,
+  health,
+  healthFailed,
+}: StatStripProps) {
   const { t } = useTranslation('dashboard');
   const ready = instances.filter((item) => item.authState === 'ready').length;
-  const blocked = instances.filter((item) => item.authState === 'auth_blocked').length;
+  const blocked = instances.filter(
+    (item) => item.authState === 'auth_blocked',
+  ).length;
   const scheduled = jobs.filter((job) => job.enabled && job.cron).length;
   const systemOk = health?.status === 'ok';
 
@@ -102,7 +115,11 @@ export function StatStrip({ instances, jobs, instanceTotal, jobTotal, health, he
         label={t('stats.instances')}
         tone={blocked > 0 ? 'warning' : 'default'}
         figure={<CountUp value={instanceTotal} />}
-        sub={t('stats.instancesSub', { ready, blocked, loaded: instances.length })}
+        sub={t('stats.instancesSub', {
+          ready,
+          blocked,
+          loaded: instances.length,
+        })}
       />
       <StatCell
         className="border-b lg:border-r lg:border-b-0"
@@ -117,7 +134,13 @@ export function StatStrip({ instances, jobs, instanceTotal, jobTotal, health, he
         tone={health ? (systemOk ? 'accent' : 'warning') : 'default'}
         figure={
           <span className="inline-flex items-center gap-3">
-            {health && <StatusDot tone={systemOk ? 'success' : 'warning'} pulse={systemOk} className="size-2.5" />}
+            {health && (
+              <StatusDot
+                tone={systemOk ? 'success' : 'warning'}
+                pulse={systemOk}
+                className="size-2.5"
+              />
+            )}
             {health
               ? systemOk
                 ? t('stats.systemOk')

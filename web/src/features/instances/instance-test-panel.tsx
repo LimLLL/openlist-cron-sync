@@ -15,7 +15,15 @@ const EASE = [0.16, 1, 0.3, 1] as const;
  * @returns 信号元素。
  * @throws 不适用。
  */
-function Signal({ icon: Icon, ok, label }: { icon: LucideIcon; ok: boolean | null; label: string }) {
+function Signal({
+  icon: Icon,
+  ok,
+  label,
+}: {
+  icon: LucideIcon;
+  ok: boolean | null;
+  label: string;
+}) {
   return (
     <div className="flex items-center gap-3">
       <span
@@ -30,7 +38,9 @@ function Signal({ icon: Icon, ok, label }: { icon: LucideIcon; ok: boolean | nul
       </span>
       <span className="flex items-center gap-2 text-sm">
         {ok !== null && <StatusDot tone={ok ? 'success' : 'danger'} />}
-        <span className={ok === null ? 'text-muted-foreground' : undefined}>{label}</span>
+        <span className={ok === null ? 'text-muted-foreground' : undefined}>
+          {label}
+        </span>
       </span>
     </div>
   );
@@ -41,7 +51,13 @@ function Signal({ icon: Icon, ok, label }: { icon: LucideIcon; ok: boolean | nul
  * @returns 测试面板。
  * @throws 不适用。
  */
-export function InstanceTestPanel({ pending, result }: { pending: boolean; result?: TestResult }) {
+export function InstanceTestPanel({
+  pending,
+  result,
+}: {
+  pending: boolean;
+  result?: TestResult;
+}) {
   const { t } = useTranslation('instances');
   const errorText = useErrorText();
   const shown = pending ? undefined : result;
@@ -71,7 +87,13 @@ export function InstanceTestPanel({ pending, result }: { pending: boolean; resul
         <Signal
           icon={Wifi}
           ok={shown ? shown.reachable : null}
-          label={shown ? (shown.reachable ? t('test.reachable') : t('test.unreachable')) : t('detail.testing')}
+          label={
+            shown
+              ? shown.reachable
+                ? t('test.reachable')
+                : t('test.unreachable')
+              : t('detail.testing')
+          }
         />
         <Signal
           icon={ShieldCheck}
@@ -94,7 +116,9 @@ export function InstanceTestPanel({ pending, result }: { pending: boolean; resul
           </div>
           <div>
             <dt className="eyebrow">{t('detail.basePath')}</dt>
-            <dd className="mt-1.5 font-mono text-[13px]">{shown.account.basePath}</dd>
+            <dd className="mt-1.5 font-mono text-[13px]">
+              {shown.account.basePath}
+            </dd>
           </div>
           <div>
             <dt className="eyebrow">{t('detail.role')}</dt>
@@ -112,7 +136,11 @@ export function InstanceTestPanel({ pending, result }: { pending: boolean; resul
           <p className="eyebrow">{t('test.warnings')}</p>
           {shown.warnings.map((warning, position) => (
             <div key={position} className="flex gap-3 text-[13px]">
-              <Info size={15} className="mt-0.5 shrink-0 text-signal" aria-hidden="true" />
+              <Info
+                size={15}
+                className="mt-0.5 shrink-0 text-signal"
+                aria-hidden="true"
+              />
               <div className="min-w-0">
                 <p>{errorText(warning.code, warning.message)}</p>
                 <p className="mt-0.5 font-mono text-[11px] break-all text-muted-foreground">
@@ -126,9 +154,15 @@ export function InstanceTestPanel({ pending, result }: { pending: boolean; resul
 
       {shown?.error && (
         <div className="mt-6 flex gap-3 border-t border-hairline pt-5 text-[13px]">
-          <CircleAlert size={15} className="mt-0.5 shrink-0 text-danger" aria-hidden="true" />
+          <CircleAlert
+            size={15}
+            className="mt-0.5 shrink-0 text-danger"
+            aria-hidden="true"
+          />
           <div className="min-w-0">
-            <p className="text-danger">{errorText(shown.error.code, shown.error.message)}</p>
+            <p className="text-danger">
+              {errorText(shown.error.code, shown.error.message)}
+            </p>
             <p className="mt-0.5 font-mono text-[11px] break-all text-muted-foreground">
               {shown.error.code} · {shown.error.message}
             </p>

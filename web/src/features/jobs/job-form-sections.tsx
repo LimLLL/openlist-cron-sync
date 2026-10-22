@@ -14,7 +14,10 @@ import type { JobFormValues } from './job-form-model';
 /** 按字段更新表单值。
  * @template K 字段名。
  */
-export type UpdateField = <K extends keyof JobFormValues>(field: K, value: JobFormValues[K]) => void;
+export type UpdateField = <K extends keyof JobFormValues>(
+  field: K,
+  value: JobFormValues[K],
+) => void;
 
 /** 各分节共用的属性。 */
 interface SectionProps {
@@ -32,7 +35,11 @@ interface SectionProps {
 export function BasicsFields({ values, update }: SectionProps) {
   const { t } = useTranslation('jobs');
   return (
-    <EditorialSection index="01" title={t('form.basics')} description={t('form.basicsDesc')}>
+    <EditorialSection
+      index="01"
+      title={t('form.basics')}
+      description={t('form.basicsDesc')}
+    >
       <div className="grid gap-6">
         <InputField
           id="job-name"
@@ -59,10 +66,18 @@ export function SourceFields({
   instances,
   isEdit,
   onBrowse,
-}: SectionProps & { instances: Instance[]; isEdit: boolean; onBrowse: () => void }) {
+}: SectionProps & {
+  instances: Instance[];
+  isEdit: boolean;
+  onBrowse: () => void;
+}) {
   const { t } = useTranslation('jobs');
   return (
-    <EditorialSection index="02" title={t('form.source')} description={t('form.sourceDesc')}>
+    <EditorialSection
+      index="02"
+      title={t('form.source')}
+      description={t('form.sourceDesc')}
+    >
       <div className="grid gap-6 sm:grid-cols-2">
         <SelectField
           id="source-instance"
@@ -88,7 +103,12 @@ export function SourceFields({
           required
           placeholder="/"
           hint={t('form.pathHint')}
-          action={<BrowseButton disabled={!values.sourceInstanceId} onClick={onBrowse} />}
+          action={
+            <BrowseButton
+              disabled={!values.sourceInstanceId}
+              onClick={onBrowse}
+            />
+          }
         />
         <InputField
           id="source-password"
@@ -119,7 +139,11 @@ export function SourceFields({
 export function ScheduleFields({ values, update }: SectionProps) {
   const { t } = useTranslation('jobs');
   return (
-    <EditorialSection index="04" title={t('form.schedule')} description={t('form.scheduleDesc')}>
+    <EditorialSection
+      index="04"
+      title={t('form.schedule')}
+      description={t('form.scheduleDesc')}
+    >
       <div className="grid gap-6 sm:grid-cols-2">
         <InputField
           id="cron"
@@ -191,7 +215,11 @@ function PatternField({
 export function FilterFields({ values, update }: SectionProps) {
   const { t } = useTranslation('jobs');
   return (
-    <EditorialSection index="05" title={t('form.filters')} description={t('form.filtersDesc')}>
+    <EditorialSection
+      index="05"
+      title={t('form.filters')}
+      description={t('form.filtersDesc')}
+    >
       <div className="grid gap-6 sm:grid-cols-2">
         <PatternField
           id="include-patterns"
@@ -241,7 +269,11 @@ export function AdvancedFields({ values, update }: SectionProps) {
   const { t } = useTranslation('jobs');
   const [open, setOpen] = useState(false);
   return (
-    <EditorialSection index="06" title={t('form.advanced')} description={t('form.advancedDesc')}>
+    <EditorialSection
+      index="06"
+      title={t('form.advanced')}
+      description={t('form.advancedDesc')}
+    >
       <Button
         variant="secondary"
         size="sm"
@@ -252,12 +284,18 @@ export function AdvancedFields({ values, update }: SectionProps) {
         {open ? t('form.hideAdvanced') : t('form.showAdvanced')}
         <ChevronDown
           size={15}
-          className={cn('transition-transform duration-300', open && 'rotate-180')}
+          className={cn(
+            'transition-transform duration-300',
+            open && 'rotate-180',
+          )}
           aria-hidden="true"
         />
       </Button>
       {open && (
-        <div id="job-advanced-fields" className="mt-6 grid gap-6 sm:grid-cols-2">
+        <div
+          id="job-advanced-fields"
+          className="mt-6 grid gap-6 sm:grid-cols-2"
+        >
           <SwitchRow
             label={t('form.allowEmptySource')}
             hint={t('form.allowEmptySourceHint')}
@@ -276,7 +314,9 @@ export function AdvancedFields({ values, update }: SectionProps) {
             type="number"
             min={0}
             value={values.relayBandwidthLimit}
-            onChange={(event) => update('relayBandwidthLimit', event.target.value)}
+            onChange={(event) =>
+              update('relayBandwidthLimit', event.target.value)
+            }
             hint={t('form.bandwidthHint')}
           />
           <InputField

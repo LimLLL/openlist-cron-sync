@@ -4,7 +4,12 @@ import { useTranslation } from 'react-i18next';
 import { Badge } from '../../components/ui/badge';
 import { StatusDot } from '../../components/ui/status-dot';
 import { CountUp } from '../../components/motion/count-up';
-import { formatBytes, formatDuration, formatRelative, formatTimeFull } from '../../lib/format';
+import {
+  formatBytes,
+  formatDuration,
+  formatRelative,
+  formatTimeFull,
+} from '../../lib/format';
 import { useErrorText } from '../../i18n/error-text';
 import { ACTIVE_RUN_STATUSES } from './run-contract';
 import type { RunDetail } from './run-contract';
@@ -50,26 +55,61 @@ export function RunDossier({ detail }: { detail: RunDetail }) {
   // 预览运行展示计划值，真实运行展示已执行的值。
   const figures: Figure[] = detail.dryRun
     ? [
-        { label: t('detail.figures.plannedCopies'), value: sum(stats, ['plannedCreates']) },
+        {
+          label: t('detail.figures.plannedCopies'),
+          value: sum(stats, ['plannedCreates']),
+        },
         {
           label: t('detail.figures.plannedDeletes'),
-          value: sum(stats, ['plannedExtraDeletes', 'plannedDirectoryDeletes', 'plannedReplacements']),
+          value: sum(stats, [
+            'plannedExtraDeletes',
+            'plannedDirectoryDeletes',
+            'plannedReplacements',
+          ]),
         },
-        { label: t('detail.figures.plannedBytes'), value: sum(stats, ['plannedBytes']), bytes: true },
-        { label: t('detail.figures.issues'), value: detail.issueCount, alert: true },
+        {
+          label: t('detail.figures.plannedBytes'),
+          value: sum(stats, ['plannedBytes']),
+          bytes: true,
+        },
+        {
+          label: t('detail.figures.issues'),
+          value: detail.issueCount,
+          alert: true,
+        },
       ]
     : [
-        { label: t('detail.figures.copied'), value: sum(stats, ['succeededCreates']) },
-        { label: t('detail.figures.deleted'), value: sum(stats, ['deletedAsExtra', 'deletedForReplace']) },
-        { label: t('detail.figures.transferred'), value: sum(stats, ['transferredBytes']), bytes: true },
-        { label: t('detail.figures.issues'), value: detail.issueCount, alert: true },
+        {
+          label: t('detail.figures.copied'),
+          value: sum(stats, ['succeededCreates']),
+        },
+        {
+          label: t('detail.figures.deleted'),
+          value: sum(stats, ['deletedAsExtra', 'deletedForReplace']),
+        },
+        {
+          label: t('detail.figures.transferred'),
+          value: sum(stats, ['transferredBytes']),
+          bytes: true,
+        },
+        {
+          label: t('detail.figures.issues'),
+          value: detail.issueCount,
+          alert: true,
+        },
       ];
-  const message = detail.error ? errorText(detail.error.code, detail.error.message) : null;
+  const message = detail.error
+    ? errorText(detail.error.code, detail.error.message)
+    : null;
 
   return (
     <div className="mb-4">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <Badge variant={badge.variant} pulse={badge.pulse} className="px-3 py-1.5 text-xs">
+        <Badge
+          variant={badge.variant}
+          pulse={badge.pulse}
+          className="px-3 py-1.5 text-xs"
+        >
           {t(`common:runStatus.${detail.status}`)}
         </Badge>
         {detail.dryRun && (
@@ -97,7 +137,9 @@ export function RunDossier({ detail }: { detail: RunDetail }) {
       {detail.cancelRequestedAt && (
         <p className="mt-5 flex items-center gap-2.5 text-sm text-signal">
           <StatusDot tone="warning" pulse={active} />
-          {t('detail.cancelRequested', { time: formatTimeFull(detail.cancelRequestedAt) })}
+          {t('detail.cancelRequested', {
+            time: formatTimeFull(detail.cancelRequestedAt),
+          })}
         </p>
       )}
 
@@ -143,7 +185,9 @@ export function RunDossier({ detail }: { detail: RunDetail }) {
         ))}
       </dl>
       {detail.dryRun && (
-        <p className="mt-4 text-xs text-muted-foreground">{t('detail.dryRunNote')}</p>
+        <p className="mt-4 text-xs text-muted-foreground">
+          {t('detail.dryRunNote')}
+        </p>
       )}
     </div>
   );

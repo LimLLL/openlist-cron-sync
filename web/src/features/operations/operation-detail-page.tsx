@@ -11,7 +11,12 @@ import { useOperationDetail } from './operation-queries';
 import type { OperationView } from './operation-contract';
 import { OperationStats, PathDossier } from './operation-dossier';
 import { UnknownManagement } from './operation-manage';
-import { OperationError, OperationFacts, OperationTimeline, ResolutionBlock } from './operation-record';
+import {
+  OperationError,
+  OperationFacts,
+  OperationTimeline,
+  ResolutionBlock,
+} from './operation-record';
 import { splitPath, statusBadge } from './operation-status';
 
 /** 渲染页头描述区的标签组：状态、动作、方式、原因与是否目录。
@@ -53,15 +58,19 @@ export function OperationDetailPage() {
   const op = useOperationDetail(id!);
   const { t } = useTranslation(['operations', 'common']);
 
-  if (op.isPending) return <LoadingState label={t('detail.loading')} rows={8} />;
-  if (op.isError) return <ErrorState error={op.error} onRetry={() => void op.refetch()} />;
+  if (op.isPending)
+    return <LoadingState label={t('detail.loading')} rows={8} />;
+  if (op.isError)
+    return <ErrorState error={op.error} onRetry={() => void op.refetch()} />;
 
   const detail = op.data;
   const { name } = splitPath(detail.targetPath);
   const showManage = detail.status === 'unknown' && !detail.resolution;
   // 分节编号随可选分节顺延：生命周期、记录固定为 01、02。
   let next = 3;
-  const resolutionIndex = detail.resolution ? String(next++).padStart(2, '0') : null;
+  const resolutionIndex = detail.resolution
+    ? String(next++).padStart(2, '0')
+    : null;
 
   return (
     <section>
@@ -70,7 +79,10 @@ export function OperationDetailPage() {
         kicker={t('common:nav.operations')}
         title={name || t('detail.title')}
         meta={
-          <Link to="/operations" className="inline-flex items-center gap-1.5 hover:text-foreground">
+          <Link
+            to="/operations"
+            className="inline-flex items-center gap-1.5 hover:text-foreground"
+          >
             <ArrowLeft size={12} aria-hidden="true" />
             {t('detail.back')}
           </Link>

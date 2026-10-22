@@ -55,7 +55,10 @@ function FactStrip({ instance }: { instance: Instance }) {
     {
       label: t('detail.version'),
       value: (
-        <span className="font-mono" title={instance.openlistVersion ?? undefined}>
+        <span
+          className="font-mono"
+          title={instance.openlistVersion ?? undefined}
+        >
           {shortVersion(instance.openlistVersion) ?? t('detail.unknownVersion')}
         </span>
       ),
@@ -64,7 +67,9 @@ function FactStrip({ instance }: { instance: Instance }) {
       label: t('detail.lastTested'),
       value: (
         <span title={formatTimeFull(instance.lastTestAt)}>
-          {instance.lastTestAt ? formatRelative(instance.lastTestAt) : t('detail.neverTested')}
+          {instance.lastTestAt
+            ? formatRelative(instance.lastTestAt)
+            : t('detail.neverTested')}
         </span>
       ),
     },
@@ -96,7 +101,11 @@ function LastError({ error }: { error: NonNullable<Instance['lastError']> }) {
   const errorText = useErrorText();
   return (
     <div className="mt-8 flex gap-4 rounded-2xl border border-signal/25 bg-signal/[0.05] p-5">
-      <CircleAlert size={18} className="mt-0.5 shrink-0 text-signal" aria-hidden="true" />
+      <CircleAlert
+        size={18}
+        className="mt-0.5 shrink-0 text-signal"
+        aria-hidden="true"
+      />
       <div className="min-w-0">
         <p className="eyebrow text-signal">{t('detail.lastError')}</p>
         <p className="mt-2 text-sm">{errorText(error.code, error.message)}</p>
@@ -141,7 +150,9 @@ export function InstanceDetailView({
     {
       label: t('detail.lastTested'),
       time: instance.lastTestAt ? formatTimeFull(instance.lastTestAt) : null,
-      note: instance.lastTestAt ? formatRelative(instance.lastTestAt) : undefined,
+      note: instance.lastTestAt
+        ? formatRelative(instance.lastTestAt)
+        : undefined,
     },
     { label: t('detail.updated'), time: formatTimeFull(instance.updatedAt) },
     ...(instance.authBlockedUntil
@@ -161,7 +172,11 @@ export function InstanceDetailView({
 
       <AnimatePresence initial={false}>
         {(test.isPending || test.data) && (
-          <InstanceTestPanel key="test" pending={test.isPending} result={test.data} />
+          <InstanceTestPanel
+            key="test"
+            pending={test.isPending}
+            result={test.data}
+          />
         )}
       </AnimatePresence>
       {test.isError && (
@@ -169,26 +184,49 @@ export function InstanceDetailView({
           <ErrorState error={test.error} />
         </div>
       )}
-      {instance.lastError && !test.data && <LastError error={instance.lastError} />}
+      {instance.lastError && !test.data && (
+        <LastError error={instance.lastError} />
+      )}
 
       <div className="mt-12">
-        <EditorialSection index="01" title={t('detail.account')} description={t('detail.accountHint')}>
+        <EditorialSection
+          index="01"
+          title={t('detail.account')}
+          description={t('detail.accountHint')}
+        >
           {instance.accountUsername ? (
             <SpecGrid
               columns={2}
               items={[
-                { label: t('detail.username'), value: instance.accountUsername },
-                { label: t('detail.basePath'), value: instance.accountBasePath ?? '—', mono: true },
+                {
+                  label: t('detail.username'),
+                  value: instance.accountUsername,
+                },
+                {
+                  label: t('detail.basePath'),
+                  value: instance.accountBasePath ?? '—',
+                  mono: true,
+                },
                 { label: t('detail.role'), value: role ?? '—' },
-                { label: t('detail.permissions'), value: instance.accountPermissions ?? '—', mono: true },
+                {
+                  label: t('detail.permissions'),
+                  value: instance.accountPermissions ?? '—',
+                  mono: true,
+                },
               ]}
             />
           ) : (
-            <p className="text-sm leading-7 text-muted-foreground">{t('detail.accountEmpty')}</p>
+            <p className="text-sm leading-7 text-muted-foreground">
+              {t('detail.accountEmpty')}
+            </p>
           )}
         </EditorialSection>
 
-        <EditorialSection index="02" title={t('detail.limits')} description={t('detail.limitsHint')}>
+        <EditorialSection
+          index="02"
+          title={t('detail.limits')}
+          description={t('detail.limitsHint')}
+        >
           <SpecGrid
             columns={4}
             items={[
@@ -207,14 +245,20 @@ export function InstanceDetailView({
               {
                 label: t('detail.downloadMode'),
                 value:
-                  instance.downloadMode === 'd' ? t('form.downloadDirect') : t('form.downloadProxy'),
+                  instance.downloadMode === 'd'
+                    ? t('form.downloadDirect')
+                    : t('form.downloadProxy'),
               },
               { label: t('detail.multipart'), value: multipart },
             ]}
           />
         </EditorialSection>
 
-        <EditorialSection index="03" title={t('detail.timeline')} description={t('detail.timelineHint')}>
+        <EditorialSection
+          index="03"
+          title={t('detail.timeline')}
+          description={t('detail.timelineHint')}
+        >
           <Timeline items={timeline} />
         </EditorialSection>
       </div>

@@ -25,7 +25,8 @@ export default {
   },
   password: {
     eyebrow: 'ACCOUNT SECURITY',
-    forcedDescription: 'Replace your initial password before entering the workspace.',
+    forcedDescription:
+      'Replace your initial password before entering the workspace.',
     description: 'Change the password for your administrator account.',
     sessionsEnd: 'All existing sessions will end after this change.',
     formLabel: 'Change password',

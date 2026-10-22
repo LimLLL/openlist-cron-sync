@@ -42,18 +42,39 @@ function Connectors({ count }: { count: number }) {
   });
 
   return (
-    <div ref={box} className="relative hidden self-stretch md:block" aria-hidden="true">
+    <div
+      ref={box}
+      className="relative hidden self-stretch md:block"
+      aria-hidden="true"
+    >
       {width > 0 && (
-        <svg width={width} height={height} className="absolute inset-0 overflow-visible">
+        <svg
+          width={width}
+          height={height}
+          className="absolute inset-0 overflow-visible"
+        >
           <defs>
             <linearGradient id="job-route-stroke" x1="0" x2="1" y1="0" y2="0">
-              <stop offset="0%" stopColor="rgb(185 237 188)" stopOpacity="0.7" />
-              <stop offset="100%" stopColor="rgb(185 237 188)" stopOpacity="0.18" />
+              <stop
+                offset="0%"
+                stopColor="rgb(185 237 188)"
+                stopOpacity="0.7"
+              />
+              <stop
+                offset="100%"
+                stopColor="rgb(185 237 188)"
+                stopOpacity="0.18"
+              />
             </linearGradient>
           </defs>
           {paths.map((path, index) => (
             <g key={index}>
-              <path d={path} fill="none" stroke="url(#job-route-stroke)" strokeWidth={1} />
+              <path
+                d={path}
+                fill="none"
+                stroke="url(#job-route-stroke)"
+                strokeWidth={1}
+              />
               {!reduced && (
                 <>
                   <circle r={6} fill="rgb(185 237 188)" opacity={0.18}>
@@ -91,14 +112,20 @@ function Connectors({ count }: { count: number }) {
 export function JobRoute({ job }: { job: JobView }) {
   const { t } = useTranslation('jobs');
   const instanceName = useInstanceName();
-  const sourceName = instanceName(job.source.instanceId) ?? t('detail.unknownInstance');
+  const sourceName =
+    instanceName(job.source.instanceId) ?? t('detail.unknownInstance');
 
   return (
-    <figure aria-label={t('detail.route')} className="panel overflow-hidden p-5 sm:p-8">
+    <figure
+      aria-label={t('detail.route')}
+      className="panel overflow-hidden p-5 sm:p-8"
+    >
       <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(5rem,11rem)_minmax(0,1.25fr)] md:items-center md:gap-0">
         <div className="relative rounded-2xl border border-accent/25 bg-accent/[0.045] p-5 shadow-[0_0_60px_-20px_rgb(185_237_188/0.45)]">
           <p className="eyebrow text-accent">{t('detail.source')}</p>
-          <p className="mt-3 font-display text-lg font-medium tracking-tight">{sourceName}</p>
+          <p className="mt-3 font-display text-lg font-medium tracking-tight">
+            {sourceName}
+          </p>
           <p className="mt-1 font-mono text-[12px] break-all text-muted-foreground">
             {job.source.path}
           </p>
@@ -107,7 +134,10 @@ export function JobRoute({ job }: { job: JobView }) {
           </div>
         </div>
         <Connectors count={job.targets.length} />
-        <div className="flex justify-center text-accent/70 md:hidden" aria-hidden="true">
+        <div
+          className="flex justify-center text-accent/70 md:hidden"
+          aria-hidden="true"
+        >
           <ArrowDown size={18} />
         </div>
         <ol className="space-y-3">
@@ -121,17 +151,23 @@ export function JobRoute({ job }: { job: JobView }) {
               </span>
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-medium">
-                  {instanceName(target.instanceId) ?? t('detail.unknownInstance')}
+                  {instanceName(target.instanceId) ??
+                    t('detail.unknownInstance')}
                 </span>
                 <span className="mt-1 block truncate font-mono text-[11.5px] text-muted-foreground">
                   {target.path}
                 </span>
               </span>
               <span className="flex shrink-0 gap-1">
-                <Badge plain variant={target.mode === 'mirror' ? 'warning' : 'default'}>
+                <Badge
+                  plain
+                  variant={target.mode === 'mirror' ? 'warning' : 'default'}
+                >
                   {t(`mode.${target.mode}`)}
                 </Badge>
-                <Badge plain variant="info">{t(`createMode.${target.createMode}`)}</Badge>
+                <Badge plain variant="info">
+                  {t(`createMode.${target.createMode}`)}
+                </Badge>
               </span>
             </li>
           ))}

@@ -305,13 +305,9 @@ export function buildJobInput(values: JobFormValues) {
   }
   if (!values.timezone) throw new JobFormError('timezoneRequired');
   const minSizeBytes =
-    values.minSizeBytes === ''
-      ? null
-      : integer(values.minSizeBytes, 'minSize');
+    values.minSizeBytes === '' ? null : integer(values.minSizeBytes, 'minSize');
   const maxSizeBytes =
-    values.maxSizeBytes === ''
-      ? null
-      : integer(values.maxSizeBytes, 'maxSize');
+    values.maxSizeBytes === '' ? null : integer(values.maxSizeBytes, 'maxSize');
   if (
     minSizeBytes !== null &&
     maxSizeBytes !== null &&

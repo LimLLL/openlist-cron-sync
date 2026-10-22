@@ -4,12 +4,11 @@ import { InstancesService } from '../src/instances/instances.service.js';
 import { InstanceOperations } from '../src/instances/instance-operations.service.js';
 import { componentFixture } from './openlist-fixture.js';
 
-describe('M1 per-instance quota', /** 注册本组 M1 行为验收用例。
+describe('M1 per-instance quota' /** 注册本组 M1 行为验收用例。
  * @param 不适用。
  * @returns 不适用。
  * @throws 不适用。
- */
-() => {
+ */, () => {
   afterEach(
     /** 恢复测试状态并释放本用例拥有的资源。
      * @param 不适用。
@@ -20,12 +19,11 @@ describe('M1 per-instance quota', /** 注册本组 M1 行为验收用例。
       vi.useRealTimers();
     },
   );
-  it('reserves control capacity, obeys rate, cancels queued requests and releases slots', /** 记录实际取得配额的顺序。
+  it('reserves control capacity, obeys rate, cancels queued requests and releases slots' /** 记录实际取得配额的顺序。
    * @param 不适用。
    * @returns 调用方负责释放的函数。
    * @throws 不适用。
-   */
-  async () => {
+   */, async () => {
     vi.useFakeTimers();
     const quota = new ApiQuota();
     const limits = {
@@ -82,12 +80,11 @@ describe('M1 per-instance quota', /** 注册本组 M1 行为验收用例。
     );
     other();
   });
-  it('drains a large backlog at once after the limits become unlimited', /** 先在并发 1 下积压大量请求，再以 0/0 配额一次派发，防止逐个递归派发撑爆调用栈。
+  it('drains a large backlog at once after the limits become unlimited' /** 先在并发 1 下积压大量请求，再以 0/0 配额一次派发，防止逐个递归派发撑爆调用栈。
    * @param 不适用。
    * @returns 断言完成。
    * @throws Error 断言失败。
-   */
-  async () => {
+   */, async () => {
     const quota = new ApiQuota();
     const signal = new AbortController().signal;
     const finite = {
@@ -113,12 +110,11 @@ describe('M1 per-instance quota', /** 注册本组 M1 行为验收用例。
     for (const release of releases) release();
     holder();
   });
-  it('login, me, settings and admin browse share the same request rate', /** 记录上游实际收到请求的时间。
+  it('login, me, settings and admin browse share the same request rate' /** 记录上游实际收到请求的时间。
    * @param 不适用。
    * @returns undefined，使用默认上游响应。
    * @throws 不适用。
-   */
-  async () => {
+   */, async () => {
     const fixture = await componentFixture();
     try {
       fixture.app

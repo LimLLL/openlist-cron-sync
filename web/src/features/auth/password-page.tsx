@@ -51,7 +51,9 @@ export function PasswordPage() {
         kicker={t('password.eyebrow')}
         description={
           <>
-            {forced ? t('password.forcedDescription') : t('password.description')}{' '}
+            {forced
+              ? t('password.forcedDescription')
+              : t('password.description')}{' '}
             {t('password.sessionsEnd')}
           </>
         }

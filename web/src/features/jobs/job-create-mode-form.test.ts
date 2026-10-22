@@ -134,8 +134,6 @@ describe('Target create mode form', () => {
       createElement(MemoryRouter, null, JobForm({ existing: job })),
     );
     expect(markup).toContain('role="alert"');
-    expect(markup).toContain(
-      i18n.t('jobs:validation.serverCopySameInstance'),
-    );
+    expect(markup).toContain(i18n.t('jobs:validation.serverCopySameInstance'));
   });
 });

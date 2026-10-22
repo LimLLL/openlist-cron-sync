@@ -29,7 +29,10 @@ interface TargetBlockProps {
   /** 是否允许移除。 */
   canRemove: boolean;
   /** 更新字段。 */
-  onChange: <K extends keyof TargetInput>(field: K, value: TargetInput[K]) => void;
+  onChange: <K extends keyof TargetInput>(
+    field: K,
+    value: TargetInput[K],
+  ) => void;
   /** 打开此目标的目录选择器。 */
   onBrowse: () => void;
   /** 移除此目标。 */
@@ -41,7 +44,16 @@ interface TargetBlockProps {
  * @returns 目标子块。
  * @throws 不适用。
  */
-function TargetBlock({ sourceInstanceId, target, index, instances, canRemove, onChange, onBrowse, onRemove }: TargetBlockProps) {
+function TargetBlock({
+  sourceInstanceId,
+  target,
+  index,
+  instances,
+  canRemove,
+  onChange,
+  onBrowse,
+  onRemove,
+}: TargetBlockProps) {
   const { t } = useTranslation('jobs');
   const label = t('form.target', { index: index + 1 });
   const createMode = targetCreateModeState(sourceInstanceId, target);
@@ -91,7 +103,9 @@ function TargetBlock({ sourceInstanceId, target, index, instances, canRemove, on
           onChange={(event) => onChange('path', event.target.value)}
           required
           placeholder="/"
-          action={<BrowseButton disabled={!target.instanceId} onClick={onBrowse} />}
+          action={
+            <BrowseButton disabled={!target.instanceId} onClick={onBrowse} />
+          }
         />
         <div className="space-y-2">
           <p className="field-label">{t('form.mode')}</p>
@@ -104,7 +118,9 @@ function TargetBlock({ sourceInstanceId, target, index, instances, canRemove, on
               { value: 'mirror', label: t('mode.mirror') },
             ]}
           />
-          <p className="text-xs leading-5 text-muted-foreground">{t('form.modeHint')}</p>
+          <p className="text-xs leading-5 text-muted-foreground">
+            {t('form.modeHint')}
+          </p>
         </div>
         <div className="space-y-2">
           <p className="field-label">{t('form.createMode')}</p>
@@ -116,15 +132,24 @@ function TargetBlock({ sourceInstanceId, target, index, instances, canRemove, on
             invalid={createMode.invalid}
             options={[
               { value: 'relay', label: t('createMode.relay') },
-              { value: 'server_copy', label: t('createMode.server_copy'), disabled: createMode.unavailable },
+              {
+                value: 'server_copy',
+                label: t('createMode.server_copy'),
+                disabled: createMode.unavailable,
+              },
             ]}
           />
           <p
             id={modeHintId}
             role={createMode.invalid ? 'alert' : undefined}
-            className={cn('text-xs leading-5', createMode.invalid ? 'text-danger' : 'text-muted-foreground')}
+            className={cn(
+              'text-xs leading-5',
+              createMode.invalid ? 'text-danger' : 'text-muted-foreground',
+            )}
           >
-            {createMode.invalid ? t('validation.serverCopySameInstance') : t('form.createModeHint')}
+            {createMode.invalid
+              ? t('validation.serverCopySameInstance')
+              : t('form.createModeHint')}
           </p>
         </div>
         <InputField
@@ -195,7 +220,11 @@ export function TargetsFields({
 }) {
   const { t } = useTranslation('jobs');
   return (
-    <EditorialSection index="03" title={t('form.targets')} description={t('form.targetsDesc')}>
+    <EditorialSection
+      index="03"
+      title={t('form.targets')}
+      description={t('form.targetsDesc')}
+    >
       <div className="space-y-4">
         <AnimatePresence initial={false}>
           {targets.map((target, index) => (
@@ -215,9 +244,15 @@ export function TargetsFields({
                 canRemove={targets.length > 1}
                 onBrowse={() => onBrowse(index)}
                 onChange={(field, value) =>
-                  onChange(targets.map((item, position) => (position === index ? { ...item, [field]: value } : item)))
+                  onChange(
+                    targets.map((item, position) =>
+                      position === index ? { ...item, [field]: value } : item,
+                    ),
+                  )
                 }
-                onRemove={() => onChange(targets.filter((_, position) => position !== index))}
+                onRemove={() =>
+                  onChange(targets.filter((_, position) => position !== index))
+                }
               />
             </motion.div>
           ))}

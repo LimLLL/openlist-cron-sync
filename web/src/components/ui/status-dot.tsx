@@ -2,7 +2,8 @@
 import { cn } from '../../lib/utils';
 
 /** 状态点的语义色调。 */
-export type StatusTone = 'active' | 'success' | 'warning' | 'danger' | 'muted' | 'info';
+export type StatusTone =
+  'active' | 'success' | 'warning' | 'danger' | 'muted' | 'info';
 
 const TONES: Record<StatusTone, string> = {
   active: 'bg-accent text-accent',
@@ -30,7 +31,12 @@ export function StatusDot({
   return (
     <span
       aria-hidden="true"
-      className={cn('status-dot', TONES[tone], pulse && 'status-dot-pulse', className)}
+      className={cn(
+        'status-dot',
+        TONES[tone],
+        pulse && 'status-dot-pulse',
+        className,
+      )}
     />
   );
 }

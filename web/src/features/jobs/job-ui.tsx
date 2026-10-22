@@ -29,7 +29,8 @@ export function useInstanceName(): (id: string) => string | null {
  */
 export function ScheduleBadge({ job }: { job: JobView }) {
   const { t } = useTranslation('jobs');
-  if (job.archivedAt) return <Badge variant="danger">{t('badge.archived')}</Badge>;
+  if (job.archivedAt)
+    return <Badge variant="danger">{t('badge.archived')}</Badge>;
   return job.enabled ? (
     <Badge variant="success" pulse={!!job.cron}>
       {t('badge.enabled')}
@@ -69,7 +70,11 @@ export function SwitchRow({
     >
       <span className="min-w-0">
         <span className="block text-sm">{label}</span>
-        {hint && <span className="mt-1 block text-xs leading-5 text-muted-foreground">{hint}</span>}
+        {hint && (
+          <span className="mt-1 block text-xs leading-5 text-muted-foreground">
+            {hint}
+          </span>
+        )}
       </span>
       <span className="relative mt-0.5 inline-flex shrink-0">
         <input
@@ -111,10 +116,21 @@ export function MonoChip({ children }: { children: ReactNode }) {
  * @returns 按钮元素。
  * @throws 不适用。
  */
-export function BrowseButton({ disabled, onClick }: { disabled: boolean; onClick: () => void }) {
+export function BrowseButton({
+  disabled,
+  onClick,
+}: {
+  disabled: boolean;
+  onClick: () => void;
+}) {
   const { t } = useTranslation('jobs');
   return (
-    <Button variant="secondary" className="min-h-12 shrink-0" onClick={onClick} disabled={disabled}>
+    <Button
+      variant="secondary"
+      className="min-h-12 shrink-0"
+      onClick={onClick}
+      disabled={disabled}
+    >
       <FolderSearch size={15} aria-hidden="true" />
       {t('form.browse')}
     </Button>

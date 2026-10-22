@@ -60,26 +60,24 @@ describe('API client', () => {
   });
 
   it('retains field errors, request ID and retry timing without retrying', async () => {
-    const fetch = vi
-      .fn<typeof globalThis.fetch>()
-      .mockResolvedValue(
-        Response.json(
-          {
-            error: {
-              code: 'LOGIN_RATE_LIMITED',
-              message: 'Too many attempts',
-              details: [
-                { field: 'username', reason: 'Invalid value' },
-                'bad detail',
-              ],
-            },
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
+      Response.json(
+        {
+          error: {
+            code: 'LOGIN_RATE_LIMITED',
+            message: 'Too many attempts',
+            details: [
+              { field: 'username', reason: 'Invalid value' },
+              'bad detail',
+            ],
           },
-          {
-            status: 429,
-            headers: { 'retry-after': '60', 'x-request-id': 'request-1' },
-          },
-        ),
-      );
+        },
+        {
+          status: 429,
+          headers: { 'retry-after': '60', 'x-request-id': 'request-1' },
+        },
+      ),
+    );
     vi.stubGlobal('fetch', fetch);
     await expect(
       apiRequest('/auth/login', { method: 'POST' }),

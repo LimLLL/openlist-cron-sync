@@ -59,11 +59,9 @@ describe('M2 job boundaries', () => {
        * @throws Error 预期的 Invalid job configuration。
        */
       () =>
-        f
-          .jobs()
-          .patch(job.id, {
-            targets: [{ id: job.targets[0].id, createMode: 'server_copy' }],
-          }),
+        f.jobs().patch(job.id, {
+          targets: [{ id: job.targets[0].id, createMode: 'server_copy' }],
+        }),
     ).toThrow('Invalid job configuration');
   });
   /** 实例版本过低或未开启 multipart 时拒绝启用 relay Job 和 dry-run；仅缺 multipart 时 server_copy 仍可预览。
@@ -109,12 +107,10 @@ describe('M2 job boundaries', () => {
         () => f.runs().trigger(job.id, { dryRun: true, confirmDeletes: false }),
       ).toThrow();
       if (kind === 'multipart') {
-        const copy = f
-          .jobs()
-          .patch(job.id, {
-            targets: [{ id: job.targets[0].id, createMode: 'server_copy' }],
-            enabled: true,
-          });
+        const copy = f.jobs().patch(job.id, {
+          targets: [{ id: job.targets[0].id, createMode: 'server_copy' }],
+          enabled: true,
+        });
         expect((await preview(f, copy)).status).toBe('succeeded');
       }
     },

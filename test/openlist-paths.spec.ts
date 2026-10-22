@@ -4,12 +4,11 @@ import { OpenListMultipart } from '../src/openlist/multipart.service.js';
 import { downloadUrl } from '../src/openlist/paths.js';
 import { componentFixture, envelope, file } from './openlist-fixture.js';
 import type { ComponentFixture } from './openlist-fixture.js';
-describe('M1 path boundaries', /** 注册本组 M1 行为验收用例。
+describe('M1 path boundaries' /** 注册本组 M1 行为验收用例。
  * @param 不适用。
  * @returns 不适用。
  * @throws 不适用。
- */
-() => {
+ */, () => {
   let fixture: ComponentFixture;
   afterEach(
     /** 恢复测试状态并释放本用例拥有的资源。
@@ -21,12 +20,11 @@ describe('M1 path boundaries', /** 注册本组 M1 行为验收用例。
       if (fixture) await fixture.close();
     },
   );
-  it('invalid names never enter names, File-Path or download URLs', /** 检查所有排除条目的固定警告码。
+  it('invalid names never enter names, File-Path or download URLs' /** 检查所有排除条目的固定警告码。
    * @param 不适用。
    * @returns 警告是否为 INVALID_NAME。
    * @throws 不适用。
-   */
-  async () => {
+   */, async () => {
     fixture = await componentFixture();
     const names = ['a/b', 'a\\b', '..\\x', '..\\..\\x', '.', '..'];
     fixture.server.responder =
@@ -97,12 +95,11 @@ describe('M1 path boundaries', /** 注册本组 M1 行为验收用例。
     expect(fixture.server.calls).toHaveLength(before);
   });
 
-  it('round trips percent, plus, hash, query, Chinese, emoji and spaces once', /** 构造下载地址，验证非法名称在本地被拒绝。
+  it('round trips percent, plus, hash, query, Chinese, emoji and spaces once' /** 构造下载地址，验证非法名称在本地被拒绝。
    * @param 不适用。
    * @returns 合法时的下载 URL。
    * @throws OpenListError 名称非法。
-   */
-  async () => {
+   */, async () => {
     fixture = await componentFixture();
     const name = '% + # ? 中文 😀 space';
     const directory = '/目录 +%';

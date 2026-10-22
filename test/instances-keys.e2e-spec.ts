@@ -15,12 +15,11 @@ import {
 import { initializeApplication } from '../src/http-setup.js';
 import { KeysService } from '../src/security/keys.service.js';
 
-describe('M1 production ENC startup acceptance', /** 注册本组 M1 行为验收用例。
+describe('M1 production ENC startup acceptance' /** 注册本组 M1 行为验收用例。
  * @param 不适用。
  * @returns 不适用。
  * @throws 不适用。
- */
-() => {
+ */, () => {
   it.each(['missing', 'wrong'])(
     'fails KEY_MISMATCH for %s master key without new ENC writes',
 

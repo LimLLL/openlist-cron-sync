@@ -6,12 +6,11 @@ import { OpenListMultipart } from '../src/openlist/multipart.service.js';
 import { componentFixture, envelope, latch } from './openlist-fixture.js';
 import type { ComponentFixture } from './openlist-fixture.js';
 
-describe('M1 authentication', /** 注册本组 M1 行为验收用例。
+describe('M1 authentication' /** 注册本组 M1 行为验收用例。
  * @param 不适用。
  * @returns 不适用。
  * @throws 不适用。
- */
-() => {
+ */, () => {
   let fixture: ComponentFixture;
   afterEach(
     /** 恢复测试状态并释放本用例拥有的资源。
@@ -25,12 +24,11 @@ describe('M1 authentication', /** 注册本组 M1 行为验收用例。
     },
   );
 
-  it('coalesces concurrent and late stale-token 401 into exactly one login', /** 验证当前场景的协议输入、输出与副作用。
+  it('coalesces concurrent and late stale-token 401 into exactly one login' /** 验证当前场景的协议输入、输出与副作用。
    * @param 不适用。
    * @returns 断言完成；异步用例返回完成 Promise。
    * @throws Error 断言或测试资源操作失败。
-   */
-  async () => {
+   */, async () => {
     fixture = await componentFixture();
     await fixture.client.auth.account(fixture.record());
     const allOld = latch();
@@ -136,7 +134,9 @@ describe('M1 authentication', /** 注册本组 M1 行为验收用例。
          * @throws 不适用。
          */
         (call) =>
-          call.url === '/api/auth/login/hash' ? { disconnect: true } : undefined;
+          call.url === '/api/auth/login/hash'
+            ? { disconnect: true }
+            : undefined;
       const offline = await operations.test(fixture.id, { retryAuth: true });
       expect(offline.error?.code).toBe('OPENLIST_ERROR');
       expect(fixture.record()).toMatchObject({
@@ -157,12 +157,11 @@ describe('M1 authentication', /** 注册本组 M1 行为验收用例。
     },
   );
 
-  it('never probes or extends a 429 cooldown, including after restart', /** 验证当前场景的协议输入、输出与副作用。
+  it('never probes or extends a 429 cooldown, including after restart' /** 验证当前场景的协议输入、输出与副作用。
    * @param 不适用。
    * @returns 断言完成；异步用例返回完成 Promise。
    * @throws Error 断言或测试资源操作失败。
-   */
-  async () => {
+   */, async () => {
     fixture = await componentFixture();
     fixture.server.responder =
       /** 根据请求端点返回本场景的可控上游响应。
@@ -227,12 +226,11 @@ describe('M1 authentication', /** 注册本组 M1 行为验收用例。
     ).toHaveLength(2);
   });
 
-  it('blocks static tokens without falling back to password and rejects guest', /** 验证当前场景的协议输入、输出与副作用。
+  it('blocks static tokens without falling back to password and rejects guest' /** 验证当前场景的协议输入、输出与副作用。
    * @param 不适用。
    * @returns 断言完成；异步用例返回完成 Promise。
    * @throws Error 断言或测试资源操作失败。
-   */
-  async () => {
+   */, async () => {
     fixture = await componentFixture('token');
     fixture.server.responder =
       /** 根据请求端点返回本场景的可控上游响应。
@@ -284,12 +282,11 @@ describe('M1 authentication', /** 注册本组 M1 行为验收用例。
     ).toBe(false);
   });
 
-  it('a login network failure is one failed call, not a credential block', /** 验证当前场景的协议输入、输出与副作用。
+  it('a login network failure is one failed call, not a credential block' /** 验证当前场景的协议输入、输出与副作用。
    * @param 不适用。
    * @returns 断言完成；异步用例返回完成 Promise。
    * @throws Error 断言或测试资源操作失败。
-   */
-  async () => {
+   */, async () => {
     fixture = await componentFixture();
     fixture.server.responder =
       /** 筛选所需端点的实际 HTTP 请求。
@@ -306,12 +303,11 @@ describe('M1 authentication', /** 注册本组 M1 行为验收用例。
     expect(fixture.server.calls).toHaveLength(1);
   });
 
-  it('updates identity on every successful me and never persists JWT', /** 验证当前场景的协议输入、输出与副作用。
+  it('updates identity on every successful me and never persists JWT' /** 验证当前场景的协议输入、输出与副作用。
    * @param 不适用。
    * @returns 断言完成；异步用例返回完成 Promise。
    * @throws Error 断言或测试资源操作失败。
-   */
-  async () => {
+   */, async () => {
     fixture = await componentFixture();
     await fixture.client.auth.account(fixture.record());
     fixture.server.responder =

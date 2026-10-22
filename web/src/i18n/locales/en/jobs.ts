@@ -100,7 +100,8 @@ export default {
     syncEmptyDirs: 'Sync empty directories',
     syncEmptyDirsHint: 'Recreate empty source folders on targets.',
     bandwidth: 'Relay bandwidth limit (bytes/s)',
-    bandwidthHint: 'Aggregate upload cap across this job’s relay targets. 0 = unlimited.',
+    bandwidthHint:
+      'Aggregate upload cap across this job’s relay targets. 0 = unlimited.',
     retryCount: 'Retries after failure',
     retryCountHint: '0–9. Leave empty to use the global default.',
     timeout: 'Timeout (seconds)',
@@ -190,7 +191,8 @@ export default {
   },
   trigger: {
     title: 'Trigger a run',
-    description: 'Start a new synchronization run for <highlight>{{name}}</highlight>.',
+    description:
+      'Start a new synchronization run for <highlight>{{name}}</highlight>.',
     modeLabel: 'Run type',
     realTitle: 'Real run',
     realHint: 'Scan, plan and execute file operations on every target.',

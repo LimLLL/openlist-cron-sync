@@ -48,15 +48,22 @@ export interface VizArc {
  * @returns 坐标。
  * @throws 不适用。
  */
-export function orbitPoint(index: number, total: number): { x: number; y: number } {
+export function orbitPoint(
+  index: number,
+  total: number,
+): { x: number; y: number } {
   const twoRings = total > 7;
   const ring = twoRings && index % 2 === 1 ? INNER : OUTER;
   const count = twoRings ? Math.ceil(total / 2) : total;
   const slot = twoRings ? Math.floor(index / 2) : index;
   // 内圈错开半格，避免与外圈节点在同一射线上重叠。
   const offset = twoRings && ring === INNER ? Math.PI / count : 0;
-  const angle = -0.82 * Math.PI + (2 * Math.PI * slot) / Math.max(count, 1) + offset;
-  return { x: VIEW.cx + ring.rx * Math.cos(angle), y: VIEW.cy + ring.ry * Math.sin(angle) };
+  const angle =
+    -0.82 * Math.PI + (2 * Math.PI * slot) / Math.max(count, 1) + offset;
+  return {
+    x: VIEW.cx + ring.rx * Math.cos(angle),
+    y: VIEW.cy + ring.ry * Math.sin(angle),
+  };
 }
 
 /** 计算两节点之间向中心弯曲的二次曲线；同一对节点的多条路径按 lane 错开。
@@ -66,7 +73,11 @@ export function orbitPoint(index: number, total: number): { x: number; y: number
  * @returns SVG 路径。
  * @throws 不适用。
  */
-function curve(a: { x: number; y: number }, b: { x: number; y: number }, lane: number): string {
+function curve(
+  a: { x: number; y: number },
+  b: { x: number; y: number },
+  lane: number,
+): string {
   const mx = (a.x + b.x) / 2;
   const my = (a.y + b.y) / 2;
   const dx = b.x - a.x;

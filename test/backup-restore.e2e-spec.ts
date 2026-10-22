@@ -31,12 +31,11 @@ async function login(base: string, password: string): Promise<string> {
   return tokenOf(response.body);
 }
 
-describe('M8 backup and restore drill', /** 注册备份恢复演练用例。
+describe('M8 backup and restore drill' /** 注册备份恢复演练用例。
  * @param 不适用。
  * @returns 不适用。
  * @throws 不适用。
- */
-() => {
+ */, () => {
   const directories: TestDirectory[] = [];
   let server: F1Server;
 

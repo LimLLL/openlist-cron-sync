@@ -19,7 +19,11 @@ const NONE = '—';
  * @returns 错误横幅。
  * @throws 不适用。
  */
-export function OperationError({ error }: { error: NonNullable<OperationView['error']> }) {
+export function OperationError({
+  error,
+}: {
+  error: NonNullable<OperationView['error']>;
+}) {
   const { t } = useTranslation('operations');
   const errorText = useErrorText();
   const message = errorText(error.code, error.message);
@@ -28,7 +32,11 @@ export function OperationError({ error }: { error: NonNullable<OperationView['er
       role="alert"
       className="mb-10 flex gap-4 rounded-[1.5rem] border border-danger/25 bg-danger/[0.05] p-5 sm:p-6"
     >
-      <CircleAlert size={20} className="mt-0.5 shrink-0 text-danger" aria-hidden="true" />
+      <CircleAlert
+        size={20}
+        className="mt-0.5 shrink-0 text-danger"
+        aria-hidden="true"
+      />
       <div className="min-w-0">
         <p className="eyebrow text-danger">{t('detail.error')}</p>
         <p className="mt-2 text-[15px] leading-7">{message}</p>
@@ -60,8 +68,16 @@ export function OperationTimeline({ op }: { op: OperationView }) {
   ];
   if (op.unknownSince) {
     items.push(
-      { label: t('detail.lifecycle.unknownSince'), time: time(op.unknownSince), tone: 'danger' },
-      { label: t('detail.lifecycle.unknownUntil'), time: time(op.unknownUntil), tone: 'warning' },
+      {
+        label: t('detail.lifecycle.unknownSince'),
+        time: time(op.unknownSince),
+        tone: 'danger',
+      },
+      {
+        label: t('detail.lifecycle.unknownUntil'),
+        time: time(op.unknownUntil),
+        tone: 'warning',
+      },
     );
   }
   if (op.quarantineReleasedAt)
@@ -70,11 +86,16 @@ export function OperationTimeline({ op }: { op: OperationView }) {
       time: time(op.quarantineReleasedAt),
       tone: 'warning',
       note: op.quarantineReleaseReason
-        ? t('detail.lifecycle.releaseReason', { reason: op.quarantineReleaseReason })
+        ? t('detail.lifecycle.releaseReason', {
+            reason: op.quarantineReleaseReason,
+          })
         : undefined,
     });
   if (op.reobservedAt)
-    items.push({ label: t('detail.lifecycle.reobserved'), time: time(op.reobservedAt) });
+    items.push({
+      label: t('detail.lifecycle.reobserved'),
+      time: time(op.reobservedAt),
+    });
   if (op.resolution)
     items.push({
       label: t('detail.lifecycle.resolved', {
@@ -113,48 +134,106 @@ export function OperationFacts({ op }: { op: OperationView }) {
       mono: true,
       wide: true,
     },
-    { label: t('detail.record.run'), value: <IdLink to={`/runs/${op.runId}`} id={op.runId} />, mono: true },
+    {
+      label: t('detail.record.run'),
+      value: <IdLink to={`/runs/${op.runId}`} id={op.runId} />,
+      mono: true,
+    },
     { label: t('detail.record.sequence'), value: `#${op.seq}`, mono: true },
-    { label: t('detail.record.reason'), value: t(`common:operationReason.${op.reason}`) },
+    {
+      label: t('detail.record.reason'),
+      value: t(`common:operationReason.${op.reason}`),
+    },
     {
       label: t('detail.record.expectedSource'),
-      value: op.expectedSourceSize === null ? NONE : formatBytes(op.expectedSourceSize),
+      value:
+        op.expectedSourceSize === null
+          ? NONE
+          : formatBytes(op.expectedSourceSize),
       mono: true,
     },
     {
       label: t('detail.record.expectedTarget'),
-      value: op.expectedTargetSize === null ? NONE : formatBytes(op.expectedTargetSize),
+      value:
+        op.expectedTargetSize === null
+          ? NONE
+          : formatBytes(op.expectedTargetSize),
       mono: true,
     },
-    { label: t('detail.record.affectedBytes'), value: formatBytes(op.affectedBytes), mono: true },
+    {
+      label: t('detail.record.affectedBytes'),
+      value: formatBytes(op.affectedBytes),
+      mono: true,
+    },
   ];
   // 创建目录不显示统计带，尝试次数改放在记录里。
   if (op.action === 'mkdir')
-    items.push({ label: t('detail.stats.attempt'), value: String(op.attemptNo), mono: true });
+    items.push({
+      label: t('detail.stats.attempt'),
+      value: String(op.attemptNo),
+      mono: true,
+    });
   if (op.sourceInstanceId)
-    items.push({ label: t('detail.record.sourceInstance'), value: op.sourceInstanceId.slice(0, 8), mono: true });
-  items.push({ label: t('detail.record.targetInstance'), value: op.targetInstanceId.slice(0, 8), mono: true });
+    items.push({
+      label: t('detail.record.sourceInstance'),
+      value: op.sourceInstanceId.slice(0, 8),
+      mono: true,
+    });
+  items.push({
+    label: t('detail.record.targetInstance'),
+    value: op.targetInstanceId.slice(0, 8),
+    mono: true,
+  });
   if (op.retryOf)
-    items.push({ label: t('detail.record.retryOf'), value: <IdLink to={`/operations/${op.retryOf}`} id={op.retryOf} />, mono: true });
+    items.push({
+      label: t('detail.record.retryOf'),
+      value: <IdLink to={`/operations/${op.retryOf}`} id={op.retryOf} />,
+      mono: true,
+    });
   if (op.causedByOperationId)
     items.push({
       label: t('detail.record.causedBy'),
-      value: <IdLink to={`/operations/${op.causedByOperationId}`} id={op.causedByOperationId} />,
+      value: (
+        <IdLink
+          to={`/operations/${op.causedByOperationId}`}
+          id={op.causedByOperationId}
+        />
+      ),
       mono: true,
     });
   if (op.task)
     items.push({
       label: t('detail.record.remoteTask'),
-      value: op.task.state === null ? op.task.id : `${op.task.id} · ${t('detail.record.taskState', { state: op.task.state })}`,
+      value:
+        op.task.state === null
+          ? op.task.id
+          : `${op.task.id} · ${t('detail.record.taskState', { state: op.task.state })}`,
       mono: true,
       wide: true,
     });
   if (op.multipart)
     items.push(
-      { label: t('detail.record.multipart'), value: op.multipart.uploadId, mono: true, wide: true },
-      { label: t('detail.record.multipartState'), value: op.multipart.state ?? NONE, mono: true },
-      { label: t('detail.record.chunk'), value: formatBytes(op.multipart.chunkSize), mono: true },
-      { label: t('detail.record.multipartAttempt'), value: op.multipart.attempt ?? NONE, mono: true },
+      {
+        label: t('detail.record.multipart'),
+        value: op.multipart.uploadId,
+        mono: true,
+        wide: true,
+      },
+      {
+        label: t('detail.record.multipartState'),
+        value: op.multipart.state ?? NONE,
+        mono: true,
+      },
+      {
+        label: t('detail.record.chunk'),
+        value: formatBytes(op.multipart.chunkSize),
+        mono: true,
+      },
+      {
+        label: t('detail.record.multipartAttempt'),
+        value: op.multipart.attempt ?? NONE,
+        mono: true,
+      },
       {
         label: t('detail.record.streamCompleted'),
         value: formatTimeFull(op.multipart.sourceStreamCompletedAt),
@@ -170,13 +249,23 @@ export function OperationFacts({ op }: { op: OperationView }) {
  * @returns 处置信息。
  * @throws 不适用。
  */
-export function ResolutionBlock({ resolution }: { resolution: NonNullable<OperationView['resolution']> }) {
+export function ResolutionBlock({
+  resolution,
+}: {
+  resolution: NonNullable<OperationView['resolution']>;
+}) {
   const { t } = useTranslation('operations');
   const variant =
-    resolution.kind === 'observed' ? 'success' : resolution.kind === 'superseded' ? 'info' : 'warning';
+    resolution.kind === 'observed'
+      ? 'success'
+      : resolution.kind === 'superseded'
+        ? 'info'
+        : 'warning';
   return (
     <div>
-      <Badge variant={variant}>{t(`detail.resolution.kind.${resolution.kind}`)}</Badge>
+      <Badge variant={variant}>
+        {t(`detail.resolution.kind.${resolution.kind}`)}
+      </Badge>
       {resolution.note && (
         <blockquote className="serif-accent mt-5 border-l border-accent/40 pl-5 text-xl leading-relaxed">
           {resolution.note}
@@ -186,10 +275,18 @@ export function ResolutionBlock({ resolution }: { resolution: NonNullable<Operat
         className="mt-6"
         columns={2}
         items={[
-          { label: t('detail.resolution.at'), value: formatTimeFull(resolution.resolvedAt), mono: true },
+          {
+            label: t('detail.resolution.at'),
+            value: formatTimeFull(resolution.resolvedAt),
+            mono: true,
+          },
           {
             label: t('detail.resolution.byRun'),
-            value: resolution.runId ? <IdLink to={`/runs/${resolution.runId}`} id={resolution.runId} /> : NONE,
+            value: resolution.runId ? (
+              <IdLink to={`/runs/${resolution.runId}`} id={resolution.runId} />
+            ) : (
+              NONE
+            ),
             mono: true,
           },
         ]}

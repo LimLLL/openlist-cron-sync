@@ -90,7 +90,11 @@ export default {
     unknown: 'Unknown',
     cancelled: 'Cancelled',
   },
-  operationAction: { mkdir: 'Create folder', create: 'Copy file', delete: 'Delete' },
+  operationAction: {
+    mkdir: 'Create folder',
+    create: 'Copy file',
+    delete: 'Delete',
+  },
   operationMethod: {
     mkdir: 'mkdir',
     relay: 'Relay',

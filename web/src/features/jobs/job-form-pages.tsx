@@ -21,7 +21,8 @@ export function JobEditPage() {
   const { t } = useTranslation('jobs');
   const { id } = useParams<{ id: string }>();
   const job = useJob(id!);
-  if (job.isPending) return <LoadingState label={t('form.loadingJob')} rows={6} />;
+  if (job.isPending)
+    return <LoadingState label={t('form.loadingJob')} rows={6} />;
   if (job.isError)
     return (
       <ErrorState

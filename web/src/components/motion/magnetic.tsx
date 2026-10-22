@@ -1,7 +1,12 @@
 // 磁吸包裹层：精确指针悬停时子元素朝指针方向轻微偏移，离开后以弹簧回位；触屏与减弱动效下不启用。
 import { useRef } from 'react';
 import type { PointerEvent, ReactNode } from 'react';
-import { motion, useMotionValue, useReducedMotion, useSpring } from 'framer-motion';
+import {
+  motion,
+  useMotionValue,
+  useReducedMotion,
+  useSpring,
+} from 'framer-motion';
 import { cn } from '../../lib/utils';
 
 const SPRING = { stiffness: 260, damping: 18, mass: 0.6 };

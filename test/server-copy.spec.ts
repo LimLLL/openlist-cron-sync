@@ -40,12 +40,10 @@ describe('M6 server copy execution', () => {
   it.each([false, true])('replaces through copy, task=%s', async (withTask) => {
     f.withTask = withTask;
     f.files.set('/target/new.txt', Buffer.from('old'));
-    const accepted = f
-      .runs()
-      .trigger(f.copyJob().id, {
-        dryRun: false,
-        confirmDeletes: true,
-      });
+    const accepted = f.runs().trigger(f.copyJob().id, {
+      dryRun: false,
+      confirmDeletes: true,
+    });
     expect((await terminal(f, accepted.id)).status).toBe('succeeded');
     expect(plan(f, accepted.id).map(status)).toEqual([
       'succeeded',
@@ -82,12 +80,10 @@ describe('M6 server copy execution', () => {
               ? listing()
               : envelope(null, 403)
             : response;
-      const accepted = f
-        .runs()
-        .trigger(f.copyJob().id, {
-          dryRun: false,
-          confirmDeletes: true,
-        });
+      const accepted = f.runs().trigger(f.copyJob().id, {
+        dryRun: false,
+        confirmDeletes: true,
+      });
       await terminal(f, accepted.id);
       expect(f.files.get('/target/new.txt')).toEqual(Buffer.from('old'));
       expect(f.server.calls.filter(isRemove)).toHaveLength(0);
@@ -101,12 +97,10 @@ describe('M6 server copy execution', () => {
    */
   it('holds quota while running and cancels once before cleanup', async () => {
     f.initialState = 1;
-    const accepted = f
-      .runs()
-      .trigger(f.copyJob().id, {
-        dryRun: false,
-        confirmDeletes: false,
-      });
+    const accepted = f.runs().trigger(f.copyJob().id, {
+      dryRun: false,
+      confirmDeletes: false,
+    });
     await vi.waitFor(
       /** 等待已持久化tid。
        * @param 不适用。
@@ -140,12 +134,10 @@ describe('M6 server copy execution', () => {
         call.url.includes('/copy/info') ? envelope(null, 404) : response;
     const run = await terminal(
       f,
-      f
-        .runs()
-        .trigger(f.copyJob().id, {
-          dryRun: false,
-          confirmDeletes: false,
-        }).id,
+      f.runs().trigger(f.copyJob().id, {
+        dryRun: false,
+        confirmDeletes: false,
+      }).id,
     );
     expect(plan(f, run.id)[0].status).toBe('unknown');
     expect(f.app.get(TaskResources).count(f.id)).toBe(0);
@@ -209,12 +201,10 @@ describe('M6 server copy execution', () => {
       };
     const run = await terminal(
       f,
-      f
-        .runs()
-        .trigger(f.copyJob().id, {
-          dryRun: false,
-          confirmDeletes: true,
-        }).id,
+      f.runs().trigger(f.copyJob().id, {
+        dryRun: false,
+        confirmDeletes: true,
+      }).id,
     );
     expect(run.status).toBe('succeeded');
     const rows = plan(f, run.id);
@@ -263,12 +253,10 @@ describe('M6 server copy execution', () => {
         };
       const run = await terminal(
         f,
-        f
-          .runs()
-          .trigger(f.copyJob().id, {
-            dryRun: false,
-            confirmDeletes: false,
-          }).id,
+        f.runs().trigger(f.copyJob().id, {
+          dryRun: false,
+          confirmDeletes: false,
+        }).id,
       );
       const op = plan(f, run.id)[0];
       expect(op.status).toBe(observed ? 'succeeded' : 'failed');

@@ -112,7 +112,6 @@ export function buildInstanceInput(
     if (!existing || value !== existing.limits[key]) limits[key] = value;
   }
   if (Object.keys(limits).length) body.limits = limits;
-  if (!Object.keys(body).length)
-    throw new InstanceFormError('noChanges');
+  if (!Object.keys(body).length) throw new InstanceFormError('noChanges');
   return body;
 }

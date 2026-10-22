@@ -79,7 +79,10 @@ function ReasonForm({
       >
         <Icon
           size={18}
-          className={cn('mt-1 shrink-0', tone === 'danger' ? 'text-danger' : 'text-signal')}
+          className={cn(
+            'mt-1 shrink-0',
+            tone === 'danger' ? 'text-danger' : 'text-signal',
+          )}
           aria-hidden="true"
         />
         <p>{consequence}</p>
@@ -98,9 +101,15 @@ function ReasonForm({
       <p id={hintId} className="text-[11.5px] text-muted-foreground">
         {t('manage.reasonHint')}
       </p>
-      {reasonMissing && <p className="text-xs text-danger">{t('manage.reasonRequired')}</p>}
+      {reasonMissing && (
+        <p className="text-xs text-danger">{t('manage.reasonRequired')}</p>
+      )}
       {error && <ErrorState error={error} />}
-      <Button type="submit" variant={tone === 'danger' ? 'danger' : 'secondary'} disabled={pending}>
+      <Button
+        type="submit"
+        variant={tone === 'danger' ? 'danger' : 'secondary'}
+        disabled={pending}
+      >
         {pending ? submittingLabel : submitLabel}
       </Button>
     </form>
@@ -160,22 +169,39 @@ function AbandonSection({ op, index }: { op: OperationView; index: string }) {
  * @returns 处置区域。
  * @throws 不适用。
  */
-export function UnknownManagement({ op, firstIndex }: { op: OperationView; firstIndex: number }) {
+export function UnknownManagement({
+  op,
+  firstIndex,
+}: {
+  op: OperationView;
+  firstIndex: number;
+}) {
   const { t } = useTranslation('operations');
   const isQuarantined = !op.quarantineReleasedAt && !op.resolution;
   const canAbandon = !op.resolution;
-  const label = (offset: number) => String(firstIndex + offset).padStart(2, '0');
+  const label = (offset: number) =>
+    String(firstIndex + offset).padStart(2, '0');
   return (
     <>
       <div className="mt-6 mb-2 flex gap-4 rounded-[1.5rem] border border-danger/20 bg-gradient-to-br from-danger/[0.07] to-transparent p-6">
-        <ShieldAlert size={22} className="mt-0.5 shrink-0 text-danger" aria-hidden="true" />
+        <ShieldAlert
+          size={22}
+          className="mt-0.5 shrink-0 text-danger"
+          aria-hidden="true"
+        />
         <div>
-          <h2 className="font-display text-xl font-medium tracking-tight">{t('manage.title')}</h2>
-          <p className="mt-2 max-w-3xl text-sm leading-7 text-muted-foreground">{t('manage.description')}</p>
+          <h2 className="font-display text-xl font-medium tracking-tight">
+            {t('manage.title')}
+          </h2>
+          <p className="mt-2 max-w-3xl text-sm leading-7 text-muted-foreground">
+            {t('manage.description')}
+          </p>
         </div>
       </div>
       {isQuarantined && <ReleaseSection op={op} index={label(0)} />}
-      {canAbandon && <AbandonSection op={op} index={label(isQuarantined ? 1 : 0)} />}
+      {canAbandon && (
+        <AbandonSection op={op} index={label(isQuarantined ? 1 : 0)} />
+      )}
     </>
   );
 }

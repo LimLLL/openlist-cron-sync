@@ -10,7 +10,11 @@ import { useErrorText } from '../../i18n/error-text';
 import { formatRelative, formatTime } from '../../lib/format';
 import { instanceHealth } from './status-labels';
 import type { BadgeTone, InstanceHealth } from './status-labels';
-import type { DashboardInstance, DashboardJob, NextFireTimes } from './dashboard-contract';
+import type {
+  DashboardInstance,
+  DashboardJob,
+  NextFireTimes,
+} from './dashboard-contract';
 
 const VISIBLE_INSTANCES = 6;
 const HEALTH_TONE: Record<InstanceHealth, BadgeTone> = {
@@ -52,7 +56,11 @@ function ColumnHeading({ title, to }: { title: string; to: string }) {
         className="group inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
       >
         {t('actions.viewAll')}
-        <ArrowUpRight size={13} className="transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" aria-hidden="true" />
+        <ArrowUpRight
+          size={13}
+          className="transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5"
+          aria-hidden="true"
+        />
       </Link>
     </div>
   );
@@ -88,33 +96,48 @@ export function FleetSection({
       <div className="min-w-0">
         <ColumnHeading title={t('fleet.instancesTitle')} to="/instances" />
         {instances.length === 0 ? (
-          <p className="border-y border-hairline px-1 py-6 text-sm text-muted-foreground">{t('fleet.noInstances')}</p>
+          <p className="border-y border-hairline px-1 py-6 text-sm text-muted-foreground">
+            {t('fleet.noInstances')}
+          </p>
         ) : (
           <>
             <IndexList className="border-t border-hairline">
-              {instances.slice(0, VISIBLE_INSTANCES).map((instance, position) => {
-                const health = instanceHealth(instance);
-                return (
-                  <IndexRow
-                    key={instance.id}
-                    to={`/instances/${instance.id}`}
-                    index={position + 1}
-                    title={instance.name}
-                    subtitle={
-                      instance.lastError
-                        ? errorText(instance.lastError.code, instance.lastError.message)
-                        : instance.lastTestAt
-                          ? t('fleet.tested', { when: formatRelative(instance.lastTestAt) })
-                          : t('fleet.neverTested')
-                    }
-                    status={<Badge variant={HEALTH_TONE[health]}>{healthLabel(health)}</Badge>}
-                  />
-                );
-              })}
+              {instances
+                .slice(0, VISIBLE_INSTANCES)
+                .map((instance, position) => {
+                  const health = instanceHealth(instance);
+                  return (
+                    <IndexRow
+                      key={instance.id}
+                      to={`/instances/${instance.id}`}
+                      index={position + 1}
+                      title={instance.name}
+                      subtitle={
+                        instance.lastError
+                          ? errorText(
+                              instance.lastError.code,
+                              instance.lastError.message,
+                            )
+                          : instance.lastTestAt
+                            ? t('fleet.tested', {
+                                when: formatRelative(instance.lastTestAt),
+                              })
+                            : t('fleet.neverTested')
+                      }
+                      status={
+                        <Badge variant={HEALTH_TONE[health]}>
+                          {healthLabel(health)}
+                        </Badge>
+                      }
+                    />
+                  );
+                })}
             </IndexList>
             {instances.length > VISIBLE_INSTANCES && (
               <p className="px-1 pt-3 font-mono text-[11px] text-muted-foreground">
-                {t('fleet.more', { count: instances.length - VISIBLE_INSTANCES })}
+                {t('fleet.more', {
+                  count: instances.length - VISIBLE_INSTANCES,
+                })}
               </p>
             )}
           </>
@@ -126,7 +149,9 @@ export function FleetSection({
         {scheduleError ? (
           <ErrorState error={scheduleError} />
         ) : scheduledJobIds.length === 0 ? (
-          <p className="border-y border-hairline px-1 py-6 text-sm text-muted-foreground">{t('fleet.noSchedules')}</p>
+          <p className="border-y border-hairline px-1 py-6 text-sm text-muted-foreground">
+            {t('fleet.noSchedules')}
+          </p>
         ) : (
           <ol className="border-t border-hairline">
             {scheduledJobIds.map((jobId, position) => {
@@ -138,7 +163,11 @@ export function FleetSection({
                   key={jobId}
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.6, ease: EASE, delay: position * 0.04 }}
+                  transition={{
+                    duration: 0.6,
+                    ease: EASE,
+                    delay: position * 0.04,
+                  }}
                 >
                   <Link
                     to={`/jobs/${jobId}`}
@@ -163,7 +192,9 @@ export function FleetSection({
                               : t('fleet.unavailable')}
                       </span>
                       {next && (
-                        <span className="mt-0.5 block font-mono text-[11px] text-accent">{formatRelative(next)}</span>
+                        <span className="mt-0.5 block font-mono text-[11px] text-accent">
+                          {formatRelative(next)}
+                        </span>
                       )}
                     </span>
                   </Link>
@@ -173,7 +204,9 @@ export function FleetSection({
           </ol>
         )}
         {scheduledJobIds.length > 0 && (
-          <p className="px-1 pt-3 text-xs text-muted-foreground">{t('fleet.nextTimesScope')}</p>
+          <p className="px-1 pt-3 text-xs text-muted-foreground">
+            {t('fleet.nextTimesScope')}
+          </p>
         )}
       </div>
     </div>

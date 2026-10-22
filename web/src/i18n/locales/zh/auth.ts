@@ -18,7 +18,8 @@ export default {
     password: '密码',
     submit: '进入工作区',
     submitting: '登录中…',
-    sessionNote: '登录状态会一直保留，直到过期或主动退出。修改密码会结束所有会话。',
+    sessionNote:
+      '登录状态会一直保留，直到过期或主动退出。修改密码会结束所有会话。',
   },
   notice: {
     'password-changed': '密码已更新，请使用新密码登录。',

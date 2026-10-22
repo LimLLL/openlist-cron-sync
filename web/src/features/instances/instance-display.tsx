@@ -25,10 +25,12 @@ export function instanceStatus(instance: Instance): InstanceStatus {
 export function InstanceStatusBadge({ instance }: { instance: Instance }) {
   const { t } = useTranslation('instances');
   const status = instanceStatus(instance);
-  if (status === 'ready') return <Badge variant="success">{t('authState.ready')}</Badge>;
+  if (status === 'ready')
+    return <Badge variant="success">{t('authState.ready')}</Badge>;
   if (status === 'auth_blocked')
     return <Badge variant="danger">{t('authState.auth_blocked')}</Badge>;
-  if (status === 'error') return <Badge variant="warning">{t('status.error')}</Badge>;
+  if (status === 'error')
+    return <Badge variant="warning">{t('status.error')}</Badge>;
   return <Badge variant="default">{t('authState.untested')}</Badge>;
 }
 

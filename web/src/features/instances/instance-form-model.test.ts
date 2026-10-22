@@ -120,7 +120,10 @@ describe('instance editing', () => {
     ).toThrow('noChanges');
     expect(() =>
       buildInstanceInput(
-        { ...fixture(), limits: { ...fixture().limits, maxApiConcurrency: -1 } },
+        {
+          ...fixture(),
+          limits: { ...fixture().limits, maxApiConcurrency: -1 },
+        },
         existing,
       ),
     ).toThrow('limit');

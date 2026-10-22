@@ -33,7 +33,11 @@ function basename(path: string): string {
  * @returns 列表或“一切正常”。
  * @throws 不适用。
  */
-export function AttentionSection({ failedRuns, unresolvedOps, jobNames }: AttentionSectionProps) {
+export function AttentionSection({
+  failedRuns,
+  unresolvedOps,
+  jobNames,
+}: AttentionSectionProps) {
   const { t } = useTranslation(['dashboard', 'common']);
   const errorText = useErrorText();
   const labels = useStatusLabels();
@@ -84,10 +88,16 @@ export function AttentionSection({ failedRuns, unresolvedOps, jobNames }: Attent
                 : `${run.id.slice(0, 8)} · ${formatTime(run.endedAt ?? run.createdAt)}`
             }
             cells={[
-              run.dryRun ? `${t('attention.kindRun')} · ${t('common:dryRun')}` : t('attention.kindRun'),
+              run.dryRun
+                ? `${t('attention.kindRun')} · ${t('common:dryRun')}`
+                : t('attention.kindRun'),
               formatRelative(run.endedAt ?? run.createdAt),
             ]}
-            status={<Badge variant={runTone(run.status)}>{labels.run(run.status)}</Badge>}
+            status={
+              <Badge variant={runTone(run.status)}>
+                {labels.run(run.status)}
+              </Badge>
+            }
           />
         ))}
       </IndexList>

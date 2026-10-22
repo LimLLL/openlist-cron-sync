@@ -22,11 +22,18 @@ interface ActivitySectionProps {
  * @returns 列表或空态。
  * @throws 不适用。
  */
-export function ActivitySection({ activeRuns, recentRuns, jobNames }: ActivitySectionProps) {
+export function ActivitySection({
+  activeRuns,
+  recentRuns,
+  jobNames,
+}: ActivitySectionProps) {
   const { t } = useTranslation(['dashboard', 'common']);
   const labels = useStatusLabels();
   const activeIds = new Set(activeRuns.map((run) => run.id));
-  const rows = [...activeRuns, ...recentRuns.filter((run) => !activeIds.has(run.id)).slice(0, 8)];
+  const rows = [
+    ...activeRuns,
+    ...recentRuns.filter((run) => !activeIds.has(run.id)).slice(0, 8),
+  ];
 
   if (rows.length === 0)
     return (
@@ -57,7 +64,11 @@ export function ActivitySection({ activeRuns, recentRuns, jobNames }: ActivitySe
                 run.dryRun
                   ? `${t(`common:trigger.${run.trigger}`)} · ${t('common:dryRun')}`
                   : t(`common:trigger.${run.trigger}`),
-                formatRelative(live ? (run.startedAt ?? run.createdAt) : (run.endedAt ?? run.createdAt)),
+                formatRelative(
+                  live
+                    ? (run.startedAt ?? run.createdAt)
+                    : (run.endedAt ?? run.createdAt),
+                ),
               ]}
               status={
                 <Badge variant={runTone(run.status)} pulse={live}>

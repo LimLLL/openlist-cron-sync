@@ -82,8 +82,14 @@ export function App() {
                   <Route element={<AppLayout />}>
                     <Route index element={<DashboardPage />} />
                     <Route path="instances" element={<InstancesPage />} />
-                    <Route path="instances/new" element={<InstanceCreatePage />} />
-                    <Route path="instances/:id" element={<InstanceDetailPage />} />
+                    <Route
+                      path="instances/new"
+                      element={<InstanceCreatePage />}
+                    />
+                    <Route
+                      path="instances/:id"
+                      element={<InstanceDetailPage />}
+                    />
                     <Route path="jobs" element={<JobsPage />} />
                     <Route path="jobs/new" element={<JobCreatePage />} />
                     <Route path="jobs/:id" element={<JobDetailPage />} />
@@ -91,7 +97,10 @@ export function App() {
                     <Route path="runs" element={<RunsPage />} />
                     <Route path="runs/:id" element={<RunDetailPage />} />
                     <Route path="operations" element={<OperationsPage />} />
-                    <Route path="operations/:id" element={<OperationDetailPage />} />
+                    <Route
+                      path="operations/:id"
+                      element={<OperationDetailPage />}
+                    />
                     <Route path="change-password" element={<PasswordPage />} />
                     <Route path="*" element={<NotFoundPage />} />
                   </Route>

@@ -19,7 +19,13 @@ function format(value: number): string {
  * @returns 数字元素。
  * @throws 不适用。
  */
-export function CountUp({ value, className }: { value: number; className?: string }) {
+export function CountUp({
+  value,
+  className,
+}: {
+  value: number;
+  className?: string;
+}) {
   const node = useRef<HTMLSpanElement>(null);
   // 当前显示的值；被新值打断时从这里继续，不会跳回。
   const shown = useRef(0);

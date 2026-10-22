@@ -98,12 +98,17 @@ export function useJobRuns(jobId: string, pageSize = 5) {
   return useQuery({
     queryKey: ['runs', 'job', jobId, pageSize],
     queryFn: ({ signal }) =>
-      request(`/runs?jobId=${jobId}&page=1&pageSize=${pageSize}` as `/${string}`, {
-        signal,
-        parse: (value): Page<JobRun> => parsePage(value, parseJobRun, 'runs'),
-      }),
+      request(
+        `/runs?jobId=${jobId}&page=1&pageSize=${pageSize}` as `/${string}`,
+        {
+          signal,
+          parse: (value): Page<JobRun> => parsePage(value, parseJobRun, 'runs'),
+        },
+      ),
     refetchInterval: (query) =>
-      query.state.data?.items.some((run) => ACTIVE.has(run.status)) ? 3000 : false,
+      query.state.data?.items.some((run) => ACTIVE.has(run.status))
+        ? 3000
+        : false,
   });
 }
 

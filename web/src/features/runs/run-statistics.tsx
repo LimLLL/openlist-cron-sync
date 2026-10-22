@@ -22,14 +22,18 @@ export function RunStatistics({ stats }: { stats: Record<string, number> }) {
   const { t } = useTranslation('runs');
   const entries = Object.entries(stats).filter(([, value]) => value > 0);
   if (entries.length === 0)
-    return <p className="text-sm text-muted-foreground">{t('detail.noStats')}</p>;
+    return (
+      <p className="text-sm text-muted-foreground">{t('detail.noStats')}</p>
+    );
   const number = new Intl.NumberFormat(intlLocale());
   return (
     <SpecGrid
       columns={4}
       items={entries.map(([key, value]) => ({
         // 后端新增字段没有翻译时，把驼峰名拆成单词显示。
-        label: isStatKey(key) ? t(`detail.stats.${key}`) : key.replace(/([A-Z])/g, ' $1').trim(),
+        label: isStatKey(key)
+          ? t(`detail.stats.${key}`)
+          : key.replace(/([A-Z])/g, ' $1').trim(),
         value: isByteStat(key) ? formatBytes(value) : number.format(value),
         mono: true,
       }))}
@@ -47,12 +51,20 @@ export function RunSnapshot({ config }: { config: RunDetail['config'] }) {
   const [open, setOpen] = useState(false);
   return (
     <div>
-      <Button variant="secondary" size="sm" aria-expanded={open} onClick={() => setOpen(!open)}>
+      <Button
+        variant="secondary"
+        size="sm"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+      >
         {open ? t('detail.snapshot.hide') : t('detail.snapshot.show')}
         <ChevronDown
           size={14}
           aria-hidden="true"
-          className={cn('transition-transform duration-300', open && 'rotate-180')}
+          className={cn(
+            'transition-transform duration-300',
+            open && 'rotate-180',
+          )}
         />
       </Button>
       <AnimatePresence initial={false}>

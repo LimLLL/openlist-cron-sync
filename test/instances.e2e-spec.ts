@@ -5,12 +5,11 @@ import { componentFixture, envelope, file } from './openlist-fixture.js';
 import type { ComponentFixture } from './openlist-fixture.js';
 import { object, string } from '../src/openlist/errors.js';
 
-describe('M1 instances API', /** 注册本组 M1 行为验收用例。
+describe('M1 instances API' /** 注册本组 M1 行为验收用例。
  * @param 不适用。
  * @returns 不适用。
  * @throws 不适用。
- */
-() => {
+ */, () => {
   let fixture: ComponentFixture;
   let base: string;
   let token: string;
@@ -41,12 +40,11 @@ describe('M1 instances API', /** 注册本组 M1 行为验收用例。
     },
   );
 
-  it('requires service authentication for every M1 route', /** 验证当前场景的协议输入、输出与副作用。
+  it('requires service authentication for every M1 route' /** 验证当前场景的协议输入、输出与副作用。
    * @param 不适用。
    * @returns 断言完成；异步用例返回完成 Promise。
    * @throws Error 断言或测试资源操作失败。
-   */
-  async () => {
+   */, async () => {
     for (const [method, path] of [
       ['get', ''],
       ['post', ''],
@@ -62,12 +60,11 @@ describe('M1 instances API', /** 注册本组 M1 行为验收用例。
         .expect(401);
     }
   });
-  it('creates, merges limits, reads pages and archives with the exact public shape', /** 验证当前场景的协议输入、输出与副作用。
+  it('creates, merges limits, reads pages and archives with the exact public shape' /** 验证当前场景的协议输入、输出与副作用。
    * @param 不适用。
    * @returns 断言完成；异步用例返回完成 Promise。
    * @throws Error 断言或测试资源操作失败。
-   */
-  async () => {
+   */, async () => {
     const created = await request(base)
       .post('/api/v1/instances')
       .auth(token, { type: 'bearer' })
@@ -143,12 +140,11 @@ describe('M1 instances API', /** 注册本组 M1 行为验收用例。
       items: [{ id, auth: { hasSecret: false } }, { id: fixture.id }],
     });
   });
-  it('accepts zero and the safe-integer ceiling for every instance quota', /** 0 表示不限，正数没有产品上限，只受安全整数约束。
+  it('accepts zero and the safe-integer ceiling for every instance quota' /** 0 表示不限，正数没有产品上限，只受安全整数约束。
    * @param 不适用。
    * @returns 断言完成；异步用例返回完成 Promise。
    * @throws Error 断言或测试资源操作失败。
-   */
-  async () => {
+   */, async () => {
     const limits = {
       maxApiConcurrency: 0,
       apiRequestsPerSecond: 0,
@@ -173,12 +169,11 @@ describe('M1 instances API', /** 注册本组 M1 行为验收用例。
       .expect(200);
     expect(max.body.limits).toEqual(ceiling);
   });
-  it('rejects invalid, unknown, null and discriminator inputs without contacting OpenList', /** 验证当前场景的协议输入、输出与副作用。
+  it('rejects invalid, unknown, null and discriminator inputs without contacting OpenList' /** 验证当前场景的协议输入、输出与副作用。
    * @param 不适用。
    * @returns 断言完成；异步用例返回完成 Promise。
    * @throws Error 断言或测试资源操作失败。
-   */
-  async () => {
+   */, async () => {
     const invalid = [
       {},
       { name: null },
@@ -223,12 +218,11 @@ describe('M1 instances API', /** 注册本组 M1 行为验收用例。
       .expect(400);
     expect(fixture.server.calls).toHaveLength(0);
   });
-  it('returns a completed failed TestResult as 200 and a manual cooldown as 409', /** 验证当前场景的协议输入、输出与副作用。
+  it('returns a completed failed TestResult as 200 and a manual cooldown as 409' /** 验证当前场景的协议输入、输出与副作用。
    * @param 不适用。
    * @returns 断言完成；异步用例返回完成 Promise。
    * @throws Error 断言或测试资源操作失败。
-   */
-  async () => {
+   */, async () => {
     fixture.server.responder =
       /** 根据请求端点返回本场景的可控上游响应。
        * @param call 捕获的真实 HTTP 请求。
@@ -273,12 +267,11 @@ describe('M1 instances API', /** 注册本组 M1 行为验收用例。
       .expect(409);
     expect(cooldown.body).toMatchObject({ error: { code: 'AUTH_COOLDOWN' } });
   });
-  it('browses safe items with warnings and maps upstream errors to 502', /** 验证当前场景的协议输入、输出与副作用。
+  it('browses safe items with warnings and maps upstream errors to 502' /** 验证当前场景的协议输入、输出与副作用。
    * @param 不适用。
    * @returns 断言完成；异步用例返回完成 Promise。
    * @throws Error 断言或测试资源操作失败。
-   */
-  async () => {
+   */, async () => {
     const path = `/api/v1/instances/${fixture.id}/browse`;
     fixture.server.responder =
       /** 根据请求端点返回本场景的可控上游响应。
@@ -379,12 +372,11 @@ describe('M1 instances API', /** 注册本组 M1 行为验收用例。
       expect(fixture.server.calls).toHaveLength(0);
     },
   );
-  it('publishes accurate route statuses and response schemas without storage secrets', /** 验证当前场景的协议输入、输出与副作用。
+  it('publishes accurate route statuses and response schemas without storage secrets' /** 验证当前场景的协议输入、输出与副作用。
    * @param 不适用。
    * @returns 断言完成；异步用例返回完成 Promise。
    * @throws Error 断言或测试资源操作失败。
-   */
-  async () => {
+   */, async () => {
     const response = await request(base)
       .get('/api/v1/openapi.json')
       .expect(200);

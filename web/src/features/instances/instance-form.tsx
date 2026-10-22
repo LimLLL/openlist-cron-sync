@@ -11,7 +11,11 @@ import { EditorialSection } from '../../components/ui/editorial-section';
 import { ErrorState } from '../../components/states';
 import { buildInstanceInput, InstanceFormError } from './instance-form-model';
 import { LIMIT_FIELDS } from './instance-display';
-import type { Instance, InstanceInput, InstanceLimits } from './instance-contract';
+import type {
+  Instance,
+  InstanceInput,
+  InstanceLimits,
+} from './instance-contract';
 
 /** 表单属性。 */
 interface InstanceFormProps {
@@ -191,7 +195,11 @@ export function InstanceForm({
               onChange={(e) => setSecret(e.target.value)}
               autoComplete="off"
               required={authChanged}
-              hint={authMode === 'token' ? t('form.tokenHint') : t('form.passwordHint')}
+              hint={
+                authMode === 'token'
+                  ? t('form.tokenHint')
+                  : t('form.passwordHint')
+              }
             />
           </div>
         </div>
@@ -214,7 +222,9 @@ export function InstanceForm({
             ]}
           />
           <p className="text-xs leading-relaxed text-muted-foreground">
-            {downloadMode === 'd' ? t('form.downloadDirectHint') : t('form.downloadProxyHint')}
+            {downloadMode === 'd'
+              ? t('form.downloadDirectHint')
+              : t('form.downloadProxyHint')}
           </p>
         </div>
       </EditorialSection>
@@ -253,7 +263,11 @@ export function InstanceForm({
           )}
           <Button type="submit" disabled={pending}>
             {pending ? (
-              <LoaderCircle size={16} className="motion-safe:animate-spin" aria-hidden="true" />
+              <LoaderCircle
+                size={16}
+                className="motion-safe:animate-spin"
+                aria-hidden="true"
+              />
             ) : (
               <Save size={16} aria-hidden="true" />
             )}

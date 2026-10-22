@@ -28,9 +28,13 @@ export function EditorialSection({
     <section id={id} className={cn('editorial-section', className)}>
       <div className="editorial-section-label">
         <p className="page-header-index">{index}</p>
-        <h2 className="mt-3 font-display text-xl font-medium tracking-tight">{title}</h2>
+        <h2 className="mt-3 font-display text-xl font-medium tracking-tight">
+          {title}
+        </h2>
         {description && (
-          <p className="mt-2 text-[13px] leading-6 text-muted-foreground">{description}</p>
+          <p className="mt-2 text-[13px] leading-6 text-muted-foreground">
+            {description}
+          </p>
         )}
         {aside && <div className="mt-4">{aside}</div>}
       </div>

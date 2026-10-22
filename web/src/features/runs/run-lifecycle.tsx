@@ -47,9 +47,18 @@ export function RunLifecycle({ detail }: { detail: RunDetail }) {
   const items: TimelineItem[] = [
     { label: t('detail.timeline.created'), time: time(detail.createdAt) },
     { label: t('detail.timeline.started'), time: time(detail.startedAt) },
-    { label: t('detail.timeline.scanCompleted'), time: time(detail.scanCompletedAt) },
+    {
+      label: t('detail.timeline.scanCompleted'),
+      time: time(detail.scanCompletedAt),
+    },
     ...(detail.cancelRequestedAt
-      ? [{ label: t('detail.timeline.cancelRequested'), time: time(detail.cancelRequestedAt), tone: 'warning' as const }]
+      ? [
+          {
+            label: t('detail.timeline.cancelRequested'),
+            time: time(detail.cancelRequestedAt),
+            tone: 'warning' as const,
+          },
+        ]
       : []),
     {
       label: t('detail.timeline.ended'),
@@ -67,13 +76,24 @@ export function RunLifecycle({ detail }: { detail: RunDetail }) {
         items={[
           {
             label: t('detail.facts.id'),
-            value: <ScrambleText text={detail.id} className="text-[12.5px]" playOnMount />,
+            value: (
+              <ScrambleText
+                text={detail.id}
+                className="text-[12.5px]"
+                playOnMount
+              />
+            ),
             wide: true,
           },
-          { label: t('detail.facts.trigger'), value: t(`detail.trigger.${detail.trigger}`) },
+          {
+            label: t('detail.facts.trigger'),
+            value: t(`detail.trigger.${detail.trigger}`),
+          },
           {
             label: t('detail.facts.scheduledAt'),
-            value: detail.scheduledAt ? formatTimeFull(detail.scheduledAt) : '—',
+            value: detail.scheduledAt
+              ? formatTimeFull(detail.scheduledAt)
+              : '—',
             mono: true,
           },
           {

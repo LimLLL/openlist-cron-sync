@@ -36,7 +36,8 @@ function Endpoint({
         <p className="eyebrow">{t(`detail.${role}`)}</p>
         {instanceId && (
           <span className="font-mono text-[11px] text-muted-foreground">
-            {t('detail.instance')} <ScrambleText text={instanceId.slice(0, 8)} />
+            {t('detail.instance')}{' '}
+            <ScrambleText text={instanceId.slice(0, 8)} />
           </span>
         )}
       </div>
@@ -52,7 +53,11 @@ function Endpoint({
         {name || path}
       </p>
       <p className="mt-4 font-mono text-[11.5px] text-muted-foreground">
-        {isDir ? t('detail.directory') : size !== null ? t('detail.expected', { size: formatBytes(size) }) : '—'}
+        {isDir
+          ? t('detail.directory')
+          : size !== null
+            ? t('detail.expected', { size: formatBytes(size) })
+            : '—'}
       </p>
     </div>
   );
@@ -68,18 +73,30 @@ function Connector({ label }: { label: string }) {
   return (
     <div className="relative flex items-center justify-center px-6 py-4 lg:w-52 lg:px-0 lg:py-0">
       {/* 横向发丝线（桌面）/ 纵向发丝线（移动端） */}
-      <span aria-hidden="true" className="absolute inset-x-6 top-1/2 h-px bg-hairline lg:inset-x-0" />
+      <span
+        aria-hidden="true"
+        className="absolute inset-x-6 top-1/2 h-px bg-hairline lg:inset-x-0"
+      />
       {!reduced && (
         <motion.span
           aria-hidden="true"
           className="absolute top-1/2 left-6 size-1.5 -translate-y-1/2 rounded-full bg-accent shadow-[0_0_12px_var(--color-accent)] lg:left-0"
           animate={{ left: ['0%', '100%'], opacity: [0, 1, 1, 0] }}
-          transition={{ duration: 2.6, ease: 'easeInOut', repeat: Infinity, repeatDelay: 0.4 }}
+          transition={{
+            duration: 2.6,
+            ease: 'easeInOut',
+            repeat: Infinity,
+            repeatDelay: 0.4,
+          }}
         />
       )}
       <span className="relative inline-flex items-center gap-2 rounded-full border border-hairline bg-background/80 px-3.5 py-1.5 text-xs text-foreground backdrop-blur">
         {label}
-        <ArrowRight size={13} className="rotate-90 text-accent lg:rotate-0" aria-hidden="true" />
+        <ArrowRight
+          size={13}
+          className="rotate-90 text-accent lg:rotate-0"
+          aria-hidden="true"
+        />
       </span>
     </div>
   );
@@ -108,7 +125,9 @@ export function PathDossier({ op }: { op: OperationView }) {
         <div className="flex items-center gap-3 border-b border-hairline px-6 py-4 text-sm sm:px-8">
           <Icon size={16} className="text-accent" aria-hidden="true" />
           {t(`common:operationAction.${op.action}`)}
-          <span className="text-muted-foreground">· {t('detail.noSource')}</span>
+          <span className="text-muted-foreground">
+            · {t('detail.noSource')}
+          </span>
         </div>
         {target}
       </div>
@@ -166,7 +185,10 @@ export function OperationStats({ op }: { op: OperationView }) {
         className="mb-4"
         items={[
           files,
-          { label: t('detail.record.affectedBytes'), value: <ByteFigure bytes={op.affectedBytes} /> },
+          {
+            label: t('detail.record.affectedBytes'),
+            value: <ByteFigure bytes={op.affectedBytes} />,
+          },
           attempt,
         ]}
       />
@@ -176,8 +198,14 @@ export function OperationStats({ op }: { op: OperationView }) {
       columns={4}
       className="mb-4"
       items={[
-        { label: t('detail.stats.transferred'), value: <ByteFigure bytes={op.bytesTransferred} /> },
-        { label: t('detail.stats.downloaded'), value: <ByteFigure bytes={op.bytesDownloaded} /> },
+        {
+          label: t('detail.stats.transferred'),
+          value: <ByteFigure bytes={op.bytesTransferred} />,
+        },
+        {
+          label: t('detail.stats.downloaded'),
+          value: <ByteFigure bytes={op.bytesDownloaded} />,
+        },
         files,
         attempt,
       ]}

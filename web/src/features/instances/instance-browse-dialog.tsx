@@ -51,8 +51,14 @@ interface BrowseDialogProps {
  */
 function trackPointer(event: PointerEvent<HTMLElement>): void {
   const rect = event.currentTarget.getBoundingClientRect();
-  event.currentTarget.style.setProperty('--mx', `${event.clientX - rect.left}px`);
-  event.currentTarget.style.setProperty('--my', `${event.clientY - rect.top}px`);
+  event.currentTarget.style.setProperty(
+    '--mx',
+    `${event.clientX - rect.left}px`,
+  );
+  event.currentTarget.style.setProperty(
+    '--my',
+    `${event.clientY - rect.top}px`,
+  );
 }
 
 /** 渲染目录浏览对话框，支持路径导航、路径密码、分页与可选的目录选择。
@@ -84,7 +90,12 @@ export function InstanceBrowseDialog({
   // 父组件通过受控 open 打开对话框时不会触发 Radix onOpenChange，在这里加载起始目录（带上预填密码）。
   useEffect(() => {
     if (open)
-      mutate({ path: initialPath, password: initialPassword || undefined, page: 1, pageSize: PAGE_SIZE });
+      mutate({
+        path: initialPath,
+        password: initialPassword || undefined,
+        page: 1,
+        pageSize: PAGE_SIZE,
+      });
   }, [open, instanceId, initialPath, initialPassword, mutate]);
 
   /** 加载指定路径；请求进行中时忽略，避免乱序覆盖。
@@ -136,7 +147,11 @@ export function InstanceBrowseDialog({
           <header className="flex items-start justify-between gap-4 px-7 pt-7 pb-5">
             <div className="min-w-0">
               <p className="eyebrow flex items-center gap-2">
-                <HardDrive size={12} className="text-accent" aria-hidden="true" />
+                <HardDrive
+                  size={12}
+                  className="text-accent"
+                  aria-hidden="true"
+                />
                 {t('browse.eyebrow')}
               </p>
               <Dialog.Title className="mt-2 truncate font-display text-2xl font-medium tracking-tight">
@@ -148,8 +163,13 @@ export function InstanceBrowseDialog({
                   <>
                     <span aria-hidden="true">·</span>
                     <span>{t('browse.items', { count: result.total })}</span>
-                    <Badge variant={result.write ? 'success' : 'default'} className="ml-1">
-                      {result.write ? t('browse.writable') : t('browse.readOnly')}
+                    <Badge
+                      variant={result.write ? 'success' : 'default'}
+                      className="ml-1"
+                    >
+                      {result.write
+                        ? t('browse.writable')
+                        : t('browse.readOnly')}
                     </Badge>
                   </>
                 )}
@@ -177,7 +197,11 @@ export function InstanceBrowseDialog({
             >
               <ArrowUp size={15} aria-hidden="true" />
             </button>
-            <PathBreadcrumbs path={currentPath} onNavigate={loadPath} disabled={browse.isPending} />
+            <PathBreadcrumbs
+              path={currentPath}
+              onNavigate={loadPath}
+              disabled={browse.isPending}
+            />
             <button
               type="button"
               onClick={() => loadPath(currentPath, page, true)}
@@ -217,7 +241,13 @@ export function InstanceBrowseDialog({
               value={password}
               onChange={(event) => setPassword(event.target.value)}
             />
-            <Button type="submit" size="sm" variant="secondary" className="min-h-10" disabled={browse.isPending}>
+            <Button
+              type="submit"
+              size="sm"
+              variant="secondary"
+              className="min-h-10"
+              disabled={browse.isPending}
+            >
               {t('browse.open')}
             </Button>
           </form>
@@ -226,7 +256,10 @@ export function InstanceBrowseDialog({
             role="table"
             aria-label={t('browse.tableLabel')}
             aria-busy={browse.isPending}
-            className={cn('flex-1 overflow-y-auto px-3 py-3 transition-opacity', browse.isPending && result && 'opacity-50')}
+            className={cn(
+              'flex-1 overflow-y-auto px-3 py-3 transition-opacity',
+              browse.isPending && result && 'opacity-50',
+            )}
           >
             {browse.isPending && !result && (
               <div className="px-4 py-2">
@@ -235,7 +268,10 @@ export function InstanceBrowseDialog({
             )}
             {browse.isError && (
               <div className="px-3 py-2">
-                <ErrorState error={browse.error} onRetry={() => loadPath(currentPath, page)} />
+                <ErrorState
+                  error={browse.error}
+                  onRetry={() => loadPath(currentPath, page)}
+                />
               </div>
             )}
             {result && result.items.length === 0 && (
@@ -257,7 +293,10 @@ export function InstanceBrowseDialog({
             )}
           </div>
 
-          {(onSelect || (result && (result.total > result.pageSize || result.warnings.length > 0))) && (
+          {(onSelect ||
+            (result &&
+              (result.total > result.pageSize ||
+                result.warnings.length > 0))) && (
             <footer className="space-y-3 border-t border-hairline px-6 py-3">
               {result && result.total > result.pageSize && (
                 <Pagination
@@ -270,7 +309,10 @@ export function InstanceBrowseDialog({
               {result && result.warnings.length > 0 && (
                 <ul className="space-y-1 text-xs text-signal">
                   {result.warnings.map((warning, position) => (
-                    <li key={position} title={`${warning.code} · ${warning.message}`}>
+                    <li
+                      key={position}
+                      title={`${warning.code} · ${warning.message}`}
+                    >
                       {errorText(warning.code, warning.message)}
                     </li>
                   ))}
@@ -298,20 +340,41 @@ export function InstanceBrowseDialog({
  * @returns 表格行。
  * @throws 不适用。
  */
-function BrowseRow({ item, disabled, onOpen }: { item: BrowseItem; disabled: boolean; onOpen: () => void }) {
+function BrowseRow({
+  item,
+  disabled,
+  onOpen,
+}: {
+  item: BrowseItem;
+  disabled: boolean;
+  onOpen: () => void;
+}) {
   const { t } = useTranslation('instances');
   const cells = (
     <>
-      <span role="cell" className={item.isDir ? 'text-accent' : 'text-muted-foreground'}>
-        {item.isDir ? <Folder size={16} aria-hidden="true" /> : <File size={16} aria-hidden="true" />}
+      <span
+        role="cell"
+        className={item.isDir ? 'text-accent' : 'text-muted-foreground'}
+      >
+        {item.isDir ? (
+          <Folder size={16} aria-hidden="true" />
+        ) : (
+          <File size={16} aria-hidden="true" />
+        )}
       </span>
       <span role="cell" className="truncate">
         {item.name}
       </span>
-      <span role="cell" className="text-right font-mono text-[11.5px] text-muted-foreground">
+      <span
+        role="cell"
+        className="text-right font-mono text-[11.5px] text-muted-foreground"
+      >
         {item.isDir ? '' : formatBytes(item.size)}
       </span>
-      <span role="cell" className="hidden text-right font-mono text-[11.5px] text-muted-foreground sm:block">
+      <span
+        role="cell"
+        className="hidden text-right font-mono text-[11.5px] text-muted-foreground sm:block"
+      >
         {formatTime(item.modified)}
       </span>
       <span role="cell" className="text-muted-foreground">
@@ -329,7 +392,10 @@ function BrowseRow({ item, disabled, onOpen }: { item: BrowseItem; disabled: boo
     <button
       type="button"
       role="row"
-      className={cn(ROW_CLASS, 'hover:text-foreground disabled:pointer-events-none')}
+      className={cn(
+        ROW_CLASS,
+        'hover:text-foreground disabled:pointer-events-none',
+      )}
       onPointerMove={trackPointer}
       onClick={onOpen}
       disabled={disabled}
@@ -363,21 +429,38 @@ function PathBreadcrumbs({
       className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto text-muted-foreground"
       aria-label={t('browse.path')}
     >
-      <button type="button" onClick={() => onNavigate('/')} disabled={disabled} className={crumb}>
+      <button
+        type="button"
+        onClick={() => onNavigate('/')}
+        disabled={disabled}
+        className={crumb}
+      >
         {t('browse.root')}
       </button>
       {segments.map((segment, position) => {
         const segmentPath = `/${segments.slice(0, position + 1).join('/')}`;
         const last = position === segments.length - 1;
         return (
-          <span key={segmentPath} className="flex shrink-0 items-center gap-0.5">
-            <ChevronRight size={12} className="text-white/20" aria-hidden="true" />
+          <span
+            key={segmentPath}
+            className="flex shrink-0 items-center gap-0.5"
+          >
+            <ChevronRight
+              size={12}
+              className="text-white/20"
+              aria-hidden="true"
+            />
             {last ? (
               <span className="rounded-full bg-white/[0.05] px-2.5 py-1 font-mono text-[12px] text-foreground">
                 {segment}
               </span>
             ) : (
-              <button type="button" onClick={() => onNavigate(segmentPath)} disabled={disabled} className={crumb}>
+              <button
+                type="button"
+                onClick={() => onNavigate(segmentPath)}
+                disabled={disabled}
+                className={crumb}
+              >
                 {segment}
               </button>
             )}

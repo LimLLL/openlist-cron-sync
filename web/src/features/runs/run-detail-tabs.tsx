@@ -67,7 +67,13 @@ export function DetailTabs({
  * @returns 虚线框提示。
  * @throws 不适用。
  */
-function TabEmpty({ title, description }: { title: string; description: string }) {
+function TabEmpty({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}) {
   return (
     <div className="rounded-2xl border border-dashed border-hairline px-6 py-10 text-center">
       <p className="serif-accent text-2xl">{title}</p>
@@ -81,17 +87,31 @@ function TabEmpty({ title, description }: { title: string; description: string }
  * @returns 操作列表。
  * @throws 不适用。
  */
-function OperationsTab({ runId, status }: { runId: string; status: RunStatus }) {
-  const { page, pageSize, setPage } = usePageParams({ page: 1, pageSize: 25 }, 'operations');
+function OperationsTab({
+  runId,
+  status,
+}: {
+  runId: string;
+  status: RunStatus;
+}) {
+  const { page, pageSize, setPage } = usePageParams(
+    { page: 1, pageSize: 25 },
+    'operations',
+  );
   const ops = useRunOperations(runId, { page, pageSize }, status);
   const { t } = useTranslation(['runs', 'common']);
 
-  if (ops.isPending) return <LoadingState rows={5} label={t('operations.loading')} />;
-  if (ops.isError) return <ErrorState error={ops.error} onRetry={() => void ops.refetch()} />;
+  if (ops.isPending)
+    return <LoadingState rows={5} label={t('operations.loading')} />;
+  if (ops.isError)
+    return <ErrorState error={ops.error} onRetry={() => void ops.refetch()} />;
   if (ops.data.items.length === 0)
     return (
       <>
-        <TabEmpty title={t('operations.emptyTitle')} description={t('operations.emptyDescription')} />
+        <TabEmpty
+          title={t('operations.emptyTitle')}
+          description={t('operations.emptyDescription')}
+        />
         <Pagination
           className="mt-6"
           page={page}
@@ -109,19 +129,33 @@ function OperationsTab({ runId, status }: { runId: string; status: RunStatus }) 
           <thead>
             <tr className="eyebrow border-b border-hairline">
               <th className="py-3 pr-4 font-medium">{t('operations.seq')}</th>
-              <th className="py-3 pr-4 font-medium">{t('operations.action')}</th>
-              <th className="py-3 pr-4 font-medium">{t('operations.status')}</th>
-              <th className="py-3 pr-4 font-medium">{t('operations.targetPath')}</th>
-              <th className="py-3 text-right font-medium">{t('operations.size')}</th>
+              <th className="py-3 pr-4 font-medium">
+                {t('operations.action')}
+              </th>
+              <th className="py-3 pr-4 font-medium">
+                {t('operations.status')}
+              </th>
+              <th className="py-3 pr-4 font-medium">
+                {t('operations.targetPath')}
+              </th>
+              <th className="py-3 text-right font-medium">
+                {t('operations.size')}
+              </th>
             </tr>
           </thead>
           <tbody>
             {ops.data.items.map((op: OperationView) => {
               const badge = statusBadgeProps(op.status);
               return (
-                <tr key={op.id} className="group border-b border-hairline transition-colors hover:bg-white/[0.02]">
+                <tr
+                  key={op.id}
+                  className="group border-b border-hairline transition-colors hover:bg-white/[0.02]"
+                >
                   <td className="py-3.5 pr-4 font-mono text-muted-foreground">
-                    <Link to={`/operations/${op.id}`} className="transition-colors group-hover:text-accent">
+                    <Link
+                      to={`/operations/${op.id}`}
+                      className="transition-colors group-hover:text-accent"
+                    >
                       {String(op.seq).padStart(3, '0')}
                     </Link>
                   </td>
@@ -139,8 +173,14 @@ function OperationsTab({ runId, status }: { runId: string; status: RunStatus }) 
                       {t(`common:operationStatus.${op.status}`)}
                     </Badge>
                   </td>
-                  <td className="max-w-[24rem] truncate py-3.5 pr-4 font-mono text-[12px] text-muted-foreground" title={op.targetPath}>
-                    <Link to={`/operations/${op.id}`} className="transition-colors hover:text-foreground">
+                  <td
+                    className="max-w-[24rem] truncate py-3.5 pr-4 font-mono text-[12px] text-muted-foreground"
+                    title={op.targetPath}
+                  >
+                    <Link
+                      to={`/operations/${op.id}`}
+                      className="transition-colors hover:text-foreground"
+                    >
                       {op.targetPath}
                     </Link>
                   </td>
@@ -170,17 +210,27 @@ function OperationsTab({ runId, status }: { runId: string; status: RunStatus }) 
  * @throws 不适用。
  */
 function IssuesTab({ runId, status }: { runId: string; status: RunStatus }) {
-  const { page, pageSize, setPage } = usePageParams({ page: 1, pageSize: 25 }, 'issues');
+  const { page, pageSize, setPage } = usePageParams(
+    { page: 1, pageSize: 25 },
+    'issues',
+  );
   const issues = useRunIssues(runId, { page, pageSize }, status);
   const { t } = useTranslation('runs');
   const errorText = useErrorText();
 
-  if (issues.isPending) return <LoadingState rows={4} label={t('issues.loading')} />;
-  if (issues.isError) return <ErrorState error={issues.error} onRetry={() => void issues.refetch()} />;
+  if (issues.isPending)
+    return <LoadingState rows={4} label={t('issues.loading')} />;
+  if (issues.isError)
+    return (
+      <ErrorState error={issues.error} onRetry={() => void issues.refetch()} />
+    );
   if (issues.data.items.length === 0)
     return (
       <>
-        <TabEmpty title={t('issues.emptyTitle')} description={t('issues.emptyDescription')} />
+        <TabEmpty
+          title={t('issues.emptyTitle')}
+          description={t('issues.emptyDescription')}
+        />
         <Pagination
           className="mt-6"
           page={page}
@@ -197,7 +247,10 @@ function IssuesTab({ runId, status }: { runId: string; status: RunStatus }) {
         {issues.data.items.map((issue: IssueView) => {
           const message = errorText(issue.code, issue.message);
           return (
-            <li key={issue.id} className="grid gap-3 border-b border-hairline py-5 md:grid-cols-[minmax(0,13rem)_minmax(0,1fr)]">
+            <li
+              key={issue.id}
+              className="grid gap-3 border-b border-hairline py-5 md:grid-cols-[minmax(0,13rem)_minmax(0,1fr)]"
+            >
               <div className="flex flex-wrap items-start gap-2">
                 <Badge variant={issue.protectSubtree ? 'danger' : 'warning'}>
                   <span className="font-mono">{issue.code}</span>
@@ -207,13 +260,21 @@ function IssuesTab({ runId, status }: { runId: string; status: RunStatus }) {
               <div className="min-w-0">
                 <p className="text-sm leading-6">{message}</p>
                 {message !== issue.message && issue.message !== issue.code && (
-                  <p className="mt-0.5 font-mono text-[11px] break-all text-muted-foreground/70">{issue.message}</p>
+                  <p className="mt-0.5 font-mono text-[11px] break-all text-muted-foreground/70">
+                    {issue.message}
+                  </p>
                 )}
-                <p className="mt-1.5 truncate font-mono text-[11.5px] text-muted-foreground" title={issue.path}>
+                <p
+                  className="mt-1.5 truncate font-mono text-[11.5px] text-muted-foreground"
+                  title={issue.path}
+                >
                   {issue.path}
                 </p>
                 {issue.protectSubtree && (
-                  <p className="mt-2 flex items-center gap-1.5 text-xs text-danger" title={t('issues.protectedHint')}>
+                  <p
+                    className="mt-2 flex items-center gap-1.5 text-xs text-danger"
+                    title={t('issues.protectedHint')}
+                  >
                     <ShieldAlert size={12} aria-hidden="true" />
                     {t('issues.protected')}
                   </p>

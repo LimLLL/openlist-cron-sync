@@ -39,7 +39,8 @@ export default {
     viewJob: '查看任务',
     cancel: '取消运行',
     cancelling: '取消中…',
-    cancelRequested: '已于 {{time}} 请求取消。进行中的工作收尾后，运行才会停止。',
+    cancelRequested:
+      '已于 {{time}} 请求取消。进行中的工作收尾后，运行才会停止。',
     duration: '耗时 {{value}}',
     running: '已运行 {{value}}',
     queued: '正在排队',

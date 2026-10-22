@@ -34,7 +34,8 @@ export default {
     kickerNew: '新建任务',
     kickerEdit: '编辑任务',
     descriptionNew: '选择源、添加目标，再决定文件何时流转。之后随时可以修改。',
-    descriptionEdit: '修改只影响之后的运行；已经开始的运行仍按启动时的配置执行。',
+    descriptionEdit:
+      '修改只影响之后的运行；已经开始的运行仍按启动时的配置执行。',
     loadingJob: '加载任务中…',
     loadingInstances: '加载实例中…',
     basics: '基本信息',
@@ -42,7 +43,8 @@ export default {
     name: '任务名称',
     namePlaceholder: '我的同步任务',
     createMode: '创建方式',
-    createModeHint: '中转：文件经由本服务转发。服务端复制：使用 OpenList 原生复制，仅当目标与源使用同一实例时可用。',
+    createModeHint:
+      '中转：文件经由本服务转发。服务端复制：使用 OpenList 原生复制，仅当目标与源使用同一实例时可用。',
     source: '源',
     sourceDesc: '任务读取的目录。源目录永远不会被修改。',
     instance: '实例',
@@ -70,7 +72,8 @@ export default {
     maxPercent: '最大删除比例',
     maxPercentHint: '最多可删除目标中文件的百分比；留空则不启用此项。',
     schedule: '定时',
-    scheduleDesc: '按所选时区解析的五段式 Cron 表达式；留空表示只在手动触发时运行。',
+    scheduleDesc:
+      '按所选时区解析的五段式 Cron 表达式；留空表示只在手动触发时运行。',
     cron: 'Cron 表达式',
     cronHint: '五段式分钟级表达式；留空表示仅手动运行。',
     timezone: '时区',
@@ -189,7 +192,8 @@ export default {
     previewHint: '只扫描和规划，不执行任何文件操作。',
     confirmDeletes: '确认删除',
     confirmDeletesHint: '跳过数量和比例阈值；扫描保护仍然生效。',
-    ambiguous: '运行可能已被接受。再次提交前，请先<runs>查看此任务的运行记录</runs>。',
+    ambiguous:
+      '运行可能已被接受。再次提交前，请先<runs>查看此任务的运行记录</runs>。',
     triggering: '触发中…',
     preview: '开始预览',
     execute: '开始运行',
@@ -205,7 +209,8 @@ export default {
     integerRange: '{{field}}必须是 {{min}} 到 {{max}} 之间的整数。',
     sizeOrder: '最小大小不能超过最大大小。',
     path: '请使用账号内的绝对路径，不能包含 . 或 ..，也不能位于 /@s 命名空间。',
-    patterns: '最多 100 条规则，每条不超过 1024 个字符；不支持以 ! 开头的反选规则。',
+    patterns:
+      '最多 100 条规则，每条不超过 1024 个字符；不支持以 ! 开头的反选规则。',
     thresholdRequired: '启用删除阈值时至少需要设置一项阈值。',
   },
   field: {

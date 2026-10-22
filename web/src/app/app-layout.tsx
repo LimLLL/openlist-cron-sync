@@ -57,7 +57,13 @@ function sectionOf(pathname: string): Section {
  * @returns 侧栏内容。
  * @throws 不适用。
  */
-function RailContent({ group, onNavigate }: { group: string; onNavigate?: () => void }) {
+function RailContent({
+  group,
+  onNavigate,
+}: {
+  group: string;
+  onNavigate?: () => void;
+}) {
   const { t } = useTranslation('common');
   const { session } = useAuth();
   const forced = session?.mustChangePassword;
@@ -75,17 +81,31 @@ function RailContent({ group, onNavigate }: { group: string; onNavigate?: () => 
         {NAV_ITEMS.map(({ key, icon: Icon, to, num }) =>
           // 强制改密期间只允许访问改密页。
           forced ? (
-            <span key={key} aria-disabled="true" className="nav-link opacity-40">
+            <span
+              key={key}
+              aria-disabled="true"
+              className="nav-link opacity-40"
+            >
               <span className="nav-link-number">{num}</span>
               <Icon size={16} aria-hidden="true" />
               <span className="nav-link-label">{t(`nav.${key}`)}</span>
             </span>
           ) : (
-            <NavLink key={key} to={to} end={to === '/'} onClick={onNavigate} className="nav-link">
+            <NavLink
+              key={key}
+              to={to}
+              end={to === '/'}
+              onClick={onNavigate}
+              className="nav-link"
+            >
               {({ isActive }) => (
                 <>
                   {isActive && (
-                    <motion.span layoutId="nav-indicator" className="nav-indicator" transition={SPRING} />
+                    <motion.span
+                      layoutId="nav-indicator"
+                      className="nav-indicator"
+                      transition={SPRING}
+                    />
                   )}
                   <span className="nav-link-number">{num}</span>
                   <Icon size={16} aria-hidden="true" />
@@ -127,13 +147,20 @@ function AccountMenu() {
         </button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
-        <DropdownMenu.Content align="end" sideOffset={10} className="menu-surface">
+        <DropdownMenu.Content
+          align="end"
+          sideOffset={10}
+          className="menu-surface"
+        >
           <DropdownMenu.Label className="px-3 pt-1.5 pb-2">
             <p className="eyebrow">{t('layout.administrator')}</p>
             <p className="mt-1 truncate text-sm">{username}</p>
           </DropdownMenu.Label>
           <DropdownMenu.Separator className="my-1 h-px bg-hairline" />
-          <DropdownMenu.Item className="menu-item" onSelect={() => void navigate('/change-password')}>
+          <DropdownMenu.Item
+            className="menu-item"
+            onSelect={() => void navigate('/change-password')}
+          >
             <KeyRound size={15} aria-hidden="true" />
             {t('layout.changePassword')}
           </DropdownMenu.Item>
@@ -160,8 +187,13 @@ export function AppLayout() {
   const outlet = useOutlet();
   const main = useRef<HTMLElement>(null);
   const section = sectionOf(location.pathname);
-  const sectionLabel = t(section === 'account' ? 'nav.account' : `nav.${section}`);
-  const shell = useMemo(() => ({ actionsSlot, setCompactTitle }), [actionsSlot]);
+  const sectionLabel = t(
+    section === 'account' ? 'nav.account' : `nav.${section}`,
+  );
+  const shell = useMemo(
+    () => ({ actionsSlot, setCompactTitle }),
+    [actionsSlot],
+  );
 
   useEffect(() => prefetchPages(), []);
   useEffect(() => {
@@ -197,8 +229,12 @@ export function AppLayout() {
                 <Dialog.Portal>
                   <Dialog.Overlay className="dialog-overlay" />
                   <Dialog.Content className="app-rail drawer z-50 flex w-72 max-w-[85vw]">
-                    <Dialog.Title className="sr-only">{t('layout.navTitle')}</Dialog.Title>
-                    <Dialog.Description className="sr-only">{t('layout.navDescription')}</Dialog.Description>
+                    <Dialog.Title className="sr-only">
+                      {t('layout.navTitle')}
+                    </Dialog.Title>
+                    <Dialog.Description className="sr-only">
+                      {t('layout.navDescription')}
+                    </Dialog.Description>
                     <Dialog.Close asChild>
                       <button
                         type="button"
@@ -208,7 +244,10 @@ export function AppLayout() {
                         <X size={17} aria-hidden="true" />
                       </button>
                     </Dialog.Close>
-                    <RailContent group="drawer" onNavigate={() => setOpen(false)} />
+                    <RailContent
+                      group="drawer"
+                      onNavigate={() => setOpen(false)}
+                    />
                   </Dialog.Content>
                 </Dialog.Portal>
               </Dialog.Root>
@@ -217,7 +256,11 @@ export function AppLayout() {
                 <AnimatePresence mode="popLayout" initial={false}>
                   <motion.p
                     key={compactTitle ?? 'crumb'}
-                    className={compactTitle ? 'topbar-title truncate leading-6' : 'topbar-crumb leading-6'}
+                    className={
+                      compactTitle
+                        ? 'topbar-title truncate leading-6'
+                        : 'topbar-crumb leading-6'
+                    }
                     initial={{ y: '100%', opacity: 0 }}
                     animate={{ y: 0, opacity: 1 }}
                     exit={{ y: '-100%', opacity: 0 }}
@@ -236,7 +279,10 @@ export function AppLayout() {
             </div>
             <div className="flex shrink-0 items-center gap-2 sm:gap-3">
               <div ref={setActionsSlot} className="flex items-center gap-2" />
-              <span className="hidden h-5 w-px bg-hairline sm:block" aria-hidden="true" />
+              <span
+                className="hidden h-5 w-px bg-hairline sm:block"
+                aria-hidden="true"
+              />
               <LanguageSwitch />
               <AccountMenu />
             </div>

@@ -6,7 +6,8 @@ export default {
   authState: { untested: '未测试', ready: '就绪', auth_blocked: '已阻止' },
   status: { error: '需要处理' },
   list: {
-    description: '这个控制台读取或写入的每一台 OpenList 服务器。在任务中使用之前，先测试一次连接。',
+    description:
+      '这个控制台读取或写入的每一台 OpenList 服务器。在任务中使用之前，先测试一次连接。',
     count_one: '{{count}} 个实例',
     count_other: '{{count}} 个实例',
     newInstance: '新建实例',
@@ -26,7 +27,8 @@ export default {
   },
   create: {
     back: '全部实例',
-    description: '登记一个 OpenList 实例，任务就能把它用作源或目标。在你测试之前，不会向它发起任何请求。',
+    description:
+      '登记一个 OpenList 实例，任务就能把它用作源或目标。在你测试之前，不会向它发起任何请求。',
   },
   form: {
     label: '实例配置',

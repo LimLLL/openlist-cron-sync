@@ -68,7 +68,10 @@ export function AmbientCanvas() {
       canvas.width = Math.round(width * ratio);
       canvas.height = Math.round(height * ratio);
       context.setTransform(ratio, 0, 0, ratio, 0, 0);
-      const count = Math.min(MAX_PARTICLES, Math.round(width * height * DENSITY));
+      const count = Math.min(
+        MAX_PARTICLES,
+        Math.round(width * height * DENSITY),
+      );
       particles = Array.from({ length: count }, () => spawn(width, height));
     };
 
@@ -95,7 +98,8 @@ export function AmbientCanvas() {
         if (particle.x > width + 10) particle.x = -10;
         if (particle.y < -10) particle.y = height + 10;
         if (particle.y > height + 10) particle.y = -10;
-        const glow = distance < POINTER_RADIUS ? (1 - distance / POINTER_RADIUS) * 0.5 : 0;
+        const glow =
+          distance < POINTER_RADIUS ? (1 - distance / POINTER_RADIUS) * 0.5 : 0;
         context.beginPath();
         context.arc(particle.x, particle.y, particle.r + glow, 0, Math.PI * 2);
         context.fillStyle = particle.amber

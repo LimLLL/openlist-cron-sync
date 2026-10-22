@@ -14,10 +14,18 @@ type SelectFieldProps = Omit<ComponentProps<'select'>, 'className'> & {
  * @returns 表单字段。
  * @throws 不适用。
  */
-export function SelectField({ id, label, hint, children, ...props }: SelectFieldProps) {
+export function SelectField({
+  id,
+  label,
+  hint,
+  children,
+  ...props
+}: SelectFieldProps) {
   return (
     <div className="space-y-2">
-      <label className="field-label" htmlFor={id}>{label}</label>
+      <label className="field-label" htmlFor={id}>
+        {label}
+      </label>
       <select
         {...props}
         id={id}

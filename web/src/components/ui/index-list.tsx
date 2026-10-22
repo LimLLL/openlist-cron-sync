@@ -22,7 +22,9 @@ const itemVariants = {
  * @throws 不适用。
  */
 export function indexColumns(cellCount: number): string {
-  const cells = Array.from({ length: cellCount }, () => 'minmax(0, 1fr)').join(' ');
+  const cells = Array.from({ length: cellCount }, () => 'minmax(0, 1fr)').join(
+    ' ',
+  );
   // 每行是独立 grid，状态列必须定宽，否则标签宽度不同会让各行列线错位。
   return `2.75rem minmax(0, 1.7fr) ${cells} 9rem 1.25rem`;
 }
@@ -32,9 +34,20 @@ export function indexColumns(cellCount: number): string {
  * @returns 无序列表。
  * @throws 不适用。
  */
-export function IndexList({ children, className }: { children: ReactNode; className?: string }) {
+export function IndexList({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
   return (
-    <motion.ul className={className} variants={listVariants} initial="hidden" animate="show">
+    <motion.ul
+      className={className}
+      variants={listVariants}
+      initial="hidden"
+      animate="show"
+    >
       {children}
     </motion.ul>
   );
@@ -97,8 +110,14 @@ interface IndexRowProps {
  */
 function trackPointer(event: PointerEvent<HTMLAnchorElement>): void {
   const rect = event.currentTarget.getBoundingClientRect();
-  event.currentTarget.style.setProperty('--mx', `${event.clientX - rect.left}px`);
-  event.currentTarget.style.setProperty('--my', `${event.clientY - rect.top}px`);
+  event.currentTarget.style.setProperty(
+    '--mx',
+    `${event.clientX - rect.left}px`,
+  );
+  event.currentTarget.style.setProperty(
+    '--my',
+    `${event.clientY - rect.top}px`,
+  );
 }
 
 /** 渲染一行可点击的编号条目。
@@ -106,7 +125,15 @@ function trackPointer(event: PointerEvent<HTMLAnchorElement>): void {
  * @returns 列表项。
  * @throws 不适用。
  */
-export function IndexRow({ to, index, title, subtitle, cells = [], status, className }: IndexRowProps) {
+export function IndexRow({
+  to,
+  index,
+  title,
+  subtitle,
+  cells = [],
+  status,
+  className,
+}: IndexRowProps) {
   return (
     <motion.li variants={itemVariants}>
       <Link
@@ -115,7 +142,9 @@ export function IndexRow({ to, index, title, subtitle, cells = [], status, class
         style={{ '--cols': indexColumns(cells.length) } as CSSProperties}
         onPointerMove={trackPointer}
       >
-        <span className="index-row-number">{String(index).padStart(2, '0')}</span>
+        <span className="index-row-number">
+          {String(index).padStart(2, '0')}
+        </span>
         <span className="min-w-0">
           <span className="index-row-title block truncate">{title}</span>
           {subtitle && (
@@ -130,7 +159,11 @@ export function IndexRow({ to, index, title, subtitle, cells = [], status, class
           </span>
         ))}
         <span className="flex justify-end md:justify-start">{status}</span>
-        <ArrowUpRight size={16} className="index-row-arrow" aria-hidden="true" />
+        <ArrowUpRight
+          size={16}
+          className="index-row-arrow"
+          aria-hidden="true"
+        />
       </Link>
     </motion.li>
   );

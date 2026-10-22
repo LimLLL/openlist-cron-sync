@@ -2,7 +2,14 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { Trans, useTranslation } from 'react-i18next';
-import { ArrowLeft, Archive, Pencil, Play, Power, PowerOff } from 'lucide-react';
+import {
+  ArrowLeft,
+  Archive,
+  Pencil,
+  Play,
+  Power,
+  PowerOff,
+} from 'lucide-react';
 import { useArchiveJob, useJob, useToggleJob } from './job-queries';
 import { PageHeader } from '../../components/page-header';
 import { Magnetic } from '../../components/motion/magnetic';
@@ -56,8 +63,17 @@ function JobActions({
           {t('detail.archiveAction')}
         </Button>
       )}
-      <Button variant="secondary" size="sm" onClick={onToggle} disabled={toggling || archived}>
-        {job.enabled ? <PowerOff size={14} aria-hidden="true" /> : <Power size={14} aria-hidden="true" />}
+      <Button
+        variant="secondary"
+        size="sm"
+        onClick={onToggle}
+        disabled={toggling || archived}
+      >
+        {job.enabled ? (
+          <PowerOff size={14} aria-hidden="true" />
+        ) : (
+          <Power size={14} aria-hidden="true" />
+        )}
         {job.enabled ? t('detail.disable') : t('detail.enable')}
       </Button>
       <Magnetic>
@@ -84,7 +100,8 @@ export function JobDetailPage() {
   const toggle = useToggleJob(id!);
   const archive = useArchiveJob(id!);
 
-  if (job.isPending) return <LoadingState label={t('detail.loading')} rows={6} />;
+  if (job.isPending)
+    return <LoadingState label={t('detail.loading')} rows={6} />;
   if (job.isError)
     return (
       <ErrorState
@@ -103,7 +120,10 @@ export function JobDetailPage() {
         kicker={t('detail.kicker')}
         title={data.name}
         meta={
-          <Link to="/jobs" className="inline-flex items-center gap-1.5 transition-colors hover:text-foreground">
+          <Link
+            to="/jobs"
+            className="inline-flex items-center gap-1.5 transition-colors hover:text-foreground"
+          >
             <ArrowLeft size={12} aria-hidden="true" />
             {t('detail.allJobs')}
           </Link>
@@ -113,7 +133,12 @@ export function JobDetailPage() {
             <div className="flex flex-wrap gap-2">
               <ScheduleBadge job={data} />
             </div>
-            <p>{t('detail.summary', { path: data.source.path, count: data.targets.length })}</p>
+            <p>
+              {t('detail.summary', {
+                path: data.source.path,
+                count: data.targets.length,
+              })}
+            </p>
           </div>
         }
         actions={

@@ -15,7 +15,7 @@
     "build:all": "pnpm build && pnpm build:web",
     "dev:web": "pnpm --filter web dev",
     "deploy": "nest deploy",
-    "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
+    "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\" \"web/src/**/*.{ts,tsx,css}\" \"web/*.ts\"",
     "start": "nest start",
     "start:dev": "NODE_ENV=development nest start --watch",
     "start:debug": "NODE_ENV=development nest start --debug --watch",

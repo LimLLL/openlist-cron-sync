@@ -22,7 +22,10 @@ export function isKnownErrorCode(code: string): code is ErrorCode {
  * @returns 本地化文案或原始信息。
  * @throws 不适用。
  */
-export function errorText(code: string | null | undefined, fallback: string): string {
+export function errorText(
+  code: string | null | undefined,
+  fallback: string,
+): string {
   return code && isKnownErrorCode(code) ? i18n.t(`errors:${code}`) : fallback;
 }
 

@@ -193,7 +193,9 @@ describe('cross-page query behavior', () => {
         total: 201,
       });
     useJobNames();
-    const page = (await query().queryFn({ signal: new AbortController().signal })) as {
+    const page = (await query().queryFn({
+      signal: new AbortController().signal,
+    })) as {
       items: { id: string; name: string }[];
     };
     expect(page.items).toEqual([

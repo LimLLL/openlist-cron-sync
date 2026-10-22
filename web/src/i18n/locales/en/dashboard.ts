@@ -30,7 +30,8 @@ export default {
     stateError: 'error',
     stateUntested: 'untested',
     emptyTitle: 'An empty sky.',
-    emptyHint: 'Connect your first OpenList instance and its orbit will appear here.',
+    emptyHint:
+      'Connect your first OpenList instance and its orbit will appear here.',
   },
   stats: {
     instances: 'Instances',
@@ -49,7 +50,8 @@ export default {
   },
   attention: {
     title: 'Needs attention',
-    scope: 'Failed or partial runs among the latest 50, plus {{shown}} of {{total}} unresolved operations.',
+    scope:
+      'Failed or partial runs among the latest 50, plus {{shown}} of {{total}} unresolved operations.',
     empty: 'All clear. Nothing in the latest 50 runs needs you.',
     columns: { item: 'Item', kind: 'Kind', when: 'When', state: 'State' },
     kindRun: 'Run',
@@ -57,7 +59,8 @@ export default {
   },
   activity: {
     title: 'Activity',
-    scope: 'Live runs (up to 20 per active state) followed by the most recent finished runs.',
+    scope:
+      'Live runs (up to 20 per active state) followed by the most recent finished runs.',
     allRuns: 'All runs',
     empty: 'Quiet orbit. No runs yet.',
     columns: { run: 'Run', trigger: 'Trigger', when: 'When', state: 'State' },
@@ -65,10 +68,15 @@ export default {
   },
   fleet: {
     title: 'Fleet',
-    description: 'Connection health of your instances and the next scheduled fires.',
+    description:
+      'Connection health of your instances and the next scheduled fires.',
     instancesTitle: 'Instances',
     noInstances: 'No instances configured yet.',
-    authState: { ready: 'Ready', untested: 'Untested', auth_blocked: 'Blocked' },
+    authState: {
+      ready: 'Ready',
+      untested: 'Untested',
+      auth_blocked: 'Blocked',
+    },
     healthError: 'Error',
     tested: 'tested {{when}}',
     neverTested: 'never tested',
@@ -85,12 +93,16 @@ export default {
   },
   onboarding: {
     title: 'Begin here',
-    description: 'Three steps from an empty sky to your first synchronized file.',
+    description:
+      'Three steps from an empty sky to your first synchronized file.',
     step1: 'Connect an instance',
-    step1Body: 'Add an OpenList server with a token or account and test the connection.',
+    step1Body:
+      'Add an OpenList server with a token or account and test the connection.',
     step2: 'Define a job',
-    step2Body: 'Pick a source folder, one or more targets, and an optional schedule.',
+    step2Body:
+      'Pick a source folder, one or more targets, and an optional schedule.',
     step3: 'Preview, then run',
-    step3Body: 'Dry-run first to see every planned change before anything is written.',
+    step3Body:
+      'Dry-run first to see every planned change before anything is written.',
   },
 } as const;

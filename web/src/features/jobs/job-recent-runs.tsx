@@ -26,7 +26,13 @@ function durationOf(run: JobRun): number | null {
  * @returns 分节。
  * @throws 不适用。
  */
-export function RecentRunsSection({ jobId, index }: { jobId: string; index: string }) {
+export function RecentRunsSection({
+  jobId,
+  index,
+}: {
+  jobId: string;
+  index: string;
+}) {
   const { t } = useTranslation(['jobs', 'common']);
   const runs = useJobRuns(jobId);
   return (
@@ -49,12 +55,18 @@ export function RecentRunsSection({ jobId, index }: { jobId: string; index: stri
       ) : runs.isError ? (
         <ErrorState error={runs.error} onRetry={() => void runs.refetch()} />
       ) : runs.data.items.length === 0 ? (
-        <p className="text-sm text-muted-foreground">{t('detail.recentEmpty')}</p>
+        <p className="text-sm text-muted-foreground">
+          {t('detail.recentEmpty')}
+        </p>
       ) : (
         <>
           <IndexHead
             title={t('detail.colRun')}
-            cells={[t('detail.colTrigger'), t('detail.colStarted'), t('detail.colDuration')]}
+            cells={[
+              t('detail.colTrigger'),
+              t('detail.colStarted'),
+              t('detail.colDuration'),
+            ]}
             status={t('list.colState')}
           />
           <IndexList>

@@ -41,7 +41,11 @@ function RouteCell({ job }: { job: JobView }) {
   const [first] = job.targets;
   return (
     <span className="inline-flex max-w-full items-center gap-2">
-      <ArrowRight size={12} className="shrink-0 text-accent" aria-hidden="true" />
+      <ArrowRight
+        size={12}
+        className="shrink-0 text-accent"
+        aria-hidden="true"
+      />
       <span className="truncate">
         {job.targets.length === 1 && first
           ? first.path
@@ -82,7 +86,9 @@ export function JobsPage() {
         index="03"
         kicker={t('common:nav.jobs')}
         description={t('list.description')}
-        meta={jobs.data ? t('list.count', { count: jobs.data.total }) : undefined}
+        meta={
+          jobs.data ? t('list.count', { count: jobs.data.total }) : undefined
+        }
         actions={<CreateButton />}
       />
 
@@ -126,7 +132,10 @@ export function JobsPage() {
                 index={(jobs.data.page - 1) * jobs.data.pageSize + position + 1}
                 title={job.name}
                 subtitle={job.source.path}
-                cells={[<RouteCell key="route" job={job} />, <ScheduleCell key="schedule" job={job} />]}
+                cells={[
+                  <RouteCell key="route" job={job} />,
+                  <ScheduleCell key="schedule" job={job} />,
+                ]}
                 status={<ScheduleBadge job={job} />}
               />
             ))}

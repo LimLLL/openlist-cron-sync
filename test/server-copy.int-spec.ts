@@ -43,13 +43,11 @@ describe('M6 real Local server_copy topologies', () => {
         OPENLIST_TASK_POLL_MS: '500',
       }),
     );
-    id = app
-      .get(InstancesService)
-      .create({
-        name: 'M6 Local',
-        baseUrl: environment.baseUrl,
-        auth: { mode: 'token', secret: environment.adminToken },
-      }).id;
+    id = app.get(InstancesService).create({
+      name: 'M6 Local',
+      baseUrl: environment.baseUrl,
+      auth: { mode: 'token', secret: environment.adminToken },
+    }).id;
     expect(
       (await app.get(InstanceOperations).test(id, { retryAuth: false })).error,
     ).toBeNull();
@@ -140,20 +138,18 @@ describe('M6 real Local server_copy topologies', () => {
       bytes[index] = index % 251;
     await seed(source, 'copy.txt', bytes);
     await seed(target, 'copy.txt', Buffer.from('old'));
-    const job = app
-      .get(JobsService)
-      .create({
-        name: 'M6 ' + label,
-        source: { instanceId: id, path: source, refresh: true },
-        targets: [
-          {
-            instanceId: id,
-            path: target,
-            refresh: true,
-            createMode: 'server_copy',
-          },
-        ],
-      });
+    const job = app.get(JobsService).create({
+      name: 'M6 ' + label,
+      source: { instanceId: id, path: source, refresh: true },
+      targets: [
+        {
+          instanceId: id,
+          path: target,
+          refresh: true,
+          createMode: 'server_copy',
+        },
+      ],
+    });
     const service = app.get(RunsService);
     const accepted = service.trigger(job.id, {
       dryRun: false,

@@ -5,12 +5,11 @@ import { accountWarnings } from '../src/openlist/protocol.js';
 import { componentFixture, envelope, file } from './openlist-fixture.js';
 import type { ComponentFixture } from './openlist-fixture.js';
 
-describe('M1 protocol boundaries', /** 注册本组 M1 行为验收用例。
+describe('M1 protocol boundaries' /** 注册本组 M1 行为验收用例。
  * @param 不适用。
  * @returns 不适用。
  * @throws 不适用。
- */
-() => {
+ */, () => {
   let fixture: ComponentFixture;
   afterEach(
     /** 恢复测试状态并释放本用例拥有的资源。
@@ -24,12 +23,11 @@ describe('M1 protocol boundaries', /** 注册本组 M1 行为验收用例。
     },
   );
 
-  it('fs JSON 500 remains a failed read and is never interpreted as missing', /** 验证当前场景的协议输入、输出与副作用。
+  it('fs JSON 500 remains a failed read and is never interpreted as missing' /** 验证当前场景的协议输入、输出与副作用。
    * @param 不适用。
    * @returns 断言完成；异步用例返回完成 Promise。
    * @throws Error 断言或测试资源操作失败。
-   */
-  async () => {
+   */, async () => {
     fixture = await componentFixture();
     fixture.server.responder =
       /** 根据请求端点返回本场景的可控上游响应。
@@ -109,12 +107,11 @@ describe('M1 protocol boundaries', /** 注册本组 M1 行为验收用例。
     },
   );
 
-  it('enforces actual response bytes and accepts null content only on success', /** 验证当前场景的协议输入、输出与副作用。
+  it('enforces actual response bytes and accepts null content only on success' /** 验证当前场景的协议输入、输出与副作用。
    * @param 不适用。
    * @returns 断言完成；异步用例返回完成 Promise。
    * @throws Error 断言或测试资源操作失败。
-   */
-  async () => {
+   */, async () => {
     fixture = await componentFixture('token', {
       OPENLIST_MAX_JSON_BYTES: '1024',
     });
@@ -146,12 +143,11 @@ describe('M1 protocol boundaries', /** 注册本组 M1 行为验收用例。
     });
   });
 
-  it('honours Retry-After without replaying mutations or auth requests', /** 记录上游实际收到请求的时间。
+  it('honours Retry-After without replaying mutations or auth requests' /** 记录上游实际收到请求的时间。
    * @param 不适用。
    * @returns undefined，使用默认上游响应。
    * @throws 不适用。
-   */
-  async () => {
+   */, async () => {
     fixture = await componentFixture();
     let reads = 0;
     const times: number[] = [];
@@ -188,12 +184,11 @@ describe('M1 protocol boundaries', /** 注册本组 M1 行为验收用例。
     ).toHaveLength(1);
   });
 
-  it('refuses all API/upload redirects and never sends Authorization to their destination', /** 验证当前场景的协议输入、输出与副作用。
+  it('refuses all API/upload redirects and never sends Authorization to their destination' /** 验证当前场景的协议输入、输出与副作用。
    * @param 不适用。
    * @returns 断言完成；异步用例返回完成 Promise。
    * @throws Error 断言或测试资源操作失败。
-   */
-  async () => {
+   */, async () => {
     fixture = await componentFixture('token');
     await fixture.client.auth.account(fixture.record());
     fixture.server.responder =
@@ -326,12 +321,11 @@ describe('M1 protocol boundaries', /** 注册本组 M1 行为验收用例。
     },
   );
 
-  it('reports disabled multipart and accepts minimum 4.2.5 without a write probe', /** 验证当前场景的协议输入、输出与副作用。
+  it('reports disabled multipart and accepts minimum 4.2.5 without a write probe' /** 验证当前场景的协议输入、输出与副作用。
    * @param 不适用。
    * @returns 断言完成；异步用例返回完成 Promise。
    * @throws Error 断言或测试资源操作失败。
-   */
-  async () => {
+   */, async () => {
     fixture = await componentFixture();
     fixture.server.responder =
       /** 根据请求端点返回本场景的可控上游响应。
@@ -391,12 +385,11 @@ describe('M1 protocol boundaries', /** 注册本组 M1 行为验收用例。
   });
 });
 
-describe('M1 account capability warnings', /** 注册不依赖 F1 资源的账号能力警告用例。
+describe('M1 account capability warnings' /** 注册不依赖 F1 资源的账号能力警告用例。
  * @param 不适用。
  * @returns 不适用。
  * @throws 不适用。
- */
-() => {
+ */, () => {
   /** 上游 CanSeeHides 只看权限位 0，管理员缺少该位同样需要警告。
    * @param 不适用。
    * @returns 不适用。

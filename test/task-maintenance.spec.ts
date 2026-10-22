@@ -130,13 +130,11 @@ describe('M6 task maintenance responsibility', () => {
     await maintenance.one(id);
     await maintenance.one(id);
     expect(plan(f, run.id)).toHaveLength(1);
-    const all = f
-      .runs()
-      .operations(run.id, {
-        page: 1,
-        pageSize: 200,
-        includeMaintenance: true,
-      }).items;
+    const all = f.runs().operations(run.id, {
+      page: 1,
+      pageSize: 200,
+      includeMaintenance: true,
+    }).items;
     expect(all).toHaveLength(2);
     expect(all[1]).toMatchObject({
       status: 'unknown',

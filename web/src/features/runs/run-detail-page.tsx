@@ -26,15 +26,22 @@ export function RunDetailPage() {
   const cancel = useCancelRun();
   const { t } = useTranslation(['runs', 'common']);
 
-  if (run.isPending) return <LoadingState rows={6} label={t('detail.loading')} />;
-  if (run.isError) return <ErrorState error={run.error} onRetry={() => void run.refetch()} />;
+  if (run.isPending)
+    return <LoadingState rows={6} label={t('detail.loading')} />;
+  if (run.isError)
+    return <ErrorState error={run.error} onRetry={() => void run.refetch()} />;
 
   const detail = run.data;
   const shortId = detail.id.slice(0, 8);
-  const canCancel = ACTIVE_RUN_STATUSES.has(detail.status) && !detail.cancelRequestedAt;
+  const canCancel =
+    ACTIVE_RUN_STATUSES.has(detail.status) && !detail.cancelRequestedAt;
   // 没有计划任何改动却有扫描问题时，问题才是用户要看的内容。
-  const plannedWork = ['plannedCreates', 'plannedReplacements', 'plannedExtraDeletes', 'plannedDirectoryDeletes']
-    .reduce((total, key) => total + (detail.stats[key] ?? 0), 0);
+  const plannedWork = [
+    'plannedCreates',
+    'plannedReplacements',
+    'plannedExtraDeletes',
+    'plannedDirectoryDeletes',
+  ].reduce((total, key) => total + (detail.stats[key] ?? 0), 0);
   // 分节编号按实际出现的分节顺序生成，没有目标时不留空号。
   const sections = [
     {
@@ -87,7 +94,9 @@ export function RunDetailPage() {
         kicker={
           <>
             {t('common:nav.runs')}
-            <span className="ml-2 font-mono text-muted-foreground/80 normal-case">{shortId}</span>
+            <span className="ml-2 font-mono text-muted-foreground/80 normal-case">
+              {shortId}
+            </span>
           </>
         }
         title={snapshotJobName(detail) ?? t('detail.untitled', { id: shortId })}
@@ -96,7 +105,10 @@ export function RunDetailPage() {
           time: formatRelative(detail.createdAt),
         })}
         meta={
-          <Link to="/runs" className="inline-flex items-center gap-1.5 transition-colors hover:text-foreground">
+          <Link
+            to="/runs"
+            className="inline-flex items-center gap-1.5 transition-colors hover:text-foreground"
+          >
             <ArrowLeft size={12} aria-hidden="true" />
             {t('detail.back')}
           </Link>

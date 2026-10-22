@@ -170,12 +170,10 @@ describe('M6 recovery task ownership', () => {
    */
   it('never cancels or deletes a running copy on shutdown', async () => {
     f.initialState = 1;
-    const run = f
-      .runs()
-      .trigger(f.copyJob().id, {
-        dryRun: false,
-        confirmDeletes: false,
-      });
+    const run = f.runs().trigger(f.copyJob().id, {
+      dryRun: false,
+      confirmDeletes: false,
+    });
     await vi.waitFor(
       /** 等待数据库保存tid。
        * @param 不适用。

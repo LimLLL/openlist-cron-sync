@@ -19,7 +19,13 @@ import {
   targetCreateModeState,
 } from './job-form-model';
 import type { JobFormValues } from './job-form-model';
-import { AdvancedFields, BasicsFields, FilterFields, ScheduleFields, SourceFields } from './job-form-sections';
+import {
+  AdvancedFields,
+  BasicsFields,
+  FilterFields,
+  ScheduleFields,
+  SourceFields,
+} from './job-form-sections';
 import type { UpdateField } from './job-form-sections';
 import { TargetsFields } from './job-target-fields';
 import type { JobView } from './job-contract';
@@ -59,13 +65,23 @@ function initialValues(existing?: JobView): JobFormValues {
  * @returns 按钮内容。
  * @throws 不适用。
  */
-function SubmitLabel({ pending, isEdit }: { pending: boolean; isEdit: boolean }) {
+function SubmitLabel({
+  pending,
+  isEdit,
+}: {
+  pending: boolean;
+  isEdit: boolean;
+}) {
   const { t } = useTranslation('jobs');
   if (pending)
     return (
       <>
         {isEdit ? t('form.saving') : t('form.creating')}
-        <LoaderCircle size={15} className="motion-safe:animate-spin" aria-hidden="true" />
+        <LoaderCircle
+          size={15}
+          className="motion-safe:animate-spin"
+          aria-hidden="true"
+        />
       </>
     );
   return (
@@ -89,7 +105,9 @@ export function JobForm({ existing }: { existing?: JobView }) {
   const instances = useInstanceOptions();
   const isEdit = !!existing;
   const mutation = isEdit ? patch : create;
-  const [values, setValues] = useState<JobFormValues>(() => initialValues(existing));
+  const [values, setValues] = useState<JobFormValues>(() =>
+    initialValues(existing),
+  );
   const [validationError, setValidationError] = useState<Error | null>(null);
   // 目录选择器当前服务的端点：'source' 为源，数字为目标位置，null 为关闭。
   const [browsing, setBrowsing] = useState<'source' | number | null>(null);
@@ -98,7 +116,8 @@ export function JobForm({ existing }: { existing?: JobView }) {
   );
   const backTo = isEdit ? `/jobs/${existing.id}` : '/jobs';
 
-  const update: UpdateField = (field, value) => setValues((previous) => ({ ...previous, [field]: value }));
+  const update: UpdateField = (field, value) =>
+    setValues((previous) => ({ ...previous, [field]: value }));
 
   /** 本地校验后提交；校验失败时只保存错误键，渲染时按当前语言生成文案。
    * @param event 表单事件。
@@ -117,24 +136,35 @@ export function JobForm({ existing }: { existing?: JobView }) {
         },
       });
     } catch (failure) {
-      setValidationError(failure instanceof Error ? failure : new Error(t('form.invalid')));
+      setValidationError(
+        failure instanceof Error ? failure : new Error(t('form.invalid')),
+      );
     }
   }
 
   const instanceList = instances.data ?? [];
   const shownValidationError =
     validationError instanceof JobFormError
-      ? new Error(jobValidationText(validationError.key, validationError.params, t))
+      ? new Error(
+          jobValidationText(validationError.key, validationError.params, t),
+        )
       : validationError;
-  const submitDisabled = mutation.isPending || !instances.data || invalidTargetMode;
+  const submitDisabled =
+    mutation.isPending || !instances.data || invalidTargetMode;
   // 选择器的实例、起始路径与密码都取自该端点在表单中的当前值。
   const browseEndpoint =
     browsing === 'source'
-      ? { instanceId: values.sourceInstanceId, path: values.sourcePath, password: values.sourcePassword }
+      ? {
+          instanceId: values.sourceInstanceId,
+          path: values.sourcePath,
+          password: values.sourcePassword,
+        }
       : browsing === null
         ? undefined
         : values.targets[browsing];
-  const browseInstance = browseEndpoint && instanceList.find((item) => item.id === browseEndpoint.instanceId);
+  const browseInstance =
+    browseEndpoint &&
+    instanceList.find((item) => item.id === browseEndpoint.instanceId);
 
   return (
     <section>
@@ -142,9 +172,14 @@ export function JobForm({ existing }: { existing?: JobView }) {
         index="03"
         kicker={isEdit ? t('form.kickerEdit') : t('form.kickerNew')}
         title={isEdit ? existing.name : undefined}
-        description={isEdit ? t('form.descriptionEdit') : t('form.descriptionNew')}
+        description={
+          isEdit ? t('form.descriptionEdit') : t('form.descriptionNew')
+        }
         meta={
-          <Link to={backTo} className="inline-flex items-center gap-1.5 transition-colors hover:text-foreground">
+          <Link
+            to={backTo}
+            className="inline-flex items-center gap-1.5 transition-colors hover:text-foreground"
+          >
             <ArrowLeft size={12} aria-hidden="true" />
             {isEdit ? t('form.backToJob') : t('form.allJobs')}
           </Link>
@@ -155,7 +190,12 @@ export function JobForm({ existing }: { existing?: JobView }) {
               <Link to={backTo}>{t('common:actions.cancel')}</Link>
             </Button>
             <Magnetic>
-              <Button type="submit" form={FORM_ID} size="sm" disabled={submitDisabled}>
+              <Button
+                type="submit"
+                form={FORM_ID}
+                size="sm"
+                disabled={submitDisabled}
+              >
                 <SubmitLabel pending={mutation.isPending} isEdit={isEdit} />
               </Button>
             </Magnetic>
@@ -163,7 +203,9 @@ export function JobForm({ existing }: { existing?: JobView }) {
         }
       />
 
-      {instances.isPending && <LoadingState label={t('form.loadingInstances')} />}
+      {instances.isPending && (
+        <LoadingState label={t('form.loadingInstances')} />
+      )}
       {instances.isError && (
         <ErrorState
           error={instances.error}
@@ -173,7 +215,11 @@ export function JobForm({ existing }: { existing?: JobView }) {
         />
       )}
 
-      <form id={FORM_ID} onSubmit={handleSubmit} aria-label={t('form.formLabel')}>
+      <form
+        id={FORM_ID}
+        onSubmit={handleSubmit}
+        aria-label={t('form.formLabel')}
+      >
         <BasicsFields values={values} update={update} />
         <SourceFields
           values={values}
@@ -220,7 +266,9 @@ export function JobForm({ existing }: { existing?: JobView }) {
           initialPath={browseEndpoint.path || '/'}
           initialPassword={browseEndpoint.password}
           onSelect={(path, password) => {
-            setValues((previous) => applyBrowsedPath(previous, browsing, path, password));
+            setValues((previous) =>
+              applyBrowsedPath(previous, browsing, path, password),
+            );
             setBrowsing(null);
           }}
         />

@@ -10,7 +10,8 @@ export default {
     newInstance: 'New instance',
     loading: 'Loading instances…',
     emptyTitle: 'No instances yet.',
-    emptyDescription: 'Connect your first OpenList server to begin synchronizing files.',
+    emptyDescription:
+      'Connect your first OpenList server to begin synchronizing files.',
     create: 'Create instance',
     neverTested: 'Never tested',
     columns: {
@@ -35,9 +36,11 @@ export default {
       auth: 'Authentication',
       authHint: 'Credentials are encrypted at rest and never shown again.',
       transfer: 'Transfer',
-      transferHint: 'How file content is read from this server during relay copies.',
+      transferHint:
+        'How file content is read from this server during relay copies.',
       limits: 'Resource limits',
-      limitsHint: 'Caps that keep this console from overwhelming the server. Leave a field empty to use its default.',
+      limitsHint:
+        'Caps that keep this console from overwhelming the server. Leave a field empty to use its default.',
     },
     name: 'Name',
     namePlaceholder: 'My OpenList server',
@@ -57,7 +60,8 @@ export default {
     downloadDirect: 'Direct download',
     downloadDirectHint: 'Uses the download API (d). Fastest for most storages.',
     downloadProxy: 'Proxy stream',
-    downloadProxyHint: 'Streams through the OpenList proxy (p). Use it when direct links are blocked.',
+    downloadProxyHint:
+      'Streams through the OpenList proxy (p). Use it when direct links are blocked.',
     limitHint: 'Default {{value}} · 0 = unlimited',
     save: 'Save changes',
     create: 'Create instance',
@@ -73,7 +77,8 @@ export default {
   validation: {
     name: 'Name must contain 1–100 characters.',
     url: 'Enter a valid HTTP(S) base URL.',
-    urlParts: 'Use an HTTP(S) URL without credentials, query parameters, or a fragment.',
+    urlParts:
+      'Use an HTTP(S) URL without credentials, query parameters, or a fragment.',
     authChange:
       'Changing authentication requires the complete username and secret for that mode.',
     secretFormat:
@@ -93,7 +98,8 @@ export default {
     neverTested: 'Never',
     account: 'Account',
     accountHint: 'The OpenList identity confirmed by the last successful test.',
-    accountEmpty: 'Not verified yet. Run a connection test to confirm the account.',
+    accountEmpty:
+      'Not verified yet. Run a connection test to confirm the account.',
     username: 'Username',
     basePath: 'Base path',
     role: 'Role',
@@ -103,7 +109,8 @@ export default {
     disabled: 'Disabled',
     unknown: 'Unknown',
     limits: 'Transfer & limits',
-    limitsHint: 'How runs read from and write to this server, and the caps they respect.',
+    limitsHint:
+      'How runs read from and write to this server, and the caps they respect.',
     unlimited: 'Unlimited',
     downloadMode: 'Download mode',
     timeline: 'Timeline',

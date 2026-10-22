@@ -38,9 +38,16 @@ export function SpecGrid({
       )}
     >
       {items.map((item, position) => (
-        <div key={position} className={cn('spec-cell', item.wide && 'sm:col-span-2')}>
+        <div
+          key={position}
+          className={cn('spec-cell', item.wide && 'sm:col-span-2')}
+        >
           <dt className="eyebrow">{item.label}</dt>
-          <dd className={cn('spec-value', item.mono && 'font-mono text-[13px]')}>{item.value}</dd>
+          <dd
+            className={cn('spec-value', item.mono && 'font-mono text-[13px]')}
+          >
+            {item.value}
+          </dd>
         </div>
       ))}
     </dl>

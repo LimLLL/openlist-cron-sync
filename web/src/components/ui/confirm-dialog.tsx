@@ -77,7 +77,9 @@ export function ConfirmDialog({
               </Button>
             </Dialog.Close>
             <Button variant="danger" onClick={onConfirm} disabled={pending}>
-              {pending ? t('actions.processing') : (confirmLabel ?? t('actions.confirm'))}
+              {pending
+                ? t('actions.processing')
+                : (confirmLabel ?? t('actions.confirm'))}
             </Button>
           </div>
           <Dialog.Close asChild>

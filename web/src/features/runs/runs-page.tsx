@@ -33,7 +33,8 @@ export function RunsPage() {
   // 任务名只用于展示；查询失败时行内回退显示任务 ID，不阻塞列表。
   const names = useJobNames().data;
   const filtered = Boolean(status || dryRun || jobId);
-  const type: RunType = dryRun === 'true' ? 'dry' : dryRun === 'false' ? 'real' : 'all';
+  const type: RunType =
+    dryRun === 'true' ? 'dry' : dryRun === 'false' ? 'real' : 'all';
 
   return (
     <section>
@@ -41,14 +42,24 @@ export function RunsPage() {
         index="04"
         kicker={t('common:nav.runs')}
         description={t('list.description')}
-        meta={runs.data ? t('list.total', { count: runs.data.total }) : undefined}
+        meta={
+          runs.data ? t('list.total', { count: runs.data.total }) : undefined
+        }
       />
 
-      <div role="group" aria-label={t('list.filters')} className="mb-8 flex flex-wrap items-center gap-3">
+      <div
+        role="group"
+        aria-label={t('list.filters')}
+        className="mb-8 flex flex-wrap items-center gap-3"
+      >
         <Segmented<RunType>
           label={t('list.typeFilter')}
           value={type}
-          onChange={(next) => setDryRun(next === 'all' ? undefined : next === 'dry' ? 'true' : 'false')}
+          onChange={(next) =>
+            setDryRun(
+              next === 'all' ? undefined : next === 'dry' ? 'true' : 'false',
+            )
+          }
           options={[
             { value: 'all', label: t('list.allTypes') },
             { value: 'real', label: t('common:realRun') },
@@ -74,7 +85,9 @@ export function RunsPage() {
             title={t('list.clearJob')}
             className="inline-flex h-[2.375rem] items-center gap-2 rounded-full border border-accent/25 bg-accent/[0.06] pr-3 pl-4 text-xs font-medium text-accent transition-colors hover:bg-accent/[0.12]"
           >
-            {t('list.jobFilter', { name: names?.get(jobId) ?? jobId.slice(0, 8) })}
+            {t('list.jobFilter', {
+              name: names?.get(jobId) ?? jobId.slice(0, 8),
+            })}
             <X size={13} aria-hidden="true" />
             <span className="sr-only">{t('list.clearJob')}</span>
           </button>
@@ -88,8 +101,14 @@ export function RunsPage() {
       ) : runs.data.items.length === 0 ? (
         <>
           <EmptyState
-            title={filtered ? t('list.emptyFilteredTitle') : t('list.emptyTitle')}
-            description={filtered ? t('list.emptyFilteredDescription') : t('list.emptyDescription')}
+            title={
+              filtered ? t('list.emptyFilteredTitle') : t('list.emptyTitle')
+            }
+            description={
+              filtered
+                ? t('list.emptyFilteredDescription')
+                : t('list.emptyDescription')
+            }
           />
           {/* 超出范围的页码仍需返回入口。 */}
           <Pagination
@@ -104,7 +123,11 @@ export function RunsPage() {
         <>
           <IndexHead
             title={t('list.columns.job')}
-            cells={[t('list.columns.trigger'), t('list.columns.started'), t('list.columns.duration')]}
+            cells={[
+              t('list.columns.trigger'),
+              t('list.columns.started'),
+              t('list.columns.duration'),
+            ]}
             status={t('list.columns.status')}
           />
           <IndexList>
@@ -135,7 +158,15 @@ export function RunsPage() {
  * @returns 编号行。
  * @throws 不适用。
  */
-function RunRow({ run, index, name }: { run: RunView; index: number; name?: string }) {
+function RunRow({
+  run,
+  index,
+  name,
+}: {
+  run: RunView;
+  index: number;
+  name?: string;
+}) {
   const { t } = useTranslation(['runs', 'common']);
   const badge = statusBadgeProps(run.status);
   const duration = runDurationSeconds(run);
@@ -148,7 +179,9 @@ function RunRow({ run, index, name }: { run: RunView; index: number; name?: stri
       subtitle={
         <>
           {run.id.slice(0, 8)}
-          {run.dryRun && <span className="ml-2 text-accent/80">· {t('common:dryRun')}</span>}
+          {run.dryRun && (
+            <span className="ml-2 text-accent/80">· {t('common:dryRun')}</span>
+          )}
         </>
       }
       cells={[

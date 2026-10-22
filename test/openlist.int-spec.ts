@@ -15,12 +15,11 @@ import { resolveMount } from '../src/openlist/mounts.js';
 
 const environment = integrationEnvironment();
 
-describe('M1 real OpenList with Local storage', /** 注册本组 M1 行为验收用例。
+describe('M1 real OpenList with Local storage' /** 注册本组 M1 行为验收用例。
  * @param 不适用。
  * @returns 不适用。
  * @throws 不适用。
- */
-() => {
+ */, () => {
   let app: NestExpressApplication;
   let directory: TestDirectory;
   let tokenId: string;
@@ -62,12 +61,11 @@ describe('M1 real OpenList with Local storage', /** 注册本组 M1 行为验收
       if (directory) await directory.remove();
     },
   );
-  it('connects with both bare token and password hash and reads supported settings', /** 验证当前场景的协议输入、输出与副作用。
+  it('connects with both bare token and password hash and reads supported settings' /** 验证当前场景的协议输入、输出与副作用。
    * @param 不适用。
    * @returns 断言完成；异步用例返回完成 Promise。
    * @throws Error 断言或测试资源操作失败。
-   */
-  async () => {
+   */, async () => {
     for (const id of [tokenId, passwordId]) {
       const result = await app
         .get(InstanceOperations)
@@ -84,12 +82,11 @@ describe('M1 real OpenList with Local storage', /** 注册本组 M1 行为验收
       expect(view.multipartEnabled).toBeTypeOf('boolean');
     }
   });
-  it('browses Local through both authentication modes without returning download secrets', /** 验证当前场景的协议输入、输出与副作用。
+  it('browses Local through both authentication modes without returning download secrets' /** 验证当前场景的协议输入、输出与副作用。
    * @param 不适用。
    * @returns 断言完成；异步用例返回完成 Promise。
    * @throws Error 断言或测试资源操作失败。
-   */
-  async () => {
+   */, async () => {
     for (const id of [tokenId, passwordId]) {
       const result = await app.get(InstanceOperations).browse(id, {
         path: environment.localPath,
@@ -108,12 +105,11 @@ describe('M1 real OpenList with Local storage', /** 注册本组 M1 行为验收
         ]);
     }
   });
-  it('resolves the complete admin mount map to a unique live Local storage', /** 验证当前场景的协议输入、输出与副作用。
+  it('resolves the complete admin mount map to a unique live Local storage' /** 验证当前场景的协议输入、输出与副作用。
    * @param 不适用。
    * @returns 断言完成；异步用例返回完成 Promise。
    * @throws Error 断言或测试资源操作失败。
-   */
-  async () => {
+   */, async () => {
     const instance = app.get(InstancesService).record(tokenId);
     const client = app.get(OpenListClient);
     const account = await client.auth.account(instance);

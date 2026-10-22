@@ -29,7 +29,14 @@ interface PageHeaderProps {
  * @returns 页头元素（以及顶栏中的操作门户）。
  * @throws 不适用。
  */
-export function PageHeader({ index, kicker, title, description, meta, actions }: PageHeaderProps) {
+export function PageHeader({
+  index,
+  kicker,
+  title,
+  description,
+  meta,
+  actions,
+}: PageHeaderProps) {
   const shell = useShell();
   const heading = useRef<HTMLHeadingElement>(null);
   const setCompactTitle = shell?.setCompactTitle;
@@ -85,7 +92,11 @@ export function PageHeader({ index, kicker, title, description, meta, actions }:
               className="max-w-2xl text-sm leading-7 text-muted-foreground"
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8, ease: EASE, delay: title ? 0.15 : 0.05 }}
+              transition={{
+                duration: 0.8,
+                ease: EASE,
+                delay: title ? 0.15 : 0.05,
+              }}
             >
               {description}
             </motion.div>
@@ -94,7 +105,12 @@ export function PageHeader({ index, kicker, title, description, meta, actions }:
       )}
       {actions && (
         // 移动端顶栏空间不足，操作留在页内；桌面端由门户放进顶栏。
-        <div className={cn('flex flex-wrap items-center gap-2', shell?.actionsSlot && 'sm:hidden')}>
+        <div
+          className={cn(
+            'flex flex-wrap items-center gap-2',
+            shell?.actionsSlot && 'sm:hidden',
+          )}
+        >
           {actions}
         </div>
       )}

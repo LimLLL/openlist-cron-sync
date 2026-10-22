@@ -4,7 +4,8 @@ import type { Translation } from '../../types';
 
 export default {
   hero: {
-    description: '所有实例、定时与运行汇成一张实时星图：什么需要你处理，什么正在流转，下一次在何时触发。',
+    description:
+      '所有实例、定时与运行汇成一张实时星图：什么需要你处理，什么正在流转，下一次在何时触发。',
   },
   system: {
     ok: '系统运行正常',
@@ -36,7 +37,8 @@ export default {
   },
   stats: {
     instances: '实例',
-    instancesSub: '{{ready}} 个就绪 · {{blocked}} 个被阻止 · 已加载 {{loaded}} 个',
+    instancesSub:
+      '{{ready}} 个就绪 · {{blocked}} 个被阻止 · 已加载 {{loaded}} 个',
     jobs: '任务',
     jobsSub: '{{scheduled}} 个已定时 · 已加载 {{loaded}} 个',
     system: '系统',
@@ -51,7 +53,8 @@ export default {
   },
   attention: {
     title: '需要关注',
-    scope: '最近 50 次运行中的失败与部分成功，以及 {{shown}} / {{total}} 个未解决操作。',
+    scope:
+      '最近 50 次运行中的失败与部分成功，以及 {{shown}} / {{total}} 个未解决操作。',
     empty: '一切正常，最近 50 次运行没有需要你处理的事项。',
     columns: { item: '事项', kind: '类型', when: '时间', state: '状态' },
     kindRun: '运行',

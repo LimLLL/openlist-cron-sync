@@ -24,16 +24,28 @@ export function InstanceCreatePage() {
         kicker={t('common:nav.instances')}
         description={t('create.description')}
         meta={
-          <Link to="/instances" className="inline-flex items-center gap-1.5 hover:text-foreground">
+          <Link
+            to="/instances"
+            className="inline-flex items-center gap-1.5 hover:text-foreground"
+          >
             <ArrowLeft size={12} aria-hidden="true" />
             {t('create.back')}
           </Link>
         }
         actions={
           <Magnetic>
-            <Button type="submit" form={FORM_ID} size="sm" disabled={mutation.isPending}>
+            <Button
+              type="submit"
+              form={FORM_ID}
+              size="sm"
+              disabled={mutation.isPending}
+            >
               {mutation.isPending ? (
-                <LoaderCircle size={15} className="motion-safe:animate-spin" aria-hidden="true" />
+                <LoaderCircle
+                  size={15}
+                  className="motion-safe:animate-spin"
+                  aria-hidden="true"
+                />
               ) : (
                 <Save size={15} aria-hidden="true" />
               )}

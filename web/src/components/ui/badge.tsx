@@ -49,10 +49,18 @@ type BadgeProps = VariantProps<typeof badgeVariants> & {
  * @returns 状态标签。
  * @throws 不适用。
  */
-export function Badge({ variant, children, className, pulse, plain }: BadgeProps) {
+export function Badge({
+  variant,
+  children,
+  className,
+  pulse,
+  plain,
+}: BadgeProps) {
   return (
     <span className={cn(badgeVariants({ variant }), className)}>
-      {!plain && <StatusDot tone={DOT_TONES[variant ?? 'default']} pulse={pulse} />}
+      {!plain && (
+        <StatusDot tone={DOT_TONES[variant ?? 'default']} pulse={pulse} />
+      )}
       {children}
     </span>
   );

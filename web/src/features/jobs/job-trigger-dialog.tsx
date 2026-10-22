@@ -58,14 +58,18 @@ function ModeCard({
       <span
         className={cn(
           'grid size-10 place-items-center rounded-full border',
-          selected ? 'border-accent/40 bg-accent/10 text-accent' : 'border-hairline text-muted-foreground',
+          selected
+            ? 'border-accent/40 bg-accent/10 text-accent'
+            : 'border-hairline text-muted-foreground',
         )}
       >
         <Icon size={17} aria-hidden="true" />
       </span>
       <span>
         <span className="block text-sm font-medium">{title}</span>
-        <span className="mt-1.5 block text-xs leading-5 text-muted-foreground">{hint}</span>
+        <span className="mt-1.5 block text-xs leading-5 text-muted-foreground">
+          {hint}
+        </span>
       </span>
       {selected && (
         <span className="absolute top-4 right-4 grid size-5 place-items-center rounded-full bg-accent text-accent-foreground">
@@ -81,7 +85,12 @@ function ModeCard({
  * @returns 触发对话框。
  * @throws 不适用。
  */
-export function JobTriggerDialog({ jobId, jobName, open, onOpenChange }: JobTriggerDialogProps) {
+export function JobTriggerDialog({
+  jobId,
+  jobName,
+  open,
+  onOpenChange,
+}: JobTriggerDialogProps) {
   const { t } = useTranslation(['jobs', 'common']);
   const [dryRun, setDryRun] = useState(false);
   const [confirmDeletes, setConfirmDeletes] = useState(false);
@@ -128,7 +137,11 @@ export function JobTriggerDialog({ jobId, jobName, open, onOpenChange }: JobTrig
             />
           </Dialog.Description>
 
-          <div role="radiogroup" aria-label={t('trigger.modeLabel')} className="mt-6 grid gap-3 sm:grid-cols-2">
+          <div
+            role="radiogroup"
+            aria-label={t('trigger.modeLabel')}
+            className="mt-6 grid gap-3 sm:grid-cols-2"
+          >
             <ModeCard
               selected={!dryRun}
               icon={Play}
@@ -157,13 +170,19 @@ export function JobTriggerDialog({ jobId, jobName, open, onOpenChange }: JobTrig
             <div className="mt-5">
               <ErrorState error={trigger.error} />
               {trigger.error instanceof ApiError &&
-                (trigger.error.code === 'NETWORK_ERROR' || trigger.error.code === 'INVALID_RESPONSE') && (
+                (trigger.error.code === 'NETWORK_ERROR' ||
+                  trigger.error.code === 'INVALID_RESPONSE') && (
                   <p className="mt-2 text-sm">
                     <Trans
                       t={t}
                       i18nKey="trigger.ambiguous"
                       components={{
-                        runs: <Link to={`/runs?jobId=${jobId}`} className="text-accent underline" />,
+                        runs: (
+                          <Link
+                            to={`/runs?jobId=${jobId}`}
+                            className="text-accent underline"
+                          />
+                        ),
                       }}
                     />
                   </p>
@@ -181,12 +200,20 @@ export function JobTriggerDialog({ jobId, jobName, open, onOpenChange }: JobTrig
               {trigger.isPending ? (
                 <>
                   {t('trigger.triggering')}
-                  <LoaderCircle size={16} className="motion-safe:animate-spin" aria-hidden="true" />
+                  <LoaderCircle
+                    size={16}
+                    className="motion-safe:animate-spin"
+                    aria-hidden="true"
+                  />
                 </>
               ) : (
                 <>
                   {dryRun ? t('trigger.preview') : t('trigger.execute')}
-                  {dryRun ? <Eye size={16} aria-hidden="true" /> : <Play size={16} aria-hidden="true" />}
+                  {dryRun ? (
+                    <Eye size={16} aria-hidden="true" />
+                  ) : (
+                    <Play size={16} aria-hidden="true" />
+                  )}
                 </>
               )}
             </Button>

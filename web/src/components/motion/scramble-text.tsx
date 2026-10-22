@@ -64,7 +64,11 @@ export function ScrambleText({
   }, [play, playOnMount, text, write]);
 
   return (
-    <span className={cn('font-mono', className)} aria-label={text} onPointerEnter={play}>
+    <span
+      className={cn('font-mono', className)}
+      aria-label={text}
+      onPointerEnter={play}
+    >
       <span ref={node} aria-hidden="true">
         {text}
       </span>

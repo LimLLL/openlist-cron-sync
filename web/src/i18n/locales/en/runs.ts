@@ -25,7 +25,8 @@ export default {
     emptyTitle: 'No runs yet.',
     emptyDescription: 'Trigger a run from a job to see it here.',
     emptyFilteredTitle: 'Nothing matches.',
-    emptyFilteredDescription: 'No runs match these filters. Try another status or type.',
+    emptyFilteredDescription:
+      'No runs match these filters. Try another status or type.',
   },
   detail: {
     back: 'All runs',
@@ -56,14 +57,17 @@ export default {
     },
     sections: {
       lifecycle: 'Lifecycle',
-      lifecycleNote: 'Every stage this run passed through, and the settings it ran with.',
+      lifecycleNote:
+        'Every stage this run passed through, and the settings it ran with.',
       targetsNote: 'Scan coverage and deletion safety for each destination.',
       statistics: 'All counters',
       statisticsNote: 'Every non-zero counter reported by the sync engine.',
       activity: 'Operations & issues',
-      activityNote: 'Planned work in execution order, and anything the scan flagged.',
+      activityNote:
+        'Planned work in execution order, and anything the scan flagged.',
       snapshot: 'Configuration snapshot',
-      snapshotNote: 'The exact job and instance settings frozen when this run was accepted.',
+      snapshotNote:
+        'The exact job and instance settings frozen when this run was accepted.',
     },
     timeline: {
       created: 'Accepted',

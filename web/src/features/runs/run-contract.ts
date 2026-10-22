@@ -369,8 +369,12 @@ export function parseJobNamePage(value: unknown): Page<JobName> {
   return parsePage(
     value,
     (item) => {
-      if (!isRecord(item)) throw new ApiError(0, 'INVALID_RESPONSE', 'Invalid job.');
-      return { id: expectString(item.id, 'id'), name: expectString(item.name, 'name') };
+      if (!isRecord(item))
+        throw new ApiError(0, 'INVALID_RESPONSE', 'Invalid job.');
+      return {
+        id: expectString(item.id, 'id'),
+        name: expectString(item.name, 'name'),
+      };
     },
     'job',
   );

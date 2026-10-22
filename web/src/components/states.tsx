@@ -52,7 +52,10 @@ export function EmptyState({
   return (
     <div className="relative overflow-hidden rounded-[1.75rem] border border-hairline px-8 py-16 text-center">
       {/* 背景同心轨道，空状态也保持观测站的视觉语言。 */}
-      <div aria-hidden="true" className="pointer-events-none absolute inset-0 grid place-items-center">
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 grid place-items-center"
+      >
         <span className="absolute size-[22rem] rounded-full border border-accent/[0.07]" />
         <span className="absolute size-[14rem] rounded-full border border-accent/[0.1]" />
         <span className="absolute size-[7rem] rounded-full border border-accent/[0.14]" />
@@ -88,7 +91,8 @@ export function ErrorState({
   const api = error instanceof ApiError ? error : null;
   const message = api ? errorText(api.code, api.message) : error.message;
   // 后端原文对排查有用；客户端错误（status 0）的原文是本地固定英文，不重复显示。
-  const detail = api && api.status !== 0 && message !== api.message ? api.message : null;
+  const detail =
+    api && api.status !== 0 && message !== api.message ? api.message : null;
   return (
     <div
       role="alert"
@@ -116,7 +120,8 @@ export function ErrorState({
             <p className="break-all font-mono text-[10px] text-muted-foreground">
               {api.code}
               {detail && ` · ${detail}`}
-              {api.requestId && ` · ${t('states.requestId', { id: api.requestId })}`}
+              {api.requestId &&
+                ` · ${t('states.requestId', { id: api.requestId })}`}
             </p>
           )}
         </div>

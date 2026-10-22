@@ -34,7 +34,8 @@ export default {
   MISSING_SECRET: '该实例尚未保存凭据。',
   KEY_MISMATCH: '已保存的凭据无法用当前加密密钥解密。',
   OPENLIST_ERROR: '与 OpenList 服务器通信失败。',
-  OPENLIST_VERSION_UNSUPPORTED: '不支持该 OpenList 版本，需要 4.2.5 或更高版本。',
+  OPENLIST_VERSION_UNSUPPORTED:
+    '不支持该 OpenList 版本，需要 4.2.5 或更高版本。',
   UPSTREAM_PROTOCOL_ERROR: 'OpenList 服务器返回了无法识别的响应。',
   UPSTREAM_REDIRECT: 'OpenList 服务器重定向了请求，请检查地址。',
   UPSTREAM_JSON_TOO_LARGE: 'OpenList 返回的数据过大，无法处理。',

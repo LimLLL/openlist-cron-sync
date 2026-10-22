@@ -78,7 +78,10 @@ export function OperationsPage() {
         <ErrorState error={ops.error} onRetry={() => void ops.refetch()} />
       ) : ops.data.items.length === 0 ? (
         <>
-          <EmptyState title={t('list.emptyTitle')} description={t('list.emptyDescription')} />
+          <EmptyState
+            title={t('list.emptyTitle')}
+            description={t('list.emptyDescription')}
+          />
           <Pagination
             className="mt-6"
             page={page}
@@ -91,7 +94,11 @@ export function OperationsPage() {
         <>
           <IndexHead
             title={t('list.columns.target')}
-            cells={[t('list.columns.method'), t('list.columns.size'), t('list.columns.created')]}
+            cells={[
+              t('list.columns.method'),
+              t('list.columns.size'),
+              t('list.columns.created'),
+            ]}
             status={t('list.columns.status')}
           />
           <IndexList>
@@ -121,19 +128,30 @@ export function OperationsPage() {
  * @returns 编号行。
  * @throws 不适用。
  */
-function OperationRow({ operation: op, index }: { operation: OperationView; index: number }) {
+function OperationRow({
+  operation: op,
+  index,
+}: {
+  operation: OperationView;
+  index: number;
+}) {
   const { t } = useTranslation(['operations', 'common']);
   const badge = statusBadge(op.status);
   const Icon = ACTION_ICONS[op.action];
   const { name } = splitPath(op.targetPath);
-  const size = op.expectedSourceSize ?? (op.affectedBytes > 0 ? op.affectedBytes : null);
+  const size =
+    op.expectedSourceSize ?? (op.affectedBytes > 0 ? op.affectedBytes : null);
   return (
     <IndexRow
       to={`/operations/${op.id}`}
       index={index}
       title={
         <span className="inline-flex max-w-full items-center gap-2.5">
-          <Icon size={15} className="shrink-0 text-muted-foreground" aria-hidden="true" />
+          <Icon
+            size={15}
+            className="shrink-0 text-muted-foreground"
+            aria-hidden="true"
+          />
           <span className="truncate">{name || op.targetPath}</span>
         </span>
       }

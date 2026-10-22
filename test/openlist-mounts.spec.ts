@@ -9,12 +9,11 @@ import { InstanceOperations } from '../src/instances/instance-operations.service
 import { componentFixture, envelope, storage } from './openlist-fixture.js';
 import type { ComponentFixture } from './openlist-fixture.js';
 
-describe('M1 mount mapping', /** 注册本组 M1 行为验收用例。
+describe('M1 mount mapping' /** 注册本组 M1 行为验收用例。
  * @param 不适用。
  * @returns 不适用。
  * @throws 不适用。
- */
-() => {
+ */, () => {
   let fixture: ComponentFixture;
   afterEach(
     /** 恢复测试状态并释放本用例拥有的资源。
@@ -46,12 +45,11 @@ describe('M1 mount mapping', /** 注册本组 M1 行为验收用例。
       expect(effectiveMount(input)).toBe(expected);
     },
   );
-  it('matches path segments, preserves disabled boundaries and refuses ambiguous candidates', /** 验证当前场景的协议输入、输出与副作用。
+  it('matches path segments, preserves disabled boundaries and refuses ambiguous candidates' /** 验证当前场景的协议输入、输出与副作用。
    * @param 不适用。
    * @returns 断言完成；异步用例返回完成 Promise。
    * @throws Error 断言或测试资源操作失败。
-   */
-  () => {
+   */, () => {
     const rows = storagePage({
       total: 5,
       content: [
@@ -72,12 +70,11 @@ describe('M1 mount mapping', /** 注册本组 M1 行为验收用例。
     expect(resolveMount(rows, '/').suspect).toBe(true);
     expect(resolveMount(rows, '/independent').suspect).toBe(false);
   });
-  it('restarts a changing pagination once and returns the entire consistent map', /** 验证当前场景的协议输入、输出与副作用。
+  it('restarts a changing pagination once and returns the entire consistent map' /** 验证当前场景的协议输入、输出与副作用。
    * @param 不适用。
    * @returns 断言完成；异步用例返回完成 Promise。
    * @throws Error 断言或测试资源操作失败。
-   */
-  async () => {
+   */, async () => {
     fixture = await componentFixture('token');
     let pages = 0;
     fixture.server.responder =
@@ -170,12 +167,11 @@ describe('M1 mount mapping', /** 注册本组 M1 行为验收用例。
       ).toBe(false);
     },
   );
-  it('never logs storage addition or upstream bodies containing credentials and URLs', /** 验证当前场景的协议输入、输出与副作用。
+  it('never logs storage addition or upstream bodies containing credentials and URLs' /** 验证当前场景的协议输入、输出与副作用。
    * @param 不适用。
    * @returns 断言完成；异步用例返回完成 Promise。
    * @throws Error 断言或测试资源操作失败。
-   */
-  async () => {
+   */, async () => {
     const log = vi.spyOn(Logger.prototype, 'log').mockImplementation(
       /** 捕获日志调用，避免测试重复输出。
        * @param 不适用。

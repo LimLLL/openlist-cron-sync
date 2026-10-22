@@ -44,7 +44,9 @@ function Coverage({ label, complete }: { label: string; complete: boolean }) {
       <StatusDot tone={complete ? 'success' : 'warning'} />
       <span>{label}</span>
       <span className={complete ? 'text-foreground' : 'text-signal'}>
-        {complete ? t('detail.targets.complete') : t('detail.targets.incomplete')}
+        {complete
+          ? t('detail.targets.complete')
+          : t('detail.targets.incomplete')}
       </span>
     </p>
   );
@@ -66,41 +68,73 @@ export function RunTargets({ targets }: { targets: RunTargetView[] }) {
         return (
           <li key={target.id} className="border-b border-hairline py-6">
             <div className="grid gap-6 md:grid-cols-[2.25rem_minmax(0,1.5fr)_minmax(0,1.1fr)_repeat(3,minmax(0,0.8fr))] md:items-start">
-              <span className="page-header-index pt-0.5">{String(position + 1).padStart(2, '0')}</span>
+              <span className="page-header-index pt-0.5">
+                {String(position + 1).padStart(2, '0')}
+              </span>
               <div className="min-w-0">
                 <p className="truncate font-display text-base font-medium tracking-tight">
-                  {label.instanceName ?? t('detail.targets.unknownInstance', { id: target.targetId.slice(0, 8) })}
+                  {label.instanceName ??
+                    t('detail.targets.unknownInstance', {
+                      id: target.targetId.slice(0, 8),
+                    })}
                 </p>
-                <p className="mt-1 truncate font-mono text-[11.5px] text-muted-foreground" title={label.path ?? undefined}>
+                <p
+                  className="mt-1 truncate font-mono text-[11.5px] text-muted-foreground"
+                  title={label.path ?? undefined}
+                >
                   {label.path ?? '—'}
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {label.mode && (
-                    <Badge plain variant={label.mode === 'mirror' ? 'info' : 'default'}>
+                    <Badge
+                      plain
+                      variant={label.mode === 'mirror' ? 'info' : 'default'}
+                    >
                       {t(`detail.targets.mode.${label.mode}`)}
                     </Badge>
                   )}
                   <Badge plain variant="info">
                     {t(`common:operationMethod.${label.createMode}`)}
                   </Badge>
-                  {target.suspect && <Badge variant="warning">{t('detail.targets.suspect')}</Badge>}
-                  {blocked && <Badge variant="danger">{t('detail.targets.blocked')}</Badge>}
+                  {target.suspect && (
+                    <Badge variant="warning">
+                      {t('detail.targets.suspect')}
+                    </Badge>
+                  )}
+                  {blocked && (
+                    <Badge variant="danger">
+                      {t('detail.targets.blocked')}
+                    </Badge>
+                  )}
                 </div>
               </div>
               <div className="space-y-2">
-                <Coverage label={t('detail.targets.sourceScan')} complete={target.sourceComplete} />
-                <Coverage label={t('detail.targets.targetScan')} complete={target.targetComplete} />
+                <Coverage
+                  label={t('detail.targets.sourceScan')}
+                  complete={target.sourceComplete}
+                />
+                <Coverage
+                  label={t('detail.targets.targetScan')}
+                  complete={target.targetComplete}
+                />
               </div>
-              <Metric label={t('detail.targets.replace')}>{count(target.plannedReplaceCount)}</Metric>
-              <Metric label={t('detail.targets.extras')}>{count(target.plannedExtraCount)}</Metric>
+              <Metric label={t('detail.targets.replace')}>
+                {count(target.plannedReplaceCount)}
+              </Metric>
+              <Metric label={t('detail.targets.extras')}>
+                {count(target.plannedExtraCount)}
+              </Metric>
               <Metric label={t('detail.targets.budget')}>
                 {target.deleteBudgetCount === null ? (
-                  <span className="font-sans text-xs text-muted-foreground">{t('detail.targets.budgetUnlimited')}</span>
+                  <span className="font-sans text-xs text-muted-foreground">
+                    {t('detail.targets.budgetUnlimited')}
+                  </span>
                 ) : (
                   count(target.deleteBudgetCount)
                 )}
                 <span className="mt-1 block font-sans text-[11px] text-muted-foreground">
-                  {t('detail.targets.observed')} {count(target.observedTargetFileCount)}
+                  {t('detail.targets.observed')}{' '}
+                  {count(target.observedTargetFileCount)}
                 </span>
               </Metric>
             </div>
@@ -114,7 +148,9 @@ export function RunTargets({ targets }: { targets: RunTargetView[] }) {
                   {target.blockReasons.map((code) => (
                     <li key={code} className="text-sm">
                       {errorText(code, code)}
-                      <span className="ml-2 font-mono text-[11px] text-muted-foreground">{code}</span>
+                      <span className="ml-2 font-mono text-[11px] text-muted-foreground">
+                        {code}
+                      </span>
                     </li>
                   ))}
                 </ul>
