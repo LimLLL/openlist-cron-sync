@@ -1,7 +1,7 @@
 // 用 F1 验证真实状态、受限读取、只读重试和无变更重放。
 import { InstanceOperations } from '../src/instances/instance-operations.service.js';
 import { OpenListMultipart } from '../src/openlist/multipart.service.js';
-import { accountWarnings } from '../src/openlist/protocol.js';
+import { accountWarnings, supportedVersion } from '../src/openlist/protocol.js';
 import { componentFixture, envelope, file } from './openlist-fixture.js';
 import type { ComponentFixture } from './openlist-fixture.js';
 
@@ -405,4 +405,28 @@ describe('M1 account capability warnings' /** 注册不依赖 F1 资源的账号
       accountWarnings({ ...admin, role: 0, permissions: 1 }),
     ).toMatchObject([{ code: 'MOUNT_BOUNDARY_UNKNOWN' }]);
   });
+});
+
+describe('OpenList version support', () => {
+  it.each([
+    ['v4.2.5 (Commit: cc87e88) - Frontend: v4.2.5', true],
+    ['v4.2.6-rc.12 (Commit: c7c63173) - Frontend: v4.2.6 - Build at: x', true],
+    ['4.3.0-beta.1', true],
+    ['v5.0.0+build.7', true],
+    ['v4.2.5-rc.1', false],
+    ['v4.2.4', false],
+    ['beta (Commit: abc) - Frontend: rolling', false],
+    ['v4.2', false],
+  ])(
+    'compares %s by semantic version against the 4.2.5 minimum',
+    /** 4.2.5 之后的预发行版本可用；4.2.5 自身的预发行与无版本号构建仍不可用。
+     * @param version 上游版本字符串。
+     * @param expected 是否应受支持。
+     * @returns 不适用。
+     * @throws Error 断言失败。
+     */
+    (version, expected) => {
+      expect(supportedVersion(version)).toBe(expected);
+    },
+  );
 });

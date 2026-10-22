@@ -167,20 +167,20 @@ export function publicSettings(input: unknown): PublicSettings {
     },
   };
 }
-/** 检查最低稳定版本，不猜测无法解析的描述。
- * @param version 上游版本字符串。
- * @returns 是否可解析且不低于 4.2.5；预发行版本不受支持。
+/** 按语义化版本检查最低版本 4.2.5，不猜测无法解析的描述（如 dev、beta 构建）。
+ * @param version 上游版本字符串，如 `v4.2.6-rc.12 (Commit: …) - Frontend: …`。
+ * @returns 是否可解析且不低于 4.2.5；之后的预发行版本（如 4.2.6-rc.12）可用，4.2.5 自身的预发行版本早于 4.2.5，不可用。
  * @throws 不适用。
  */
 export function supportedVersion(version: string): boolean {
-  const match = /^v?(\d+)\.(\d+)\.(\d+)(?=$|\s|\+)/.exec(version);
-  const parts = match?.slice(1).map(Number);
-  return !(
-    !parts ||
-    parts.some(notSafe) ||
-    parts[0] < 4 ||
-    (parts[0] === 4 && (parts[1] < 2 || (parts[1] === 2 && parts[2] < 5)))
+  const match = /^v?(\d+)\.(\d+)\.(\d+)(-[0-9A-Za-z.-]+)?(?=$|\s|\+)/.exec(
+    version,
   );
+  const parts = match?.slice(1, 4).map(Number);
+  if (!match || !parts || parts.some(notSafe)) return false;
+  // 先按主、次、修订号比较；同为 4.2.5 时预发行版本排在正式版之前。
+  const order = parts[0] - 4 || parts[1] - 2 || parts[2] - 5;
+  return order > 0 || (order === 0 && match[4] === undefined);
 }
 /** 检查版本段整数。
  * @param value 数字。
