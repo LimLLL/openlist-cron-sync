@@ -39,8 +39,9 @@ export default {
       authHint: '凭据加密保存，之后不会再明文显示。',
       transfer: '传输',
       transferHint: '中转复制时，如何从这台服务器读取文件内容。',
-      limits: '资源配额',
-      limitsHint: '限制本控制台对服务器的压力。留空即使用默认值。',
+      limits: 'API 配额',
+      limitsHint:
+        '限制本控制台调用这台服务器管理接口（列目录、建目录、删除、提交复制等）的并发与频率。留空即使用默认值；传输并发在任务中按源和目标分别设置。',
     },
     name: '名称',
     namePlaceholder: '我的 OpenList 服务器',
@@ -68,10 +69,6 @@ export default {
   limits: {
     maxApiConcurrency: 'API 并发数',
     apiRequestsPerSecond: '每秒 API 请求数',
-    maxOutstandingTasks: '未完成任务数',
-    maxDownloadConnections: '下载连接数',
-    maxUploadSessions: '上传会话数',
-    maxChunkConcurrency: '分片并发数',
   },
   validation: {
     name: '名称需为 1–100 个字符。',
@@ -103,8 +100,9 @@ export default {
     enabled: '已开启',
     disabled: '未开启',
     unknown: '未知',
-    limits: '传输与配额',
-    limitsHint: '运行如何读写这台服务器，以及需要遵守的上限。',
+    limits: '配额与传输',
+    limitsHint:
+      '管理接口的并发与频率上限，以及读取文件的方式。传输并发在任务中设置。',
     unlimited: '不限',
     downloadMode: '下载方式',
     timeline: '时间线',

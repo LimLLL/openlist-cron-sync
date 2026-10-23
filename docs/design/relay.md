@@ -8,34 +8,33 @@ relay 是每个 Target 的默认创建方式（见[创建方式](sync-engine.md#
 
 ## 总体结构
 
-下载和上传是两组独立 worker，中间是本地磁盘 spool：
+每个文件同时持有 Job 源配额和 Target 文件配额，中间用本地磁盘 spool 解耦读取和上传：
 
 ```text
-源 GET 流 ──下载worker──▶ spool（1 MiB 块）──上传worker──▶ multipart chunk ──▶ complete
+源 GET 流 ──Job源配额──▶ spool（1 MiB 块）──Target文件配额──▶ multipart chunk ──▶ complete
 ```
 
-- 下载 worker 的工作单位是一个 spool 块：取得空间额度、从该文件的 GET 流读满 1 MiB（或读到 EOF）、写盘、发布，然后立即去处理下一个块或下一个文件，不等待上传。
-- 上传 worker 的工作单位是一次 chunk 请求：取若干已发布的连续块拼成 chunk 发送，确认后释放这些块。
-- Sync 的文件协调器连接两端：负责删除依赖和结果落库；Relay 提供准备句柄，并等待 submitting、session 和 EOF 的持久化检查点后才继续网络操作。等待 complete 不占 chunk worker。
+- 文件开始前同时取得 Job 源文件配额和 Target 文件配额；Target 配额从准备阶段一直持有到 complete 或本地收尾结束。
+- 首个 spool 块在打开源 GET 前预留。随后读取块、发布并按 FIFO/frontier 优先级发送；配额为 0 时不设置隐含进程上限。
+- 一个文件的 chunk 请求受 Target 的 chunkConcurrency 限制，complete 仍由同一个 Target 文件配额保护。
+- Sync 的文件协调器连接两端：负责删除依赖和结果落库；Relay 提供准备句柄，并等待 submitting、session 和 EOF 的持久化检查点后才继续网络操作。等待 complete 仍持有 Target 文件配额，但不占 chunkConcurrency 窗口。
 - 每个 (源文件, Target) 独立下载一次；同一文件发往多个 Target 时各自下载，不共享 spool 块。
 
 ## 资源
 
-| 资源                         | 默认 | 说明                                           |
-| ---------------------------- | ---- | ---------------------------------------------- |
-| 全局下载 worker              | 4    | 正在读取并写入 spool 的块数                    |
-| 每源 Instance 下载连接       | 2    | 打开的 GET，包括因 spool 背压暂停的连接        |
-| 每目标 Instance 上传 session | 2    | 从 init 前预留，到 complete 结果落库或本地收尾 |
-| 全局 chunk 上传 worker       | 8    | 同时进行的 chunk HTTP 请求                     |
-| 每目标 Instance chunk 并发   | 4    | 防止单个实例占满全部上传能力                   |
-| 每 session chunk 并发        | 2    | 固定值，不主动填满 OpenList 的 8 槽窗口        |
+| 资源                          | 默认   | 说明                                                         |
+| ----------------------------- | ------ | ------------------------------------------------------------ |
+| Job sourceDownloadConcurrency | 2      | 同一 Job 从源读取的 relay 文件数；0 不限                     |
+| Target concurrentFiles        | 2      | relay 从准备到完成的文件数；server_copy 未终态任务数；0 不限 |
+| Target chunkConcurrency       | 2      | 每个 relay 文件同时发送的 chunk 请求数，范围 1–8             |
+| SPOOL_RESERVE_BYTES           | 512MiB | SQLite/WAL 保留空间；spool FIFO 背压仍是容量约束             |
 
-数值的配置键见[配置](../reference/configuration.md)。一个文件开始前同时取得源下载连接与目标上传 session，按 instance id 排序获取，避免 A→B 与 B→A 互相等待；同实例时分别占用两类名额。
-init、status、abort 及 list/remove 等控制请求走实例的 API 并发与速率令牌；chunk 请求和 complete 等待使用上表名额，不消耗控制请求的速率令牌，长时间的 complete 等待也不占用取消和 status 所需的控制通道。
+数值的配置键见[配置](../reference/configuration.md)。Job 和 Target 配额按稳定的 Job/Target ID 隔离；不同 Job 同时运行时额度相加。server_copy 的 concurrentFiles=0 会持续提交所有待复制的任务，可能使 OpenList 同时承受大量任务。
+init、status、abort 及 list/get/mkdir/remove/copy/task-info 等管理请求走目标 Instance 的 API 并发与速率令牌；chunk 和 complete 绕过该 API 配额。complete 仍受 Target 文件配额及 relay 文件总期限约束，长时间等待不会阻塞同一 Instance 的 list、取消或 status 控制通道。
 
 ## Spool
 
-- 目录 `SPOOL_DIR`，默认 `DATA_DIR/spool`，权限 0700，文件 0600。块固定 1 MiB（最后一块可更短），先写临时文件，关闭后才发布给上传 worker；未完成的块不可消费。
+- 目录 `SPOOL_DIR`，默认 `DATA_DIR/spool`，权限 0700，文件 0600。块固定 1 MiB（最后一块可更短），先写临时文件，关闭后才发布给上传流水线；未完成的块不可消费。
 - 块内容与引用只存在于当前进程，不建持久化块表或续传索引。启动时在重建未决责任之后清理私有relay-UUID目录，保留其它内容；若清理范围与DATA_DIR重叠则拒绝启动，防止误删数据库。备份排除 spool。
 - 预算 = 文件系统对本进程的可用空间 − `SPOOL_RESERVE_BYTES`（默认 512 MiB，保证同卷的 SQLite/WAL 仍可写）− 已承诺未完成的写入。不需要配置上限，默认可用全部剩余空间。
 - 预算不足时下载暂停等待上传释放空间，这是正常背压，不报错。明确例外：init 的 session 已持久化后，如果该文件 frontier 的实际 payload 即使释放本进程全部 spool 仍无法容纳，则有界主动 abort，记 failed SPOOL_FULL（摘要为 insufficient spool capacity）。自身其它 session 的临时争用只等待；容量条件未改变时本 Run 不反复创建 session。真实写入失败（ENOSPC、EDQUOT 或其他 I/O 错误，例如其他进程占满磁盘）记 SPOOL_FULL 或 SPOOL_IO_ERROR，按下文“主动 abort”收尾该文件。
@@ -45,15 +44,15 @@ init、status、abort 及 list/remove 等控制请求走实例的 API 并发与�
 
 1. 以 init 返回的 chunk_size 和剩余文件大小计算 frontier 的实际 payload；为可推进的 session 保留完整 chunk 的进展额度，不把两块 1 MiB 当作足够条件。已发送但未确认的数据仍须保留供重传。
 2. 已开始上传的文件，其下一个缺失块优先于任何预读；上传优先发送最靠近 session frontier 的 chunk。
-3. 尚未开始上传的文件最多预读一个块，处于预读状态的文件总数不超过下载 worker 数。
-4. 空间紧张时停止接纳新文件和预读，让已有上传消费并释放块。
+3. 尚未开始上传的文件最多预读一个块；spool FIFO/frontier 优先级保证已有上传先消费缺块。
+4. 空间紧张时暂停新的源读取，让已有上传消费并释放块；这是容量背压，不是隐藏的并发上限。
 
 因此 60 GB 文件不需要 60 GB spool：已确认的块持续释放。等待同样受 relay 与 Run 总期限约束。OpenList 侧另有磁盘开销（每 session 最多 8 个 chunk 的接收窗口，部分驱动还会缓存整文件）；与 OpenList 同机部署时一并估算。
 
 ## 单文件流程
 
-1. **准入**：取得下载连接和上传 session 名额。
-2. **打开源**：解析全局 /d 或 /p 路径及 sign，GET 携带 `Accept-Encoding: identity`，通常不向下载路由发送 OpenList API token。最终必须是 200；Content-Length 存在时必须等于计划 size。Content-Type 不作判断。读出第一个块（或小文件读到 EOF）写入 spool，证明源能正常出数据。
+1. **配额**：取得 Job 源文件配额和 Target 文件配额，并预留首个 spool 块；配额等待和 spool 等待都可被取消。
+2. **打开源**：解析全局 /d 或 /p 路径及 sign，GET 携带 `Accept-Encoding: identity`，通常不向下载路由发送 OpenList API token。最终必须是 200；Content-Length 存在时必须等于计划 size。Content-Type 不作判断。首个块已预留后才打开 GET，并读入 spool，证明源能正常出数据。
 3. **删除依赖**：替换时先按[删除保护](deletion.md#执行时复查)remove 旧文件并 refresh 确认消失；第 2 步失败时绝不删除。删除失败则本 create skipped DEPENDENCY_FAILED，释放 spool 与名额。
 4. **提交**：Operation 写 submitting 并提交事务，然后 `POST /api/fs/multipart/init`：File-Path 一次编码，`X-File-Size`=size，`Overwrite: false`，不发 hash 头、不发 `X-Chunk-Size`、不发 Content-Type（OpenList 按文件名推断）。源 modified 可解析且晚于 Unix 纪元时发送毫秒 Last-Modified；Go 零值时间或 ≤0 毫秒省略。
 5. **记录 session**：收到有效 init 响应后，先持久化 upload_id、state、attempt 与 chunk_size，再发送任何 chunk。chunk i 由块 `[i×k, (i+1)×k)` 拼成，k = chunk_size ÷ 1 MiB。

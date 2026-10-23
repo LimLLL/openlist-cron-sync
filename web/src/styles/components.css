@@ -253,6 +253,12 @@
   .field-input[aria-invalid='true'] {
     border-color: rgb(244 163 155 / 0.6);
   }
+  /* 当前选择下不适用的字段：保留取值与布局，弱化并禁止编辑。 */
+  .field-input:disabled {
+    cursor: not-allowed;
+    border-color: var(--color-hairline);
+    opacity: 0.45;
+  }
   .field-input::placeholder {
     color: rgb(139 149 141 / 0.6);
   }

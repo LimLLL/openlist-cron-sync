@@ -36,7 +36,6 @@ export default {
     source: '源',
     target: '目标',
     noSource: '没有源端，这一步只作用于目标。',
-    instance: '实例',
     expected: '预期 {{size}}',
     error: '错误',
     stats: {

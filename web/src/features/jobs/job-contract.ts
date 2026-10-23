@@ -54,6 +54,10 @@ export interface Target extends Endpoint {
   mode: 'incremental' | 'mirror';
   /** 此目标的文件创建方式。 */
   createMode: 'relay' | 'server_copy';
+  /** 同时处理的文件数：中转为在途文件，服务端复制为未结束的复制任务；0 不限。 */
+  concurrentFiles: number;
+  /** 每个中转文件同时发送的分片数，1–8。 */
+  chunkConcurrency: number;
   /** 删除阈值。 */
   deleteLimits: DeleteLimits;
 }
@@ -80,6 +84,8 @@ export interface JobView {
   allowEmptySource: boolean;
   /** 是否同步目录结构。 */
   syncEmptyDirs: boolean;
+  /** 同时从源读取的中转文件数，所有目标共享；0 不限。 */
+  sourceDownloadConcurrency: number;
   /** 失败后的重试次数；null 表示继承进程默认值。 */
   retryCount: number | null;
   /** 此 Job 所有 relay Target 的聚合上传 bytes/s。 */
@@ -206,6 +212,14 @@ export function parseTarget(value: unknown, index: number): Target {
     position: expectNumber(value.position, `targets[${index}].position`),
     mode,
     createMode,
+    concurrentFiles: expectNumber(
+      value.concurrentFiles,
+      `targets[${index}].concurrentFiles`,
+    ),
+    chunkConcurrency: expectNumber(
+      value.chunkConcurrency,
+      `targets[${index}].chunkConcurrency`,
+    ),
     deleteLimits: parseDeleteLimits(value.deleteLimits),
   };
 }
@@ -231,6 +245,10 @@ export function parseJob(value: unknown): JobView {
     filters: parseFilters(value.filters),
     allowEmptySource: expectBoolean(value.allowEmptySource, 'allowEmptySource'),
     syncEmptyDirs: expectBoolean(value.syncEmptyDirs, 'syncEmptyDirs'),
+    sourceDownloadConcurrency: expectNumber(
+      value.sourceDownloadConcurrency,
+      'sourceDownloadConcurrency',
+    ),
     retryCount: nullableNumber(value.retryCount, 'retryCount'),
     relayBandwidthLimit: expectNumber(
       value.relayBandwidthLimit,

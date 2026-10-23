@@ -90,11 +90,7 @@ export async function uploadChunk(
     signal.throwIfAborted();
     let flow = false;
     let original: unknown;
-    // 先取实例名额再取全局worker：等待已满实例时不占用其他目标可用的全局位。
-    const releaseInstance = await resources.acquire(target, 'chunk', signal);
-    let releaseGlobal: (() => void) | undefined;
     try {
-      releaseGlobal = await resources.uploads.acquire(signal);
       const bodyStop = new AbortController();
       const bodySignal = AbortSignal.any([signal, bodyStop.signal]);
       /** 每次重传都重新读取同一份spool，不复用已消费的网络流。
@@ -158,7 +154,7 @@ export async function uploadChunk(
         if (localFailure instanceof RelayError) throw localFailure;
         throw error;
       } finally {
-        // 上游可提前返回409/429；停止并等待限速中的生成器，释放worker后不再读取块或累计字节。
+        // 上游可提前返回409/429；停止并等待限速中的生成器，之后不再读取块或累计字节。
         const closed = finished(body, { cleanup: true });
         bodyStop.abort();
         body.destroy();
@@ -203,9 +199,6 @@ export async function uploadChunk(
         )
           return;
       }
-    } finally {
-      releaseGlobal?.();
-      releaseInstance();
     }
     if (!flow) {
       try {

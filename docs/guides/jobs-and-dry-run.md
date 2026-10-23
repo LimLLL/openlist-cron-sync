@@ -48,13 +48,17 @@
 | `filters`                        | 全部文件                  | 见[过滤](#过滤)                                                                               |
 | `syncEmptyDirs`                  | `false`                   | 见[空目录](#空目录)                                                                           |
 | `allowEmptySource`               | `false`                   | 源确认为空时是否仍允许删除，见[阈值](#删除保护与阈值)                                         |
+| `sourceDownloadConcurrency`      | `2`                       | Job 同时读取的 relay 文件数；0 表示不限                                                       |
+| `targets[].concurrentFiles`      | `2`                       | relay 在途文件数或 server-copy 未终态任务数；0 表示不限                                       |
+| `targets[].chunkConcurrency`     | `2`                       | 单个 relay 文件的并行 chunk 请求数；范围 1–8                                                  |
 | `relayBandwidthLimit`            | `0`                       | 本任务所有 relay 目标共用的上传上限（字节/秒），0 表示不限                                    |
-| `retryCount`                     | `null`                    | 失败后的重试次数，0–9；留空继承环境 `RETRY_MAX_ATTEMPTS`，Run 接受时冻结有效尝试数       |
+| `retryCount`                     | `null`                    | 失败后的重试次数，0–9；留空继承环境 `RETRY_MAX_ATTEMPTS`，Run 接受时冻结有效尝试数            |
 | `timeoutSeconds`                 | `86400`                   | 60–604800；从开始扫描算起（不含排队），超时后运行以 `RUN_TIMEOUT` 取消                        |
 
 - 修改任务（`PATCH /api/v1/jobs/:id`）时，`filters` 和已有目标的字段按字段合并；`targets` 数组决定完整的目标集合：已有目标带 `id` 修改，新目标不带 `id`，数组中去掉的目标被归档。
 - 任务有未结束的运行时，修改配置返回 409 `JOB_BUSY`；启用和停用定时不受此限制。已开始的运行始终按接受时的配置快照执行。
 - `retryCount` 的值分别用于 Run 内的外层文件、chunk、下载、读取、完成和 task-info 重试循环；这些循环各自计数，可能产生乘积效果。退避基数和上限仍由全局环境配置决定。
+- 并发配额在 Run 接受时冻结；不同 Job 同时运行时各自额度相加。把 server-copy 的 `concurrentFiles` 设为 0 会持续提交所有待复制的任务，可能使 OpenList 任务队列和驱动承压。
 
 ### 路径规则
 

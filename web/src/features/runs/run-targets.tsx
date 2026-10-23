@@ -73,10 +73,7 @@ export function RunTargets({ targets }: { targets: RunTargetView[] }) {
               </span>
               <div className="min-w-0">
                 <p className="truncate font-display text-base font-medium tracking-tight">
-                  {label.instanceName ??
-                    t('detail.targets.unknownInstance', {
-                      id: target.targetId.slice(0, 8),
-                    })}
+                  {target.instanceName}
                 </p>
                 <p
                   className="mt-1 truncate font-mono text-[11.5px] text-muted-foreground"

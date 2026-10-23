@@ -102,7 +102,7 @@ export class RemoteTaskMaintenance {
       )
         return;
       if (!taskTerminal(info.state)) {
-        this.resources.hold(id, fact.operation.targetInstanceId);
+        this.resources.hold(id, fact.operation.runTargetId);
         return;
       }
       this.resources.release(id);
@@ -127,7 +127,7 @@ export class RemoteTaskMaintenance {
             settings.quarantineSeconds,
           )
         )
-          this.resources.hold(id, fact.operation.targetInstanceId);
+          this.resources.hold(id, fact.operation.runTargetId);
       } else {
         this.clear(fact, outcome.kind === 'failed');
       }

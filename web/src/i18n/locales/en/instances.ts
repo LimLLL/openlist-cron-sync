@@ -38,9 +38,9 @@ export default {
       transfer: 'Transfer',
       transferHint:
         'How file content is read from this server during relay copies.',
-      limits: 'Resource limits',
+      limits: 'API limits',
       limitsHint:
-        'Caps that keep this console from overwhelming the server. Leave a field empty to use its default.',
+        'Caps on how often and how concurrently this console calls the server’s management API (listing, creating folders, deleting, submitting copies). Leave a field empty to use its default; transfer concurrency is set per source and target in each job.',
     },
     name: 'Name',
     namePlaceholder: 'My OpenList server',
@@ -69,10 +69,6 @@ export default {
   limits: {
     maxApiConcurrency: 'API concurrency',
     apiRequestsPerSecond: 'API requests/s',
-    maxOutstandingTasks: 'Outstanding tasks',
-    maxDownloadConnections: 'Download connections',
-    maxUploadSessions: 'Upload sessions',
-    maxChunkConcurrency: 'Chunk concurrency',
   },
   validation: {
     name: 'Name must contain 1–100 characters.',
@@ -108,9 +104,9 @@ export default {
     enabled: 'Enabled',
     disabled: 'Disabled',
     unknown: 'Unknown',
-    limits: 'Transfer & limits',
+    limits: 'Limits & transfer',
     limitsHint:
-      'How runs read from and write to this server, and the caps they respect.',
+      'Management API caps and how file content is read. Transfer concurrency is set in each job.',
     unlimited: 'Unlimited',
     downloadMode: 'Download mode',
     timeline: 'Timeline',

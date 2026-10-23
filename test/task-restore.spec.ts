@@ -4,7 +4,7 @@ import { copyFixture } from './copy-fixture.js';
 import { preview } from './m2-fixture.js';
 import { DatabaseService } from '../src/database/database.service.js';
 import { operations } from '../src/database/operation-schema.js';
-import { instances } from '../src/database/schema.js';
+import { runTargets } from '../src/database/run-schema.js';
 import { TaskResources } from '../src/coordination/task-resources.js';
 
 /** 两类索引候选跨越128行分页边界，重叠行只占一个名额。
@@ -71,12 +71,12 @@ it('restores paged task responsibility once and excludes released occupancy', as
     );
     const resources = new TaskResources(database);
     resources.restore();
-    expect(resources.count(f.id)).toBe(391);
+    expect(resources.count(original.runTargetId)).toBe(391);
     resources.release('restore-000');
     resources.release('restore-130');
     resources.release('restore-260');
     resources.release('restore-393');
-    expect(resources.count(f.id)).toBe(387);
+    expect(resources.count(original.runTargetId)).toBe(387);
   } finally {
     await f.close();
   }
@@ -87,23 +87,57 @@ it('admits unlimited server-copy reservations when the snapshot quota is zero', 
   const f = await copyFixture();
   try {
     const database = f.app.get(DatabaseService);
-    database.db
-      .update(instances)
-      .set({ maxOutstandingTasks: 0 })
-      .where(eq(instances.id, f.id))
-      .run();
+    const run = await preview(f, f.copyJob());
+    const original = database.db
+      .select()
+      .from(runTargets)
+      .where(eq(runTargets.runId, run.id))
+      .get();
+    if (!original) throw new Error('Missing Run Target');
     const resources = new TaskResources(database);
-    const instance = f.record();
     const reservations = await Promise.all(
       ['zero-1', 'zero-2', 'zero-3'].map((id) =>
-        resources.reserve(instance, id, new AbortController().signal),
+        resources.reserve(original.id, 0, id, new AbortController().signal),
       ),
     );
     expect(reservations).toHaveLength(3);
-    expect(resources.count(f.id)).toBe(3);
+    expect(resources.count(original.id)).toBe(3);
     resources.release('zero-1');
     resources.release('zero-2');
     resources.release('zero-3');
+  } finally {
+    await f.close();
+  }
+});
+
+/** 同一稳定Target跨Run共享未结束任务额度，不同Job/Target额度分别计数。
+ * @returns 验证完成。
+ * @throws Error 夹具或断言失败。
+ */
+it('retains a stable Target quota across Runs and isolates another Job', async () => {
+  const f = await copyFixture();
+  try {
+    const job = f.copyJob();
+    const first = await preview(f, job);
+    const next = await preview(f, job);
+    const other = await preview(f, f.copyJob());
+    const resources = f.app.get(TaskResources);
+    const signal = AbortSignal.timeout(5000);
+    await resources.reserve(first.targets[0].id, 1, 'old-task', signal);
+    expect(resources.count(next.targets[0].id)).toBe(1);
+    let admitted = false;
+    const waiting = resources
+      .reserve(next.targets[0].id, 1, 'new-task', signal)
+      .then(() => {
+        admitted = true;
+      });
+    await resources.reserve(other.targets[0].id, 1, 'other-task', signal);
+    expect(admitted).toBe(false);
+    resources.release('old-task');
+    await waiting;
+    expect(resources.count(next.targets[0].id)).toBe(1);
+    resources.release('new-task');
+    resources.release('other-task');
   } finally {
     await f.close();
   }

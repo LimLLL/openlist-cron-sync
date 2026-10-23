@@ -118,7 +118,7 @@ describe('mixed create modes in one Run', () => {
         downloadedBytes: 0,
         transferredBytes: 0,
       });
-      expect(f.app.get(TaskResources).count(f.id)).toBe(0);
+      expect(f.app.get(TaskResources).count(result.targets[0].id)).toBe(0);
       expect(f.tasks.size).toBe(0);
     },
   );
@@ -212,6 +212,6 @@ describe('mixed create modes in one Run', () => {
     expect(urls).not.toContain('/api/fs/copy');
     expect(urls).not.toContain('/api/fs/multipart/init');
     expect(urls).not.toContain('/api/fs/multipart/chunk');
-    expect(f.app.get(TaskResources).count(f.id)).toBe(0);
+    expect(f.app.get(TaskResources).count(result.targets[0].id)).toBe(0);
   });
 });

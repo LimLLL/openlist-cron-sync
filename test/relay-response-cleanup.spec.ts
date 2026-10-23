@@ -74,9 +74,13 @@ describe('relay response cleanup', () => {
       {
         operationId: randomUUID(),
         jobId: randomUUID(),
+        sourceDownloadConcurrency: 2,
         bandwidth: 1,
         instance: f.record(),
         target: f.record(),
+        targetResourceId: randomUUID(),
+        targetConcurrentFiles: 2,
+        targetChunkConcurrency: 2,
         directory: '/source',
         name: 'new.txt',
         size: 12,

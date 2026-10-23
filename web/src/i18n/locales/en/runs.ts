@@ -115,7 +115,6 @@ export default {
     targets: {
       title_one: 'Target ({{count}})',
       title_other: 'Targets ({{count}})',
-      unknownInstance: 'Instance {{id}}',
       mode: { incremental: 'Incremental', mirror: 'Mirror' },
       sourceScan: 'Source scan',
       targetScan: 'Target scan',
@@ -140,6 +139,14 @@ export default {
     loading: 'Loading operations…',
     emptyTitle: 'No operations.',
     emptyDescription: 'This run planned no file changes.',
+    emptyFilteredTitle: 'No matching operations.',
+    emptyFilteredDescription:
+      'No operations match these filters. Try another status or action.',
+    filters: 'Operation filters',
+    statusFilter: 'Status',
+    allStatuses: 'All statuses',
+    actionFilter: 'Action',
+    allActions: 'All actions',
     seq: '#',
     action: 'Action',
     method: 'Method',

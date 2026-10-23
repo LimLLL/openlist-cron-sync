@@ -173,16 +173,15 @@ export function OperationFacts({ op }: { op: OperationView }) {
       value: String(op.attemptNo),
       mono: true,
     });
-  if (op.sourceInstanceId)
+  // 实例显示名称，悬停查看完整 ID。
+  if (op.sourceInstanceId && op.sourceInstanceName)
     items.push({
       label: t('detail.record.sourceInstance'),
-      value: op.sourceInstanceId.slice(0, 8),
-      mono: true,
+      value: <span title={op.sourceInstanceId}>{op.sourceInstanceName}</span>,
     });
   items.push({
     label: t('detail.record.targetInstance'),
-    value: op.targetInstanceId.slice(0, 8),
-    mono: true,
+    value: <span title={op.targetInstanceId}>{op.targetInstanceName}</span>,
   });
   if (op.retryOf)
     items.push({

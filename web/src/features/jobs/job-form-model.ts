@@ -71,6 +71,10 @@ export interface TargetInput {
   mode: 'incremental' | 'mirror';
   /** 此目标的文件创建方式。 */
   createMode: 'relay' | 'server_copy';
+  /** 同时处理的文件或复制任务数；0 不限。 */
+  concurrentFiles: string;
+  /** 每个中转文件的分片并发，1–8。 */
+  chunkConcurrency: string;
   /** 是否刷新扫描缓存。 */
   refresh: boolean;
   /** 是否启用删除阈值。 */
@@ -93,6 +97,8 @@ export interface JobFormValues {
   sourcePassword: string;
   /** 源扫描刷新。 */
   sourceRefresh: boolean;
+  /** 同时从源读取的中转文件数；0 不限。 */
+  sourceDownloadConcurrency: string;
   /** 完整目标集合。 */
   targets: TargetInput[];
   /** 五段 cron；空字符串表示手动。 */
@@ -131,6 +137,8 @@ export function emptyTarget(): TargetInput {
     password: '',
     mode: 'incremental',
     createMode: 'relay',
+    concurrentFiles: '2',
+    chunkConcurrency: '2',
     refresh: false,
     deleteLimitsEnabled: true,
     maxCount: '1000',
@@ -151,6 +159,8 @@ export function targetsFromJob(job: JobView): TargetInput[] {
     password: '',
     mode: target.mode,
     createMode: target.createMode,
+    concurrentFiles: target.concurrentFiles.toString(),
+    chunkConcurrency: target.chunkConcurrency.toString(),
     refresh: target.refresh,
     deleteLimitsEnabled: target.deleteLimits.enabled,
     maxCount: target.deleteLimits.maxCount?.toString() ?? '',
@@ -336,6 +346,13 @@ export function buildJobInput(values: JobFormValues) {
       ...(target.password ? { password: target.password } : {}),
       mode: target.mode,
       createMode: target.createMode,
+      concurrentFiles: integer(target.concurrentFiles, 'concurrentFiles'),
+      chunkConcurrency: integer(
+        target.chunkConcurrency,
+        'chunkConcurrency',
+        1,
+        8,
+      ),
       refresh: target.refresh,
       deleteLimits: {
         enabled: target.deleteLimitsEnabled,
@@ -358,6 +375,10 @@ export function buildJobInput(values: JobFormValues) {
     },
     allowEmptySource: values.allowEmptySource,
     syncEmptyDirs: values.syncEmptyDirs,
+    sourceDownloadConcurrency: integer(
+      values.sourceDownloadConcurrency,
+      'sourceDownloadConcurrency',
+    ),
     retryCount:
       values.retryCount === ''
         ? null

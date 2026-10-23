@@ -1,6 +1,17 @@
 // 原子保存操作结果和有界重试依赖；不在数据库事务中执行网络请求。
 import { randomUUID } from 'node:crypto';
-import { and, asc, desc, eq, inArray, isNull, max, or, sql } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNull,
+  max,
+  or,
+  sql,
+} from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import {
   operations,
@@ -382,15 +393,19 @@ export class OperationStore {
         .get() ?? row
     );
   }
-  /** 取得一个目标当前阶段的pending小批次，重试行同样参与。
+  /** 按计划顺序取得一个目标当前阶段在游标之后的pending动作，重试行同样参与。
    * @param targetId 当前目标。
    * @param phase 准备、创建、文件extras或目录extras。
-   * @returns 按计划顺序的有界批次。
+   * @param after 只返回seq大于该值的行；-1表示从头读取。
+   * @param limit 本次读取的行数，只约束内存，不约束执行并发。
+   * @returns 按seq排序的有界读取页。
    * @throws Error 数据库失败。
    */
   pending(
     targetId: string,
     phase: 'mkdir' | 'create' | 'files' | 'directories',
+    after: number,
+    limit: number,
   ): OperationRecord[] {
     const condition =
       phase === 'mkdir' || phase === 'create'
@@ -406,6 +421,7 @@ export class OperationStore {
         and(
           eq(operations.runTargetId, targetId),
           eq(operations.status, 'pending'),
+          gt(operations.seq, after),
           condition,
           phase === 'mkdir'
             ? sql`NOT EXISTS (SELECT 1 FROM operation_dependencies dep JOIN operations parent ON parent.id = dep.depends_on_id WHERE dep.operation_id = operations.id AND parent.status IN ('pending','submitting','submitted','running'))`
@@ -413,7 +429,7 @@ export class OperationStore {
         ),
       )
       .orderBy(asc(operations.seq))
-      .limit(phase === 'directories' ? 1 : 4)
+      .limit(limit)
       .all();
   }
   /** 从已落库的seq分配后续值，调用者处于同步短事务中。

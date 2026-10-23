@@ -1,4 +1,4 @@
-// 目标列表：逐个配置实例、路径、同步模式、创建方式、密码、刷新与删除阈值；保留稳定 ID。
+// 目标列表：逐个配置实例、路径、同步模式、创建方式、并发、密码、刷新与删除阈值；保留稳定 ID。
 import { Plus, X } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
@@ -58,6 +58,12 @@ function TargetBlock({
   const label = t('form.target', { index: index + 1 });
   const createMode = targetCreateModeState(sourceInstanceId, target);
   const modeHintId = `target-${index}-create-mode-hint`;
+  const serverCopy = target.createMode === 'server_copy';
+  // 服务端复制不限时会一次提交全部待复制任务，在提示位置给出风险说明。
+  const unlimitedCopy =
+    serverCopy &&
+    target.concurrentFiles.trim() !== '' &&
+    Number(target.concurrentFiles) === 0;
   return (
     <fieldset className="rounded-[1.4rem] border border-hairline bg-white/[0.015] p-5 sm:p-6">
       <legend className="sr-only">{label}</legend>
@@ -152,6 +158,41 @@ function TargetBlock({
               : t('form.createModeHint')}
           </p>
         </div>
+        <InputField
+          id={`target-${index}-concurrent-files`}
+          label={t('form.concurrentFiles')}
+          type="number"
+          inputMode="numeric"
+          min={0}
+          required
+          value={target.concurrentFiles}
+          onChange={(event) => onChange('concurrentFiles', event.target.value)}
+          hint={
+            unlimitedCopy
+              ? t('form.concurrentFilesCopyUnlimited')
+              : serverCopy
+                ? t('form.concurrentFilesCopyHint')
+                : t('form.concurrentFilesRelayHint')
+          }
+          hintTone={unlimitedCopy ? 'warning' : undefined}
+        />
+        <InputField
+          id={`target-${index}-chunk-concurrency`}
+          label={t('form.chunkConcurrency')}
+          type="number"
+          inputMode="numeric"
+          min={1}
+          max={8}
+          required
+          disabled={serverCopy}
+          value={target.chunkConcurrency}
+          onChange={(event) => onChange('chunkConcurrency', event.target.value)}
+          hint={
+            serverCopy
+              ? t('form.chunkConcurrencyCopyHint')
+              : t('form.chunkConcurrencyHint')
+          }
+        />
         <InputField
           id={`target-${index}-password`}
           label={t('form.pathPassword')}

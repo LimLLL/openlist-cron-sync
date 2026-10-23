@@ -108,7 +108,7 @@ curl -X POST http://localhost:3000/api/v1/auth/login \
 
 ## 配置
 
-服务通过环境变量配置。以 `NODE_ENV=development` 启动时，还会读取项目根目录下的 `.env` 文件。常用变量如下；此外还读取全局运行/排队容量、relay 资源参数及[完整ExecutionSettings固定映射](docs/reference/configuration.md#executionsettings固定映射)，全部在启动时校验：
+服务通过环境变量配置。以 `NODE_ENV=development` 启动时，还会读取项目根目录下的 `.env` 文件。常用变量如下；此外还读取全局运行/排队容量、spool 资源参数及[完整ExecutionSettings固定映射](docs/reference/configuration.md#executionsettings固定映射)，全部在启动时校验：
 
 | 变量                             | 默认值           | 说明                                                      |
 | -------------------------------- | ---------------- | --------------------------------------------------------- |
@@ -136,7 +136,7 @@ curl -X POST http://localhost:3000/api/v1/auth/login \
 
 - `ADMIN_USERNAME` 和 `ADMIN_PASSWORD` 只在首次启动、数据库中还没有管理员时使用；之后以数据库中保存的账号为准。
 - 配置值不合法时，服务拒绝启动并报告是哪个字段，但不会打印该字段的值。
-- 实例的六项资源配额都可以填 `0`，表示不限；中转仍受进程级总上限 `RELAY_DOWNLOAD_WORKERS` / `RELAY_UPLOAD_WORKERS` 约束。
+- Instance 只配置 OpenList 管理 API 并发和每秒请求数。Job 的 `sourceDownloadConcurrency` 控制源端同时读取的 relay 文件数；每个 Target 的 `concurrentFiles` 控制在途文件或 server-copy 任务数，`chunkConcurrency` 控制单文件分片请求数。源下载和同时文件数填 `0` 表示不限；单文件分片并发为 1–8；不同 Job 同时运行时额度相加。server-copy 的 `0` 可能一次提交大量任务并使 OpenList 承压，请谨慎使用。
 - 任务可设置“失败后的重试次数”（0–9），留空时使用 `RETRY_MAX_ATTEMPTS`；运行开始时固定有效次数，退避间隔仍由全局配置决定。
 - 完整说明见[配置参考](docs/reference/configuration.md)。
 

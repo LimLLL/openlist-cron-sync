@@ -331,7 +331,7 @@ export class CopyTracker {
         )
       ) {
         if (result.kind === 'observed')
-          this.resources.hold(op.id, op.targetInstanceId);
+          this.resources.hold(op.id, op.runTargetId);
         else this.resources.release(op.id);
       }
     } catch (error) {

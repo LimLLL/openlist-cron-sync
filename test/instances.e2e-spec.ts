@@ -88,7 +88,6 @@ describe('M1 instances API' /** 注册本组 M1 行为验收用例。
       limits: {
         maxApiConcurrency: 3,
         apiRequestsPerSecond: 5,
-        maxChunkConcurrency: 4,
       },
       authState: 'untested',
       accountUsername: null,
@@ -101,11 +100,11 @@ describe('M1 instances API' /** 注册本组 M1 行为验收用例。
     const updated = await request(base)
       .patch('/api/v1/instances/' + id)
       .auth(token, { type: 'bearer' })
-      .send({ limits: { maxChunkConcurrency: 2 }, name: 'Renamed' })
+      .send({ limits: { maxApiConcurrency: 2 }, name: 'Renamed' })
       .expect(200);
     expect(updated.body).toMatchObject({
       name: 'Renamed',
-      limits: { maxApiConcurrency: 3, maxChunkConcurrency: 2 },
+      limits: { maxApiConcurrency: 2, apiRequestsPerSecond: 5 },
     });
     expect(fixture.server.calls).toHaveLength(0);
     const page = await request(base)
@@ -140,7 +139,7 @@ describe('M1 instances API' /** 注册本组 M1 行为验收用例。
       items: [{ id, auth: { hasSecret: false } }, { id: fixture.id }],
     });
   });
-  it('accepts zero and the safe-integer ceiling for every instance quota' /** 0 表示不限，正数没有产品上限，只受安全整数约束。
+  it('accepts zero and the safe-integer ceiling for every API quota' /** 0 表示不限，正数没有产品上限，只受安全整数约束。
    * @param 不适用。
    * @returns 断言完成；异步用例返回完成 Promise。
    * @throws Error 断言或测试资源操作失败。
@@ -148,10 +147,6 @@ describe('M1 instances API' /** 注册本组 M1 行为验收用例。
     const limits = {
       maxApiConcurrency: 0,
       apiRequestsPerSecond: 0,
-      maxOutstandingTasks: 0,
-      maxDownloadConnections: 0,
-      maxUploadSessions: 0,
-      maxChunkConcurrency: 0,
     };
     const zero = await request(base)
       .patch('/api/v1/instances/' + fixture.id)

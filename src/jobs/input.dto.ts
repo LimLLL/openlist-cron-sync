@@ -25,6 +25,8 @@ export class JobInputDto {
   @Allow() allowEmptySource?: unknown;
   /** 目录结构同步。 */
   @Allow() syncEmptyDirs?: unknown;
+  /** 同时读取的源文件数；0表示不限。 */
+  @Allow() sourceDownloadConcurrency?: unknown;
   /** 此 Job 所有 relay Target 的聚合上传 bytes/s。 */
   @Allow() relayBandwidthLimit?: unknown;
   /** 失败后的重试次数；null 继承进程默认值。 */

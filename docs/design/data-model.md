@@ -42,12 +42,14 @@ erDiagram
 run_config_json 持久化规范化后的 Job 公共字段、Target完整列表、目标稳定UUID、Instance id/baseUrl/authMode/username/accountBasePath、全部有效默认值、通知channel id、snapshotVersion=1。
 不存解密secret、JWT、sign、storage.addition、下载URL、Webhook URL。source/target路径密码放 runs.secret_snapshot_enc，内容仅为按endpoint id键控的密码；没有路径密码时为NULL。
 
-run_config_json的精确形状为{snapshotVersion:1,job:JobView,instances:Record<instanceId,InstanceSnapshot>,settings:ExecutionSettings}。JobView为当时的完整公共形状，每个targets[]对象包含必填createMode；retryCount在迁移中对历史Run补为null，settings.retryMaxAttempts仍保留接受Run时的有效尝试次数。Job本身不含Target级createMode；InstanceSnapshot={id,name,baseUrl,authMode,username:string|null,accountUsername:string|null,accountBasePath,accountRole,accountPermissions,limits,downloadMode}，不含authState、error或secret。run_targets.target_snapshot_json={target:JobView.targets中对应对象,instance:对应InstanceSnapshot}。
+run_config_json的精确形状为{snapshotVersion:1,job:JobView,instances:Record<instanceId,InstanceSnapshot>,settings:ExecutionSettings}。JobView为当时的完整公共形状，每个targets[]对象包含必填createMode、concurrentFiles（默认2，0不限）和chunkConcurrency（默认2，1–8）；Job包含sourceDownloadConcurrency（默认2，0不限）。retryCount在迁移中对历史Run补为null，settings.retryMaxAttempts仍保留接受Run时的有效尝试次数。Job本身不含Target级createMode；InstanceSnapshot={id,name,baseUrl,authMode,username:string|null,accountUsername:string|null,accountBasePath,accountRole,accountPermissions,limits:{maxApiConcurrency,apiRequestsPerSecond},downloadMode}，不含authState、error或secret。run_targets.target_snapshot_json={target:JobView.targets中对应对象,instance:对应InstanceSnapshot}。
 ExecutionSettings使用[配置](../reference/configuration.md)定义的映射。secret_snapshot_enc解密形状为{sourcePassword:string|null,targetPasswords:Record<targetId,string|null>}，无任何路径密码时整个字段NULL。
 Instance 的连接配置在[未决责任](#responsibility)引用它时禁止修改地址/账号/删除；允许原地址同账号更新token/password恢复认证。账号是否相同以 /api/me 返回的 username 与 base_path 为准，见[OpenList集成](openlist-integration.md#认证与实例身份)。
-Instance.limits/downloadMode在被非终态Run引用时也禁止修改；name允许修改但不回写旧snapshot。全局执行位/队列容量为进程级配置，不是每个Run各自建立一套配额。
+Instance.limits/downloadMode在被非终态Run引用时也禁止修改；name允许修改但不回写旧snapshot。API配额属于Instance；relay/server-copy文件配额属于Job/Target，并在Run快照中冻结。全局执行位/队列容量为进程级配置，不是每个Run各自建立一套配额。
 Job 编辑在存在非终态Run时409；无活动Run时可编辑，但旧target逻辑归档，稳定id不复用。old runs永远读自己的JSON，不联表读取新Job配置决定远程操作。
 获取运行配置和插入queued在同一短事务；启动时不重新套用新的默认值。
+
+迁移0006把现有Job的源下载配额从其源Instance当前值继承，把relay Target的文件配额从目标Instance上传session值继承，把server_copy Target的文件配额从目标Instance task值继承；旧chunk值按0→2、1→1、≥2→2映射。历史Run和run_targets按各自冻结的旧Instance值重写为同一个snapshotVersion=1形状，坏快照直接中止迁移；迁移结束执行外键检查。
 
 ## 事务边界
 
@@ -63,7 +65,7 @@ Job 编辑在存在非终态Run时409；无活动Run时可编辑，但旧target�
 ## 持久性与清理
 
 运行期连接固定设置 journal_mode=WAL、synchronous=FULL、foreign_keys=ON、busy_timeout=5000ms。启动迁移在Drizzle事务外临时关闭foreign_keys，重建表的迁移在事务内用CHECK断言foreign_key_check无违规，否则连同数据和迁移记录一起回滚。迁移完成后恢复并确认foreign_keys=ON，再检查外键完整性；失败即关闭连接并退出，不能开放业务工作。只有一个写连接，短批事务，不在进度每个chunk上写入。
-历史查询用(run_id,seq)、(status,created_at,id)索引分页；客户端不得拉取全部operations作进度聚合。
+历史查询用(run_id,seq)、(status,created_at,id)索引分页；活动Run的统计由单条SQL聚合读取，客户端不得拉取全部operations作进度聚合。
 具体清理算法见 [维护与历史保留](retention.md)。运行配置JSON不是跨运行目录快照，不用于代替下一轮扫描。
 
 <a id="responsibility"></a>

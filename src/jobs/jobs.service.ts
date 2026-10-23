@@ -236,6 +236,7 @@ export class JobsService {
       enabled: job.enabled,
       sourceInstanceId: job.source.instanceId,
       sourcePath: job.source.path,
+      sourceDownloadConcurrency: job.sourceDownloadConcurrency,
       sourcePasswordEnc: encryptPathPassword(
         this.keys,
         secrets.sourcePassword,
@@ -281,6 +282,8 @@ export class JobsService {
         position: target.position,
         mode: target.mode,
         createMode: target.createMode,
+        concurrentFiles: target.concurrentFiles,
+        chunkConcurrency: target.chunkConcurrency,
         refresh: target.refresh,
         deleteLimitsEnabled: target.deleteLimits.enabled,
         maxDeleteCount: target.deleteLimits.maxCount,

@@ -56,9 +56,22 @@ export default {
     optional: 'Optional.',
     refreshSource: 'Refresh on scan',
     refreshHint: 'Ask OpenList to refresh its cache before listing.',
+    sourceDownloadConcurrency: 'Source download concurrency',
+    sourceDownloadConcurrencyHint:
+      'Relay files read from the source at once, shared by all targets; 0 = unlimited.',
     targets: 'Targets',
     targetsDesc:
-      'Every target chooses its sync mode, create mode and delete limits. Up to 32 targets.',
+      'Every target chooses its sync mode, create mode, concurrency and delete limits. Up to 32 targets. Concurrency is counted per job, so jobs running at the same time against the same storage add up.',
+    concurrentFiles: 'Concurrent files',
+    concurrentFilesRelayHint:
+      'Files relayed to this target at once; 0 = unlimited.',
+    concurrentFilesCopyHint:
+      'Outstanding copy tasks for this target; 0 = unlimited.',
+    concurrentFilesCopyUnlimited:
+      'Unlimited submits every pending copy task at once and may overload OpenList.',
+    chunkConcurrency: 'Chunks per file',
+    chunkConcurrencyHint: 'Chunks uploaded in parallel for each file, 1–8.',
+    chunkConcurrencyCopyHint: 'Only used by relay.',
     addTarget: 'Add target',
     target: 'Target {{index}}',
     removeTarget: 'Remove target {{index}}',
@@ -141,7 +154,7 @@ export default {
     nextFireTimes: 'Next fire times',
     targets: 'Targets & limits',
     targetsDesc:
-      'How each target is synchronized, and how much it may delete in a single run.',
+      'How each target is synchronized, how many files it handles at once, and how much it may delete in a single run.',
     instance: 'Instance',
     path: 'Path',
     password: 'Password',
@@ -171,6 +184,9 @@ export default {
     bandwidthValue: '{{value}}/s',
     retryCount: 'Retries after failure',
     retryInherited: 'Global default',
+    sourceDownloadConcurrency: 'Source download concurrency',
+    concurrentFiles: 'Concurrent files',
+    chunkConcurrency: 'Chunks per file',
     timeout: 'Timeout',
     sourceRefresh: 'Refresh source on scan',
     sourcePassword: 'Source password',
@@ -231,5 +247,8 @@ export default {
     bandwidth: 'Bandwidth limit',
     retryCount: 'Retries after failure',
     timeout: 'Timeout',
+    sourceDownloadConcurrency: 'Source download concurrency',
+    concurrentFiles: 'Concurrent files',
+    chunkConcurrency: 'Chunks per file',
   },
 } as const;

@@ -61,10 +61,14 @@ export interface OperationView {
   status: OperationStatus;
   /** 源实例 UUID。 */
   sourceInstanceId: string | null;
+  /** 源实例名称；没有源端时为 null。 */
+  sourceInstanceName: string | null;
   /** 源路径。 */
   sourcePath: string | null;
   /** 目标实例 UUID。 */
   targetInstanceId: string;
+  /** 目标实例名称：快照名，其次当前名，最后为实例 ID 前 8 位。 */
+  targetInstanceName: string;
   /** 目标路径。 */
   targetPath: string;
   /** 是否目录。 */
@@ -200,8 +204,16 @@ export function parseOperation(value: unknown): OperationView {
       value.sourceInstanceId,
       'sourceInstanceId',
     ),
+    sourceInstanceName: nullableString(
+      value.sourceInstanceName,
+      'sourceInstanceName',
+    ),
     sourcePath: nullableString(value.sourcePath, 'sourcePath'),
     targetInstanceId: expectString(value.targetInstanceId, 'targetInstanceId'),
+    targetInstanceName: expectString(
+      value.targetInstanceName,
+      'targetInstanceName',
+    ),
     targetPath: expectString(value.targetPath, 'targetPath'),
     isDir: expectBoolean(value.isDir, 'isDir'),
     expectedSourceSize: nullableNumber(

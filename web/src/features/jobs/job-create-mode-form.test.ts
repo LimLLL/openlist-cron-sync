@@ -6,6 +6,8 @@ import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import i18n from '../../i18n';
 import { JobForm } from './job-form';
+import { targetsFromJob } from './job-form-model';
+import { TargetsFields } from './job-target-fields';
 import { mixedJobFixture } from './job-test-fixture';
 
 const mutation = vi.hoisted(() => ({
@@ -135,5 +137,61 @@ describe('Target create mode form', () => {
     );
     expect(markup).toContain('role="alert"');
     expect(markup).toContain(i18n.t('jobs:validation.serverCopySameInstance'));
+  });
+  /** 服务端复制不限时提示风险，分片并发只对中转可编辑。
+   * @param 不适用。
+   * @returns 不适用。
+   * @throws Error 断言失败。
+   */
+  it('warns about unlimited server copy and disables chunks outside relay', () => {
+    const job = mixedJobFixture();
+    job.targets[0].concurrentFiles = 0;
+    const markup = renderToStaticMarkup(
+      createElement(MemoryRouter, null, JobForm({ existing: job })),
+    );
+    expect(markup).toContain(i18n.t('jobs:form.concurrentFilesCopyUnlimited'));
+    // 属性顺序由组件决定，先取出整个 input 标签再检查 disabled。
+    const chunkInput = (index: number) =>
+      markup.match(
+        new RegExp(`<input[^>]*id="target-${index}-chunk-concurrency"[^>]*>`),
+      )?.[0];
+    expect(chunkInput(0)).toContain('disabled=""');
+    expect(chunkInput(1)).toBeDefined();
+    expect(chunkInput(1)).not.toContain('disabled=""');
+    job.targets[0].concurrentFiles = 4;
+    expect(
+      renderToStaticMarkup(
+        createElement(MemoryRouter, null, JobForm({ existing: job })),
+      ),
+    ).not.toContain(i18n.t('jobs:form.concurrentFilesCopyUnlimited'));
+  });
+  /** 数字输入的等价零值也启用不限，空值则仍是未填写。
+   * @param value 用户输入。
+   * @param warning 是否应显示不限风险。
+   * @returns 验证完成。
+   * @throws Error 断言失败。
+   */
+  it.each([
+    ['00', true],
+    ['0.0', true],
+    ['0e0', true],
+    ['-0', true],
+    ['', false],
+  ])('shows the unlimited warning for input %s: %s', (value, warning) => {
+    const job = mixedJobFixture();
+    const targets = targetsFromJob(job);
+    targets[0].concurrentFiles = value;
+    const markup = renderToStaticMarkup(
+      createElement(TargetsFields, {
+        sourceInstanceId: job.source.instanceId,
+        targets,
+        instances: [],
+        onChange: vi.fn(),
+        onBrowse: vi.fn(),
+      }),
+    );
+    expect(
+      markup.includes(i18n.t('jobs:form.concurrentFilesCopyUnlimited')),
+    ).toBe(warning);
   });
 });

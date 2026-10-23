@@ -62,14 +62,6 @@ export interface InstanceSnapshot {
     maxApiConcurrency: number;
     /** 每秒 API 请求数。 */
     apiRequestsPerSecond: number;
-    /** 未完成任务数。 */
-    maxOutstandingTasks: number;
-    /** 下载连接数。 */
-    maxDownloadConnections: number;
-    /** 上传会话数。 */
-    maxUploadSessions: number;
-    /** 分片并发数。 */
-    maxChunkConcurrency: number;
   };
   /** 下载模式。 */
   downloadMode: 'd' | 'p';

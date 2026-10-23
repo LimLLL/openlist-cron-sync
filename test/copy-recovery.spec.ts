@@ -7,7 +7,6 @@ import { DatabaseService } from '../src/database/database.service.js';
 import { operations } from '../src/database/operation-schema.js';
 import { runs } from '../src/database/run-schema.js';
 import { TaskResources } from '../src/coordination/task-resources.js';
-import { InstancesService } from '../src/instances/instances.service.js';
 import { envelope } from './openlist-fixture.js';
 
 /** 注册恢复和关闭窗口。
@@ -60,7 +59,7 @@ describe('M6 recovery task ownership', () => {
       source: '/source/new.txt',
       destination: '/target/new.txt',
     });
-    return { runId: run.id, id };
+    return { runId: run.id, id, targetId: plan(f, run.id)[0].runTargetId };
   }
   /** 恢复轮询使用接受时的Job重试预算，即使进程默认值更小。
    * @param 不适用。
@@ -104,20 +103,19 @@ describe('M6 recovery task ownership', () => {
    * @throws Error 断言失败。
    */
   it('restores over-capacity occupancy and shares cancellation with recovery expiry', async () => {
-    f.app
-      .get(InstancesService)
-      .patch(f.id, { limits: { maxOutstandingTasks: 1 } });
     const first = await recovering(Date.now() + 5000);
     const second = await recovering(Date.now() + 5000);
     await f.restart();
-    expect(f.app.get(TaskResources).count(f.id)).toBe(2);
+    expect(f.app.get(TaskResources).count(first.targetId)).toBe(1);
+    expect(f.app.get(TaskResources).count(second.targetId)).toBe(1);
     f.runs().cancel(first.runId);
     f.runs().cancel(first.runId);
     f.runs().cancel(second.runId);
     expect((await terminal(f, first.runId)).status).toBe('interrupted');
     expect((await terminal(f, second.runId)).status).toBe('interrupted');
     expect(f.server.calls.filter(cancelRequest)).toHaveLength(2);
-    expect(f.app.get(TaskResources).count(f.id)).toBe(0);
+    expect(f.app.get(TaskResources).count(first.targetId)).toBe(0);
+    expect(f.app.get(TaskResources).count(second.targetId)).toBe(0);
   });
   /** 已过固定宽限的恢复不会再产生一个新cancel窗口。
    * @param 不适用。
@@ -133,7 +131,7 @@ describe('M6 recovery task ownership', () => {
       task: { id: old.id },
     });
     expect(f.server.calls.filter(cancelRequest)).toHaveLength(0);
-    expect(f.app.get(TaskResources).count(f.id)).toBe(1);
+    expect(f.app.get(TaskResources).count(old.targetId)).toBe(1);
   });
   /** 取消无终态证据必须unknown，不能delete仍运行的task。
    * @param 不适用。

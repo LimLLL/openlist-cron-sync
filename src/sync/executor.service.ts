@@ -21,6 +21,50 @@ import { OperationStore } from './operation-store.js';
 import { Mutations } from './mutations.js';
 import { FileCoordinator } from './file-coordinator.js';
 import { targetResult } from './results.js';
+import type { OperationRecord } from '../database/operation-schema.js';
+import { setImmediate as yieldTurn } from 'node:timers/promises';
+
+/** Target内按序推进的执行阶段。 */
+type Phase = 'mkdir' | 'create' | 'files' | 'directories';
+/** 单次读取的pending行数，只约束内存，不约束执行并发。 */
+const FETCH_SIZE = 32;
+
+/** 阶段内可同时派发的动作数，只取用户配置的配额；0表示不限。
+ * 目录删除逐个进行；mkdir与文件删除受目标实例API并发约束；创建受Target文件并发及relay源并发约束。
+ * @param target 当前目标。
+ * @param phase 当前阶段。
+ * @param context 当前Run上下文。
+ * @returns 正整数或Infinity。
+ * @throws 不适用。
+ */
+function phaseCapacity(
+  target: RunTargetRecord,
+  phase: Phase,
+  context: ExecutionContext,
+): number {
+  if (phase === 'directories') return 1;
+  const { instance, target: config } = target.config;
+  const quotas =
+    phase !== 'create'
+      ? [instance.limits.maxApiConcurrency]
+      : config.createMode === 'relay'
+        ? [
+            config.concurrentFiles,
+            context.run.config.job.sourceDownloadConcurrency,
+          ]
+        : [config.concurrentFiles];
+  return Math.min(
+    Infinity,
+    ...quotas.filter(
+      /** 0表示该配额不限，不参与取最小值。
+       * @param value 配额。
+       * @returns 是否为有限配额。
+       * @throws 不适用。
+       */
+      (value) => value > 0,
+    ),
+  );
+}
 
 /** 具体执行器，内存仅保存有界批次及活动文件协调器。
  * @param 不适用。
@@ -221,97 +265,168 @@ export class Executor {
           .where(eq(runTargets.id, target.id))
           .run();
       }
+      await this.dispatch(
+        target,
+        phase,
+        context,
+        store,
+        stop,
+        /** 按当前阶段执行一个动作并检查新建根的读取屏障。
+         * @param op 已认领的pending动作。
+         * @returns 当前动作完成。
+         * @throws Error 取消或本地错误。
+         */
+        async (op) => {
+          if (
+            (phase === 'files' || phase === 'directories') &&
+            target.extrasBlocked
+          ) {
+            store.end(op.id, { status: 'skipped', code: 'DELETE_BLOCKED' });
+            return;
+          }
+          const dependencies = store.dependencies(op.id);
+          if (
+            phase !== 'create' &&
+            dependencies.some(
+              /** 判断必要父依赖是否尚未成功。
+               * @param dependency 必要依赖操作。
+               * @returns 是否应阻断当前动作。
+               * @throws 不适用。
+               */
+              (dependency) => dependency.status !== 'succeeded',
+            )
+          ) {
+            store.end(op.id, { status: 'skipped', code: 'DEPENDENCY_FAILED' });
+            return;
+          }
+          if (phase === 'create') await files.execute(target, op);
+          else {
+            const result = await mutations.execute(target, op);
+            if (
+              phase === 'mkdir' &&
+              result.status === 'succeeded' &&
+              op.targetPath === target.config.target.path
+            ) {
+              try {
+                await context.list(target, op.targetPath);
+              } catch (error) {
+                context.signal.throwIfAborted();
+                if (!(error instanceof OpenListError)) throw error;
+                this.rootUnavailable(target, store);
+              }
+            }
+          }
+        },
+      );
+    }
+  }
+  /** 在一个阶段内持续补位：任一动作结束即派发下一个，直到没有pending动作。
+   * 游标按seq向后翻页并在内存中跳过已认领的逻辑动作，补位开销不随在途数量增长；
+   * mkdir结束可能放行seq更早的子目录，因此从头重扫；在途清空后再从头确认没有遗留。
+   * @param target 当前目标。
+   * @param phase 当前阶段。
+   * @param context 观察与停止上下文。
+   * @param store 操作事务。
+   * @param stop 停止同Run其它工作的控制器。
+   * @param perform 执行一个已认领的动作。
+   * @returns 本阶段全部动作收敛。
+   * @throws Error 取消或本地错误；已启动的动作全部退出后才抛出。
+   */
+  private async dispatch(
+    target: RunTargetRecord,
+    phase: Phase,
+    context: ExecutionContext,
+    store: OperationStore,
+    stop: AbortController,
+    perform: (op: OperationRecord) => Promise<void>,
+  ): Promise<void> {
+    const capacity = phaseCapacity(target, phase, context);
+    // 已认领的逻辑动作（含协调器自行生成的重试行）在真正提交前仍是pending。
+    const claimed = new Set<string>();
+    const inFlight = new Set<Promise<void>>();
+    let failure: unknown;
+    let cursor = -1;
+    // 根mkdir会先持久化成功，再异步刷新；依赖SQL尚不能代表根已通过读取屏障。
+    let confirmingRoot = false;
+    let wake = (): void => undefined;
+    try {
       for (;;) {
         context.signal.throwIfAborted();
-        const batch = store.pending(target.id, phase);
-        if (!batch.length) break;
-        const settled = await Promise.allSettled(
-          batch
-            .map(
-              /** 按当前阶段执行一个动作并检查新建根的读取屏障。
-               * @param op 当前pending动作。
-               * @returns 当前动作完成。
-               * @throws Error 取消或本地错误。
+        const page =
+          !confirmingRoot && inFlight.size < capacity
+            ? store.pending(
+                target.id,
+                phase,
+                cursor,
+                Math.min(FETCH_SIZE, capacity - inFlight.size),
+              )
+            : [];
+        for (const op of page) {
+          cursor = op.seq;
+          const root = op.retryOf ?? op.id;
+          if (claimed.has(root)) continue;
+          claimed.add(root);
+          const isRoot =
+            phase === 'mkdir' && op.targetPath === target.config.target.path;
+          if (isRoot) confirmingRoot = true;
+          const tracked: Promise<void> = perform(op)
+            .catch(
+              /** 记录首个本地错误并停止同Run其余工作。
+               * @param error 原始错误。
+               * @returns 不适用。
+               * @throws 不适用。
                */
-              async (op) => {
-                if (
-                  (phase === 'files' || phase === 'directories') &&
-                  target.extrasBlocked
-                ) {
-                  store.end(op.id, {
-                    status: 'skipped',
-                    code: 'DELETE_BLOCKED',
-                  });
-                  return;
-                }
-                const dependencies = store.dependencies(op.id);
-                if (
-                  phase !== 'create' &&
-                  dependencies.some(
-                    /** 判断必要父依赖是否尚未成功。
-                     * @param dependency 必要依赖操作。
-                     * @returns 是否应阻断当前动作。
-                     * @throws 不适用。
-                     */
-                    (dependency) => dependency.status !== 'succeeded',
-                  )
-                ) {
-                  store.end(op.id, {
-                    status: 'skipped',
-                    code: 'DEPENDENCY_FAILED',
-                  });
-                  return;
-                }
-                if (phase === 'create') await files.execute(target, op);
-                else {
-                  const result = await mutations.execute(target, op);
-                  if (
-                    phase === 'mkdir' &&
-                    result.status === 'succeeded' &&
-                    op.targetPath === target.config.target.path
-                  ) {
-                    try {
-                      await context.list(target, op.targetPath);
-                    } catch (error) {
-                      context.signal.throwIfAborted();
-                      if (!(error instanceof OpenListError)) throw error;
-                      this.rootUnavailable(target, store);
-                    }
-                  }
-                }
+              (error: unknown) => {
+                failure ??= error;
+                stop.abort(error);
               },
             )
-            .map(
-              /** 给每个批内工作安装停止同Run其它工作的异常出口。
-               * @param work 本批次的异步工作。
-               * @returns 保留失败信息的Promise。
-               * @throws Error 原工作失败。
+            .finally(
+              /** 归还认领并唤醒派发循环。
+               * @param 不适用。
+               * @returns 不适用。
+               * @throws 不适用。
                */
-              (work) =>
-                work.catch(
-                  /** 停止同Run其余工作并保留原本地错误。
-                   * @param error 原始错误，仅转换为受控结果或安全特征。
-                   * @returns 不返回。
-                   * @throws Error 原工作失败。
-                   */
-                  (error: unknown) => {
-                    stop.abort(error);
-                    throw error;
-                  },
-                ),
-            ),
-        );
-        const rejected = settled.find(
-          /** 在已全部退出的工作中定位拒绝结果。
-           * @param result 已完成的工作或聚合结果。
-           * @returns 是否失败。
+              () => {
+                claimed.delete(root);
+                inFlight.delete(tracked);
+                if (isRoot) confirmingRoot = false;
+                if (phase === 'mkdir') cursor = -1;
+                wake();
+              },
+            );
+          inFlight.add(tracked);
+          if (confirmingRoot || inFlight.size >= capacity) break;
+        }
+        if (page.length) {
+          // 让已启动的动作先推进，避免无限配额下连续读取占住事件循环。
+          await yieldTurn();
+          continue;
+        }
+        if (!inFlight.size) {
+          if (cursor < 0) break;
+          cursor = -1;
+          continue;
+        }
+        await new Promise<void>(
+          /** 等待任一在途动作结束。
+           * @param resolve 唤醒回调。
+           * @returns 不适用。
            * @throws 不适用。
            */
-          (result) => result.status === 'rejected',
+          (resolve) => {
+            wake = resolve;
+          },
         );
-        if (rejected?.status === 'rejected') throw rejected.reason;
       }
+    } catch (error) {
+      failure ??= error;
+      stop.abort(error);
+    } finally {
+      // 所有已启动动作退出后才能让Run终态事务或关机关闭数据库。
+      await Promise.all(inFlight);
     }
+    if (failure) throw failure;
   }
   /** 新根创建后无法读取时保留mkdir成功并阻断该Target子动作。
    * @param target 当前目标。

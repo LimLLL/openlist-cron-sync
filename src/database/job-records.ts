@@ -70,6 +70,8 @@ export function jobView(row: JobRecord, targets: TargetRecord[]): Job {
         refresh: t.refresh,
         mode: t.mode,
         createMode: t.createMode,
+        concurrentFiles: t.concurrentFiles,
+        chunkConcurrency: t.chunkConcurrency,
         deleteLimits: {
           enabled: t.deleteLimitsEnabled,
           maxCount: t.maxDeleteCount,
@@ -87,6 +89,7 @@ export function jobView(row: JobRecord, targets: TargetRecord[]): Job {
     },
     allowEmptySource: row.allowEmptySource,
     syncEmptyDirs: row.syncEmptyDirs,
+    sourceDownloadConcurrency: row.sourceDownloadConcurrency,
     retryCount: row.retryCount,
     relayBandwidthLimit: row.relayBandwidthLimit,
     timeoutSeconds: row.timeoutSeconds,

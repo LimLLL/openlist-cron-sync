@@ -65,10 +65,6 @@ export function InstanceForm({
   const [limits, setLimits] = useState<Partial<InstanceLimits>>({
     maxApiConcurrency: instance?.limits.maxApiConcurrency,
     apiRequestsPerSecond: instance?.limits.apiRequestsPerSecond,
-    maxOutstandingTasks: instance?.limits.maxOutstandingTasks,
-    maxDownloadConnections: instance?.limits.maxDownloadConnections,
-    maxUploadSessions: instance?.limits.maxUploadSessions,
-    maxChunkConcurrency: instance?.limits.maxChunkConcurrency,
   });
 
   /** 构建请求体并提交。
@@ -234,7 +230,7 @@ export function InstanceForm({
         title={t('form.sections.limits')}
         description={t('form.sections.limitsHint')}
       >
-        <div className="grid gap-x-6 gap-y-5 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-x-6 gap-y-5 sm:grid-cols-2">
           {LIMIT_FIELDS.map((field) => (
             <InputField
               key={field.key}

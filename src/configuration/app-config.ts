@@ -38,10 +38,6 @@ export class AppConfig implements OnModuleInit {
   readonly globalMaxRuns: number;
   /** 进程等待队列容量。 */
   readonly maxQueuedRuns: number;
-  /** 全局同时读写spool块的worker数量。 */
-  readonly relayDownloadWorkers: number;
-  /** 全局同时发送chunk的worker数量。 */
-  readonly relayUploadWorkers: number;
   /** spool文件系统保留字节。 */
   readonly spoolReserveBytes: number;
   /** 进程关闭的持久化和清理宽限秒。 */
@@ -94,20 +90,6 @@ export class AppConfig implements OnModuleInit {
     this.execution = executionSettings(env);
     this.globalMaxRuns = integerSetting(env, 'GLOBAL_MAX_RUNS', 2, 1, 16);
     this.maxQueuedRuns = integerSetting(env, 'MAX_QUEUED_RUNS', 100, 1, 10000);
-    this.relayDownloadWorkers = integerSetting(
-      env,
-      'RELAY_DOWNLOAD_WORKERS',
-      4,
-      1,
-      64,
-    );
-    this.relayUploadWorkers = integerSetting(
-      env,
-      'RELAY_UPLOAD_WORKERS',
-      8,
-      1,
-      128,
-    );
     this.spoolReserveBytes = integerSetting(
       env,
       'SPOOL_RESERVE_BYTES',

@@ -1,8 +1,7 @@
-// 验证异常收尾释放已取得的spool承诺、连接和预读准入，且不会重复扣减块。
+// 验证异常收尾释放已取得的spool承诺、连接和Job/Target配额，且不会重复扣减块。
 import { randomUUID } from 'node:crypto';
 import { AppConfig } from '../src/configuration/app-config.js';
 import { RelayResources } from '../src/coordination/relay-resources.js';
-import { InstancesService } from '../src/instances/instances.service.js';
 import { RelayService } from '../src/relay/relay.service.js';
 import type { RelayInput, PreparedTransfer } from '../src/relay/relay-types.js';
 import { RelayError } from '../src/relay/errors.js';
@@ -20,13 +19,13 @@ describe('relay failure cleanup', () => {
   let f: RelayFixture;
   let relay: RelayService;
   let spool: Spool;
-  /** 单个准入位使泄漏直接阻塞下一次准备。
+  /** 使用默认的Job/Target配额验证资源释放。
    * @param 不适用。
    * @returns 夹具就绪。
    * @throws Error 初始化失败。
    */
   beforeEach(async () => {
-    f = await relayFixture({ RELAY_DOWNLOAD_WORKERS: '1' });
+    f = await relayFixture();
     relay = f.app.get(RelayService);
     spool = f.app.get(Spool);
   });
@@ -47,10 +46,14 @@ describe('relay failure cleanup', () => {
   function input(signal: AbortSignal): RelayInput {
     return {
       operationId: randomUUID(),
-      jobId: randomUUID(),
+      jobId: 'job',
+      sourceDownloadConcurrency: 2,
       bandwidth: 0,
       instance: f.record(),
       target: f.record(),
+      targetResourceId: 'target',
+      targetConcurrentFiles: 2,
+      targetChunkConcurrency: 2,
       directory: '/source',
       name: 'new.txt',
       size: 12,
@@ -67,52 +70,53 @@ describe('relay failure cleanup', () => {
    * @throws 不适用。
    */
   function progress(_downloaded: number, _transferred: number): void {}
-  /** 每实例资源为零时跳过本地permit，但仍返回幂等释放函数。 */
-  it('bypasses zero per-instance relay permits', async () => {
-    f.app.get(InstancesService).patch(f.id, {
-      limits: {
-        maxDownloadConnections: 0,
-        maxUploadSessions: 0,
-        maxChunkConcurrency: 0,
-      },
+  /** 首块空间未取得时不打开源GET，磁盘背压期间不占住源连接。
+   * @returns 验证完成。
+   * @throws Error 断言或资源操作失败。
+   */
+  it('reserves the first spool block before opening a source GET', async () => {
+    const entered = latch();
+    const ready = latch();
+    const reserve = spool.reserve.bind(spool);
+    vi.spyOn(spool, 'reserve').mockImplementationOnce(async (...args) => {
+      entered.release();
+      await ready.promise;
+      return reserve(...args);
     });
+    const prepared = relay.prepare(input(AbortSignal.timeout(5000)), progress);
+    await entered.promise;
+    expect(f.server.calls.some((call) => call.url.startsWith('/d/'))).toBe(
+      false,
+    );
+    ready.release();
+    const transfer = await prepared;
+    expect(f.server.calls.some((call) => call.url.startsWith('/d/'))).toBe(
+      true,
+    );
+    await relay.dispose(transfer);
+  });
+  /** Job/Target资源为零时跳过本地permit，但仍返回幂等释放函数。 */
+  it('bypasses zero Job/Target relay permits', async () => {
     const resources = f.app.get(RelayResources);
     const signal = new AbortController().signal;
     const releases = await Promise.all([
-      resources.acquire(f.record(), 'download', signal),
-      resources.acquire(f.record(), 'session', signal),
-      resources.acquire(f.record(), 'chunk', signal),
+      resources.relayFile('job', 'target', 0, 0, signal),
+      resources.relayFile('job', 'target', 0, 0, signal),
     ]);
     for (const release of releases) release();
   });
-  /** 在预留已成功、worker尚未取得时取消，下一文件仍可使用全部容量。
+  /** 在Job/Target permit等待时取消，下一文件仍可使用全部容量。
    * @param 不适用。
    * @returns 容量回收验证。
    * @throws Error 断言或资源释放失败。
    */
-  it('returns the reservation when cancelled while waiting for a download worker', async () => {
-    vi.spyOn(spool, 'available').mockResolvedValue(12);
-    const reserved = latch();
-    const reserve = spool.reserve.bind(spool);
-    vi.spyOn(spool, 'reserve').mockImplementation(
-      /** 在真实预留完成后通知取消方。
-       * @param args 原始预留参数。
-       * @returns 已登记的预留。
-       * @throws Error 真实预留失败。
-       */
-      async (...args) => {
-        const result = await reserve(...args);
-        reserved.release();
-        return result;
-      },
-    );
+  it('frees all capacity when cancelled while waiting for a Job source permit', async () => {
     const release = await f.app
       .get(RelayResources)
-      .downloads.acquire(new AbortController().signal);
+      .relayFile('job', 'target', 1, 1, new AbortController().signal);
     const stop = new AbortController();
     const preparing = relay.prepare(input(stop.signal), progress);
     try {
-      await reserved.promise;
       stop.abort();
       await expect(preparing).rejects.toThrow();
     } finally {
@@ -124,12 +128,12 @@ describe('relay failure cleanup', () => {
     );
     await relay.dispose(next);
   });
-  /** 源读取和进度落库连续失败不能遗留连接或准入名额。
+  /** 源读取和进度落库连续失败不能遗留文件资源。
    * @param 不适用。
    * @returns 下一文件可成功准备。
    * @throws Error 断言失败。
    */
-  it('releases admission and the source connection when failure progress cannot be persisted', async () => {
+  it('releases file resources when failure progress cannot be persisted', async () => {
     f.fault =
       /** 拒绝源下载，触发失败进度检查点。
        * @param call 当前请求。

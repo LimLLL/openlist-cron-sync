@@ -108,6 +108,13 @@ export function TargetsSection({
 }) {
   const { t } = useTranslation('jobs');
   const instanceName = useInstanceName();
+  /** 并发配额的展示值，0 显示为“不限”。
+   * @param value 配额。
+   * @returns 展示文本。
+   * @throws 不适用。
+   */
+  const concurrency = (value: number) =>
+    value === 0 ? t('detail.unlimited') : String(value);
   return (
     <EditorialSection
       index={index}
@@ -143,6 +150,21 @@ export function TargetsSection({
               columns={3}
               className="grid-cols-2"
               items={[
+                {
+                  label: t('detail.concurrentFiles'),
+                  value: concurrency(target.concurrentFiles),
+                  mono: target.concurrentFiles !== 0,
+                },
+                // 分片并发只作用于中转；服务端复制不显示该项。
+                ...(target.createMode === 'relay'
+                  ? [
+                      {
+                        label: t('detail.chunkConcurrency'),
+                        value: String(target.chunkConcurrency),
+                        mono: true,
+                      },
+                    ]
+                  : []),
                 {
                   label: t('detail.deleteLimits'),
                   value: target.deleteLimits.enabled
@@ -286,6 +308,14 @@ export function AdvancedSection({
             value: yesNo(job.allowEmptySource),
           },
           { label: t('detail.syncEmptyDirs'), value: yesNo(job.syncEmptyDirs) },
+          {
+            label: t('detail.sourceDownloadConcurrency'),
+            value:
+              job.sourceDownloadConcurrency === 0
+                ? t('detail.unlimited')
+                : String(job.sourceDownloadConcurrency),
+            mono: job.sourceDownloadConcurrency !== 0,
+          },
           {
             label: t('detail.bandwidth'),
             value:

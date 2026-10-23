@@ -95,7 +95,11 @@ export function seedLegacyRun(
       }),
     ),
   }).job;
-  const { retryCount: _retryCount, ...jobWithoutRetryCount } = job;
+  const {
+    retryCount: _retryCount,
+    sourceDownloadConcurrency: _sourceQuota,
+    ...jobWithoutRetryCount
+  } = job;
   const historicalJob = {
     ...jobWithoutRetryCount,
     createMode: historicalMode,
@@ -105,7 +109,12 @@ export function seedLegacyRun(
        * @returns 不含创建方式的旧目标。
        * @throws 不适用。
        */
-      ({ createMode: _mode, ...target }) => target,
+      ({
+        createMode: _mode,
+        concurrentFiles: _files,
+        chunkConcurrency: _chunks,
+        ...target
+      }) => target,
     ),
   };
   const currentMode = historicalMode === 'relay' ? 'server_copy' : 'relay';
@@ -133,10 +142,20 @@ export function seedLegacyRun(
         target.position === 0 ? 3 : null,
       );
   const runId = randomUUID();
+  const frozenInstance = {
+    ...instanceSnapshot(instance),
+    limits: {
+      ...instanceSnapshot(instance).limits,
+      maxOutstandingTasks: 4,
+      maxDownloadConnections: 2,
+      maxUploadSessions: 2,
+      maxChunkConcurrency: 4,
+    },
+  };
   const snapshot = {
     snapshotVersion: 1,
     job: historicalJob,
-    instances: { [instance.id]: instanceSnapshot(instance) },
+    instances: { [instance.id]: frozenInstance },
     settings: config.execution,
   };
   connection
@@ -162,7 +181,7 @@ export function seedLegacyRun(
      */
     (target) => {
       const id = randomUUID();
-      const value = { target, instance: instanceSnapshot(instance) };
+      const value = { target, instance: frozenInstance };
       connection
         .prepare(
           `INSERT INTO run_targets

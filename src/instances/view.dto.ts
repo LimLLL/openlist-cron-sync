@@ -23,38 +23,6 @@ export class LimitsView {
     maximum: Number.MAX_SAFE_INTEGER,
   })
   apiRequestsPerSecond: number;
-  /** 有效值，默认 4，0 表示不限。 */
-  @ApiProperty({
-    type: 'integer',
-    default: 4,
-    minimum: 0,
-    maximum: Number.MAX_SAFE_INTEGER,
-  })
-  maxOutstandingTasks: number;
-  /** 有效值，默认 2，0 表示不限。 */
-  @ApiProperty({
-    type: 'integer',
-    default: 2,
-    minimum: 0,
-    maximum: Number.MAX_SAFE_INTEGER,
-  })
-  maxDownloadConnections: number;
-  /** 有效值，默认 2，0 表示不限。 */
-  @ApiProperty({
-    type: 'integer',
-    default: 2,
-    minimum: 0,
-    maximum: Number.MAX_SAFE_INTEGER,
-  })
-  maxUploadSessions: number;
-  /** 有效值，默认 4，0 表示不限。 */
-  @ApiProperty({
-    type: 'integer',
-    default: 4,
-    minimum: 0,
-    maximum: Number.MAX_SAFE_INTEGER,
-  })
-  maxChunkConcurrency: number;
 }
 
 /** 凭据状态，不包含原文或密文。

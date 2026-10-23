@@ -15,10 +15,6 @@ const existing: Instance = {
   limits: {
     maxApiConcurrency: 4,
     apiRequestsPerSecond: 5,
-    maxOutstandingTasks: 4,
-    maxDownloadConnections: 2,
-    maxUploadSessions: 2,
-    maxChunkConcurrency: 4,
   },
   downloadMode: 'd',
   authState: 'ready',

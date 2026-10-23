@@ -36,8 +36,6 @@ export function snapshotJobName(detail: RunDetail): string | null {
 
 /** 目标在快照中的展示信息。 */
 export interface TargetLabel {
-  /** 实例名称；缺失时为 null。 */
-  instanceName: string | null;
   /** 目标路径；缺失时为 null。 */
   path: string | null;
   /** 同步模式；未知值为 null。 */
@@ -46,19 +44,18 @@ export interface TargetLabel {
   createMode: RunTargetView['config']['target']['createMode'];
 }
 
-/** 从运行目标快照中提取实例名、路径、同步模式与创建方式。
+/** 从运行目标快照中提取路径、同步模式与创建方式；实例名直接取 RunTargetView.instanceName。
  * @param target 运行目标。
  * @returns 展示信息。
  * @throws 不适用。
  */
 export function targetLabel(target: RunTargetView): TargetLabel {
-  const { instance, target: config } = target.config;
+  const config = target.config.target;
   const mode =
     config.mode === 'incremental' || config.mode === 'mirror'
       ? config.mode
       : null;
   return {
-    instanceName: typeof instance.name === 'string' ? instance.name : null,
     path: typeof config.path === 'string' ? config.path : null,
     mode,
     createMode: config.createMode,

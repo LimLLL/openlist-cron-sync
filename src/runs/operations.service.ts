@@ -7,7 +7,7 @@ import { runTargets } from '../database/run-schema.js';
 import { PathOccupancy } from '../coordination/path-occupancy.js';
 import { ApiError } from '../common/errors.js';
 import type { OperationsQueryDto } from './operations.dto.js';
-import { operationView } from './views.js';
+import { operationViews } from './views.js';
 
 /** 操作管理服务。
  * @param 不适用。
@@ -46,7 +46,7 @@ export class OperationsService {
    * @throws ApiError 未找到；Error 数据库失败。
    */
   get(id: string) {
-    return operationView(this.record(id));
+    return operationViews(this.database.db, [this.record(id)])[0];
   }
   /** 按(runId,seq)分页，不加载全部未决历史。
    * @param query 已验证过滤参数。
@@ -81,15 +81,17 @@ export class OperationsService {
     );
     const db = this.database.db;
     return {
-      items: db
-        .select()
-        .from(operations)
-        .where(where)
-        .orderBy(asc(operations.runId), asc(operations.seq))
-        .limit(query.pageSize)
-        .offset(offset)
-        .all()
-        .map(operationView),
+      items: operationViews(
+        db,
+        db
+          .select()
+          .from(operations)
+          .where(where)
+          .orderBy(asc(operations.runId), asc(operations.seq))
+          .limit(query.pageSize)
+          .offset(offset)
+          .all(),
+      ),
       page: query.page,
       pageSize: query.pageSize,
       total:
@@ -147,7 +149,7 @@ export class OperationsService {
       () => {
         const row = this.record(id);
         if (row.status === 'unknown' && row.resolutionKind === 'abandoned')
-          return operationView(row);
+          return operationViews(this.database.db, [row])[0];
         if (row.status !== 'unknown' || row.resolutionKind !== null)
           throw new ApiError(
             409,

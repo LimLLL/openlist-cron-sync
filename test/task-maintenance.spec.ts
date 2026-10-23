@@ -61,7 +61,8 @@ describe('M6 task maintenance responsibility', () => {
       source: '/source/new.txt',
       destination: '/target/new.txt',
     });
-    if (![2, 4, 7].includes(state)) f.app.get(TaskResources).hold(id, f.id);
+    if (![2, 4, 7].includes(state))
+      f.app.get(TaskResources).hold(id, record(id).runTargetId);
     return { id, run };
   }
   /** Detached maintenance deliberately uses the process-current retry budget, not a Run snapshot.
@@ -109,12 +110,12 @@ describe('M6 task maintenance responsibility', () => {
     expect(record(id).remoteCleanupPending).toBe(true);
     f.app.get(OperationsService).abandon(id, 'Operator accepts unknown');
     expect(record(id).remoteCleanupPending).toBe(true);
-    expect(f.app.get(TaskResources).count(f.id)).toBe(1);
+    expect(f.app.get(TaskResources).count(record(id).runTargetId)).toBe(1);
     await maintenance.one(id);
     expect(record(id).remoteCleanupPending).toBe(false);
-    expect(f.app.get(TaskResources).count(f.id)).toBe(0);
+    expect(f.app.get(TaskResources).count(record(id).runTargetId)).toBe(0);
     await f.restart();
-    expect(f.app.get(TaskResources).count(f.id)).toBe(0);
+    expect(f.app.get(TaskResources).count(record(id).runTargetId)).toBe(0);
   });
   /** 同一远端边沿只有一条维护行，历史统计及默认查询不改变。
    * @param 不适用。
@@ -143,7 +144,7 @@ describe('M6 task maintenance responsibility', () => {
     });
     expect(f.runs().get(run.id).stats).toEqual(run.stats);
     expect(record(id).remoteState).toBe(1);
-    expect(f.app.get(TaskResources).count(f.id)).toBe(1);
+    expect(f.app.get(TaskResources).count(record(id).runTargetId)).toBe(1);
     f.app.get(OperationsService).abandon(all[1].id, 'Accept incident');
     await maintenance.one(id);
     expect(record(id).remoteCleanupPending).toBe(true);
@@ -151,7 +152,7 @@ describe('M6 task maintenance responsibility', () => {
     await maintenance.one(id);
     expect(record(id).remoteCleanupPending).toBe(false);
     expect(record(id).status).toBe('succeeded');
-    expect(f.app.get(TaskResources).count(f.id)).toBe(0);
+    expect(f.app.get(TaskResources).count(record(id).runTargetId)).toBe(0);
   });
   /** 异步info期间resolution变化必须使旧条件写入失效。
    * @param 不适用。

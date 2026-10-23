@@ -109,7 +109,8 @@ export class FileCoordinator {
           throw new Error('Incomplete create plan');
         if (serverCopy)
           await this.copies.resources.reserve(
-            this.context.instance(op.targetInstanceId),
+            target.id,
+            target.config.target.concurrentFiles,
             op.id,
             signal,
           );
@@ -118,9 +119,14 @@ export class FileCoordinator {
             {
               operationId: op.id,
               jobId: this.context.run.jobId,
+              sourceDownloadConcurrency:
+                this.context.run.config.job.sourceDownloadConcurrency,
               bandwidth: this.context.run.config.job.relayBandwidthLimit,
               instance: this.context.instance(op.sourceInstanceId),
               target: this.context.instance(op.targetInstanceId),
+              targetResourceId: target.config.target.id,
+              targetConcurrentFiles: target.config.target.concurrentFiles,
+              targetChunkConcurrency: target.config.target.chunkConcurrency,
               ...splitPath(op.sourcePath),
               file: {
                 ...splitPath(op.targetPath),

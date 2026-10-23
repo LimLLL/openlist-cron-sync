@@ -28,20 +28,12 @@ export interface AuthView {
   hasSecret: boolean;
 }
 
-/** 实例资源配额。 */
+/** 实例管理 API 配额；传输并发属于任务与目标。 */
 export interface InstanceLimits {
   /** API 并发数。 */
   maxApiConcurrency: number;
   /** 每秒 API 请求数。 */
   apiRequestsPerSecond: number;
-  /** 未完成复制任务数。 */
-  maxOutstandingTasks: number;
-  /** 下载连接数。 */
-  maxDownloadConnections: number;
-  /** 上传会话数。 */
-  maxUploadSessions: number;
-  /** 分片并发数。 */
-  maxChunkConcurrency: number;
 }
 
 /** 实例公共视图。 */
@@ -200,22 +192,6 @@ function parseLimits(value: unknown): InstanceLimits {
     apiRequestsPerSecond: expectNumber(
       value.apiRequestsPerSecond,
       'apiRequestsPerSecond',
-    ),
-    maxOutstandingTasks: expectNumber(
-      value.maxOutstandingTasks,
-      'maxOutstandingTasks',
-    ),
-    maxDownloadConnections: expectNumber(
-      value.maxDownloadConnections,
-      'maxDownloadConnections',
-    ),
-    maxUploadSessions: expectNumber(
-      value.maxUploadSessions,
-      'maxUploadSessions',
-    ),
-    maxChunkConcurrency: expectNumber(
-      value.maxChunkConcurrency,
-      'maxChunkConcurrency',
     ),
   };
 }

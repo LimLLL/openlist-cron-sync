@@ -51,8 +51,4 @@ export const LIMIT_FIELDS: ReadonlyArray<{
 }> = [
   { key: 'maxApiConcurrency', defaultValue: 4 },
   { key: 'apiRequestsPerSecond', defaultValue: 5 },
-  { key: 'maxOutstandingTasks', defaultValue: 4 },
-  { key: 'maxDownloadConnections', defaultValue: 2 },
-  { key: 'maxUploadSessions', defaultValue: 2 },
-  { key: 'maxChunkConcurrency', defaultValue: 4 },
 ];

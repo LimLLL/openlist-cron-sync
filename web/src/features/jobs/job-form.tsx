@@ -45,6 +45,8 @@ function initialValues(existing?: JobView): JobFormValues {
     sourcePath: existing?.source.path ?? '/',
     sourcePassword: '',
     sourceRefresh: existing?.source.refresh ?? false,
+    sourceDownloadConcurrency:
+      existing?.sourceDownloadConcurrency.toString() ?? '2',
     targets: existing ? targetsFromJob(existing) : [emptyTarget()],
     cron: existing?.cron ?? '',
     timezone: existing?.timezone ?? 'UTC',

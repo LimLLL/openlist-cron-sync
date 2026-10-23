@@ -32,6 +32,7 @@ Error={error:{code:string,message:string,details:FieldError[]},requestId:string}
 | 502  | OPENLIST_ERROR / UPSTREAM_PROTOCOL_ERROR              | 同步浏览等上游失败                                        |
 | 503  | QUEUE_FULL / NOT_READY                                | 暂不能接受工作                                            |
 | 500  | INTERNAL_ERROR                                        | 本地不可恢复异常，脱敏                                    |
+| 500  | RESOURCE_LIMIT                                        | Run详情实时统计超过安全整数；读取不改变Run状态            |
 
 <a id="reason-codes"></a>
 
@@ -89,7 +90,7 @@ Error={error:{code:string,message:string,details:FieldError[]},requestId:string}
 | code                         | 出现位置                               | 含义                                                                                          |
 | ---------------------------- | -------------------------------------- | --------------------------------------------------------------------------------------------- |
 | QUEUE_TIMEOUT                | Run.error（stopReason=NULL）           | 到queueDeadlineAt仍未开始                                                                     |
-| RESOURCE_LIMIT               | Run.error                              | 扫描/规划期资源上限超限或聚合超过安全整数；Run failed，不执行计划                             |
+| RESOURCE_LIMIT               | Run.error或Run详情HTTP错误             | 扫描/规划资源超限或执行统计溢出；实时读取溢出返回500，不修改Run状态                           |
 | PLAN_INTERRUPTED             | Operation.error                        | 进程重启或扫描失败使旧计划中的pending不再执行                                                 |
 | INTERNAL_ERROR               | Run.error                              | 本地不可恢复实现错误                                                                          |
 | RUN_TIMEOUT                  | Run.stopReason                         | 超过Job timeoutSeconds，Run cancelled                                                         |

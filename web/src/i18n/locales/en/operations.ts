@@ -33,7 +33,6 @@ export default {
     source: 'Source',
     target: 'Target',
     noSource: 'No source. This step acts on the target only.',
-    instance: 'Instance',
     expected: 'Expected {{size}}',
     error: 'Error',
     stats: {

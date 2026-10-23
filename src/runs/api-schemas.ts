@@ -29,7 +29,7 @@ const statsSchema = {
     ),
   ),
   description:
-    '预览执行结果和实际字节为0；真实结果按逻辑动作最后attempt计算，传输字节含重传；目录删除不计文件数；源计数只计一次',
+    '运行详情在planned/executing/cancelling/recovering时读取实时SQL聚合，扫描和终态读取持久化统计；逻辑动作取最后attempt，字节含全部attempt及重传；relay进度约5秒持久化；预览执行结果和实际字节为0；源计数只计一次',
 };
 const errorSchema = nullable(
   objectSchema({ code: stringSchema, message: stringSchema }),
@@ -47,14 +47,7 @@ const instanceSchema = objectSchema({
   downloadMode: { type: 'string', enum: ['d', 'p'] },
   limits: objectSchema(
     Object.fromEntries(
-      [
-        'maxApiConcurrency',
-        'apiRequestsPerSecond',
-        'maxOutstandingTasks',
-        'maxDownloadConnections',
-        'maxUploadSessions',
-        'maxChunkConcurrency',
-      ].map(
+      ['maxApiConcurrency', 'apiRequestsPerSecond'].map(
         /** 为一个实例限额字段生成非负整数属性。
          * @param key 实例限额字段名。
          * @returns 字段名与整数 schema 的属性条目。
@@ -92,6 +85,7 @@ export const runViewSchema = objectSchema({
 const runTargetSchema = objectSchema({
   id: idSchema,
   targetId: idSchema,
+  instanceName: stringSchema,
   config: objectSchema({ target: targetViewSchema, instance: instanceSchema }),
   stats: statsSchema,
   sourceComplete: booleanSchema,
@@ -115,6 +109,7 @@ const runTargetSchema = objectSchema({
 });
 export const runDetailSchema = objectSchema({
   ...(runViewSchema.properties as Record<string, SchemaObject>),
+  sourceInstanceName: stringSchema,
   config: objectSchema({
     snapshotVersion: { type: 'integer', enum: [1] },
     job: jobViewSchema,
@@ -152,8 +147,10 @@ export const operationViewSchema = objectSchema({
   },
   status: { type: 'string', enum: [...OPERATION_STATUSES] },
   sourceInstanceId: nullable(idSchema),
+  sourceInstanceName: nullable(stringSchema),
   sourcePath: nullable(stringSchema),
   targetInstanceId: idSchema,
+  targetInstanceName: stringSchema,
   targetPath: stringSchema,
   isDir: booleanSchema,
   expectedSourceSize: nullable(sizeSchema),

@@ -32,6 +32,9 @@ export const jobs = sqliteTable(
     sourceRefresh: integer('source_refresh', { mode: 'boolean' })
       .notNull()
       .default(false),
+    sourceDownloadConcurrency: integer('source_download_concurrency')
+      .notNull()
+      .default(2),
     cron: text('cron'),
     timezone: text('timezone').notNull().default('UTC'),
     includeGlobs: text('include_globs_json', { mode: 'json' })
@@ -78,7 +81,7 @@ export const jobs = sqliteTable(
     ),
     check(
       'jobs_limits',
-      sql`${t.timeoutSeconds} BETWEEN 60 AND 604800 AND ${t.relayBandwidthLimit} BETWEEN 0 AND 9007199254740991`,
+      sql`${t.timeoutSeconds} BETWEEN 60 AND 604800 AND ${t.relayBandwidthLimit} BETWEEN 0 AND 9007199254740991 AND ${t.sourceDownloadConcurrency} BETWEEN 0 AND 9007199254740991`,
     ),
     check(
       'jobs_retry_count',
@@ -126,6 +129,8 @@ export const jobTargets = sqliteTable(
     createMode: text('create_mode', { enum: ['relay', 'server_copy'] })
       .notNull()
       .default('relay'),
+    concurrentFiles: integer('concurrent_files').notNull().default(2),
+    chunkConcurrency: integer('chunk_concurrency').notNull().default(2),
     refresh: integer('refresh', { mode: 'boolean' }).notNull().default(false),
     deleteLimitsEnabled: integer('delete_limits_enabled', { mode: 'boolean' })
       .notNull()
@@ -161,6 +166,10 @@ export const jobTargets = sqliteTable(
     check(
       'job_targets_limits',
       sql`(${t.deleteLimitsEnabled} = 0 OR ${t.maxDeleteCount} IS NOT NULL OR ${t.maxDeletePercent} IS NOT NULL) AND (${t.maxDeleteCount} IS NULL OR ${t.maxDeleteCount} BETWEEN 0 AND 9007199254740991) AND (${t.maxDeletePercent} IS NULL OR ${t.maxDeletePercent} BETWEEN 0 AND 100)`,
+    ),
+    check(
+      'job_targets_resources',
+      sql`${t.concurrentFiles} BETWEEN 0 AND 9007199254740991 AND ${t.chunkConcurrency} BETWEEN 1 AND 8`,
     ),
     check(
       'job_targets_times',

@@ -55,7 +55,7 @@ export function BasicsFields({ values, update }: SectionProps) {
   );
 }
 
-/** 渲染源分节：实例、路径、路径密码与刷新开关。
+/** 渲染源分节：实例、路径、路径密码、刷新开关与源下载并发。
  * @param props 表单值、更新函数、实例列表、是否编辑与打开目录选择器的回调。
  * @returns 分节。
  * @throws 不适用。
@@ -125,6 +125,19 @@ export function SourceFields({
           hint={t('form.refreshHint')}
           checked={values.sourceRefresh}
           onChange={(checked) => update('sourceRefresh', checked)}
+        />
+        <InputField
+          id="source-download-concurrency"
+          label={t('form.sourceDownloadConcurrency')}
+          type="number"
+          inputMode="numeric"
+          min={0}
+          required
+          value={values.sourceDownloadConcurrency}
+          onChange={(event) =>
+            update('sourceDownloadConcurrency', event.target.value)
+          }
+          hint={t('form.sourceDownloadConcurrencyHint')}
         />
       </div>
     </EditorialSection>

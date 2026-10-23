@@ -106,6 +106,8 @@ export interface RunTargetView {
   id: string;
   /** 关联的 Target UUID。 */
   targetId: string;
+  /** 目标实例名称：快照名，其次当前名，最后为实例 ID 前 8 位。 */
+  instanceName: string;
   /** 快照配置。 */
   config: {
     target: Target;
@@ -137,6 +139,8 @@ export interface RunTargetView {
 
 /** Run 详情（含配置快照和目标）。 */
 export interface RunDetail extends RunView {
+  /** 源实例名称，解析规则同目标实例名称。 */
+  sourceInstanceName: string;
   /** 固定配置快照。 */
   config: {
     snapshotVersion: 1;
@@ -227,6 +231,7 @@ function parseRunTarget(value: unknown, index: number): RunTargetView {
   return {
     id: value.id,
     targetId: expectString(value.targetId, 'targetId'),
+    instanceName: expectString(value.instanceName, 'instanceName'),
     config: {
       target: parseTarget(expectRecord(value.config, 'config').target, index),
       instance: expectRecord(
@@ -271,6 +276,10 @@ export function parseRunDetail(value: unknown): RunDetail {
     throw new ApiError(0, 'INVALID_RESPONSE', 'Invalid run detail.');
   return {
     ...base,
+    sourceInstanceName: expectString(
+      value.sourceInstanceName,
+      'sourceInstanceName',
+    ),
     config: parseConfig(value.config),
     targets: parseTargets(value.targets),
     issueCount: expectNumber(value.issueCount, 'issueCount'),

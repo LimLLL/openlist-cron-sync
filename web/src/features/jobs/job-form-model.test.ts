@@ -21,6 +21,7 @@ function fixture(): JobFormValues {
     sourcePath: '/source',
     sourcePassword: '',
     sourceRefresh: false,
+    sourceDownloadConcurrency: '2',
     targets: [
       {
         ...emptyTarget(),
@@ -129,6 +130,27 @@ describe('job form payload', () => {
     expect(buildJobInput(values).retryCount).toBeNull();
     values.retryCount = '10';
     expect(() => buildJobInput(values)).toThrow('Retries after failure');
+  });
+  it('round-trips transfer quotas and keeps zero as unlimited except for chunks', () => {
+    const values = fixture();
+    values.targets = targetsFromJob(mixedJobFixture());
+    values.sourceDownloadConcurrency = '0';
+    values.targets[1].concurrentFiles = '0';
+    const body = buildJobInput(values);
+    expect(body.sourceDownloadConcurrency).toBe(0);
+    expect(
+      body.targets.map(({ concurrentFiles, chunkConcurrency }) => ({
+        concurrentFiles,
+        chunkConcurrency,
+      })),
+    ).toEqual([
+      { concurrentFiles: 4, chunkConcurrency: 2 },
+      { concurrentFiles: 0, chunkConcurrency: 2 },
+    ]);
+    values.targets[1].chunkConcurrency = '0';
+    expect(() => buildJobInput(values)).toThrow('Chunks per file');
+    values.targets[1].chunkConcurrency = '9';
+    expect(() => buildJobInput(values)).toThrow('Chunks per file');
   });
   it('writes a browsed path and password back to the chosen endpoint only', () => {
     const values = fixture();

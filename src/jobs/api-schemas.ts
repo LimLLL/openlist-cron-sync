@@ -66,6 +66,21 @@ const targetInputFields = {
     description:
       '此 Target 的创建方式；新目标省略为 relay，已有目标 PATCH 省略保留；server_copy 要求与源同 Instance ID',
   } as SchemaObject,
+  concurrentFiles: {
+    type: 'integer',
+    minimum: 0,
+    maximum: Number.MAX_SAFE_INTEGER,
+    default: 2,
+    description:
+      '此 Target 同时处理的文件数：relay 为在途文件，server_copy 为未结束的复制任务；0 不限',
+  } as SchemaObject,
+  chunkConcurrency: {
+    type: 'integer',
+    minimum: 1,
+    maximum: 8,
+    default: 2,
+    description: '每个 relay 文件同时发送的分片数',
+  } as SchemaObject,
   deleteLimits: {
     ...objectSchema(deleteLimitFields, []),
     description: '按字段合并；enabled=true 时不能同时禁用两个阈值',
@@ -98,6 +113,13 @@ const jobFields = {
   filters: objectSchema(filterFields, []),
   allowEmptySource: { type: 'boolean', default: false } as SchemaObject,
   syncEmptyDirs: { type: 'boolean', default: false } as SchemaObject,
+  sourceDownloadConcurrency: {
+    type: 'integer',
+    minimum: 0,
+    maximum: Number.MAX_SAFE_INTEGER,
+    default: 2,
+    description: '同时从源读取的 relay 文件数；0 不限',
+  } as SchemaObject,
   retryCount: {
     type: 'integer',
     minimum: 0,
@@ -164,6 +186,8 @@ export const targetViewSchema = objectSchema({
   position: sizeSchema,
   mode: targetInputFields.mode,
   createMode: targetInputFields.createMode,
+  concurrentFiles: targetInputFields.concurrentFiles,
+  chunkConcurrency: targetInputFields.chunkConcurrency,
   deleteLimits: objectSchema(deleteLimitFields),
 });
 export const jobViewSchema = objectSchema({

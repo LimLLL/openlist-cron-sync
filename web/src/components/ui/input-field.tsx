@@ -1,5 +1,6 @@
 // 统一文本/数字输入字段，匹配暗色观测站主题。
 import type { ComponentProps, ReactNode } from 'react';
+import { cn } from '../../lib/utils';
 
 /** 输入字段属性。 */
 type InputFieldProps = Omit<ComponentProps<'input'>, 'className'> & {
@@ -7,6 +8,8 @@ type InputFieldProps = Omit<ComponentProps<'input'>, 'className'> & {
   label: string;
   /** 可选提示。 */
   hint?: string;
+  /** 提示语气；warning 用于需要用户留意但仍可提交的取值。 */
+  hintTone?: 'warning';
   /** 行内错误。 */
   error?: string | null;
   /** 输入框右侧的附加操作（如浏览按钮），不影响标签与提示的关联。 */
@@ -14,7 +17,7 @@ type InputFieldProps = Omit<ComponentProps<'input'>, 'className'> & {
 };
 
 /** 渲染带标签的输入字段。
- * @param props 标签、提示、可选右侧操作和原生 input 属性。
+ * @param props 标签、提示及其语气、可选右侧操作和原生 input 属性。
  * @returns 表单字段。
  * @throws 不适用。
  */
@@ -22,6 +25,7 @@ export function InputField({
   id,
   label,
   hint,
+  hintTone,
   error,
   action,
   ...props
@@ -49,7 +53,13 @@ export function InputField({
         input
       )}
       {hint && !error && (
-        <p id={`${id}-hint`} className="text-xs text-muted-foreground">
+        <p
+          id={`${id}-hint`}
+          className={cn(
+            'text-xs',
+            hintTone === 'warning' ? 'text-signal' : 'text-muted-foreground',
+          )}
+        >
           {hint}
         </p>
       )}

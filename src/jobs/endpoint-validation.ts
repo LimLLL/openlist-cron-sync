@@ -135,10 +135,6 @@ export function instanceSnapshot(row: InstanceRecord): InstanceSnapshot {
     limits: {
       maxApiConcurrency: row.maxApiConcurrency,
       apiRequestsPerSecond: row.apiRequestsPerSecond,
-      maxOutstandingTasks: row.maxOutstandingTasks,
-      maxDownloadConnections: row.maxDownloadConnections,
-      maxUploadSessions: row.maxUploadSessions,
-      maxChunkConcurrency: row.maxChunkConcurrency,
     },
     downloadMode: row.downloadMode,
   };

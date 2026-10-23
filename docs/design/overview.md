@@ -99,7 +99,7 @@ Run 在全局队列中等待一个执行位，并占用路径：source 目录按
 
 执行顺序是：先准备父目录，再按 Target 执行 create 和替换链，最后执行 mirror extras。一个 Target 失败不会取消其他 Target。见[同步引擎](sync-engine.md)。
 
-- `a.jpg`（两个 Target 各一次）：下载 worker 从实例 A 的下载路由读取 `/115/照片/2024/a.jpg`，按 1 MiB 块写入本地 spool，写完一块就继续下一块，不等上传。上传 worker 先对目标调用分片上传 init（Overwrite:false），再按目标返回的分片大小把块拼成 chunk 依次发送，对方确认后删掉本地块。源读完且字节数恰好等于 3 MiB 后才发出最后一个 chunk，然后调用 complete，返回成功即记 succeeded。Target 1 虽然与 source 同在实例 A，也同样下载再上传。
+- `a.jpg`（两个 Target 各一次）：每个文件先取得 Job 源配额和对应 Target 文件配额，并在打开实例 A 的下载路由前预留首个 spool 块。读取按 1 MiB 块写入本地 spool，FIFO/frontier 优先级驱动上传；目标先调用分片上传 init，再按返回的分片大小并行发送不超过 Target chunkConcurrency 的 chunk，确认后删掉本地块。源读完且字节数恰好等于 3 MiB 后才发出最后一个 chunk，然后调用 complete，返回成功即记 succeeded。Target 1 虽然与 source 同在实例 A，也同样下载再上传。
 - `b.jpg` 走[替换链](sync-engine.md#替换链)：
   1. 先打开源下载并写入第一块，确认源能正常出数据；源不可用就不动旧文件。
   2. 用 refresh=true 重新列出目标的 `2024` 目录，确认 b.jpg 仍是 4 MiB；若已变化则跳过这次替换（PRECONDITION_CHANGED）。

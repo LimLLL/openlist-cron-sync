@@ -53,7 +53,9 @@ describe('M6 server copy execution', () => {
       f.files.get('/source/new.txt'),
     );
     expect(f.copyCount).toBe(1);
-    expect(f.app.get(TaskResources).count(f.id)).toBe(0);
+    expect(
+      f.app.get(TaskResources).count(plan(f, accepted.id)[0].runTargetId),
+    ).toBe(0);
     expect(f.tasks.size).toBe(0);
   });
   /** 源新鲜列表与旧计划不符不能删除旧文件。
@@ -109,12 +111,16 @@ describe('M6 server copy execution', () => {
        */
       () => expect(plan(f, accepted.id)[0]?.task).toBeTruthy(),
     );
-    expect(f.app.get(TaskResources).count(f.id)).toBe(1);
+    expect(
+      f.app.get(TaskResources).count(plan(f, accepted.id)[0].runTargetId),
+    ).toBe(1);
     f.runs().cancel(accepted.id);
     f.runs().cancel(accepted.id);
     expect((await terminal(f, accepted.id)).status).toBe('cancelled');
     expect(f.server.calls.filter(isCancel)).toHaveLength(1);
-    expect(f.app.get(TaskResources).count(f.id)).toBe(0);
+    expect(
+      f.app.get(TaskResources).count(plan(f, accepted.id)[0].runTargetId),
+    ).toBe(0);
   });
   /** tid404必须保留unknown但释放已不可跟踪的额度。
    * @param 不适用。
@@ -140,7 +146,9 @@ describe('M6 server copy execution', () => {
       }).id,
     );
     expect(plan(f, run.id)[0].status).toBe('unknown');
-    expect(f.app.get(TaskResources).count(f.id)).toBe(0);
+    expect(f.app.get(TaskResources).count(plan(f, run.id)[0].runTargetId)).toBe(
+      0,
+    );
     const op = f.app
       .get(DatabaseService)
       .db.select()

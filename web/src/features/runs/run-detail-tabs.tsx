@@ -1,4 +1,4 @@
-// 运行的操作与扫描问题：胶囊标签切换，各自使用独立的 URL 分页参数；活动运行期间持续刷新。
+// 运行的操作与扫描问题：胶囊标签切换，各自使用独立的 URL 分页与筛选参数；活动运行期间持续刷新。
 import { Link } from 'react-router';
 import * as Tabs from '@radix-ui/react-tabs';
 import { ShieldAlert } from 'lucide-react';
@@ -7,12 +7,17 @@ import { Badge } from '../../components/ui/badge';
 import { Pagination } from '../../components/ui/pagination';
 import { ErrorState, LoadingState } from '../../components/states';
 import { formatBytes } from '../../lib/format';
-import { usePageParams } from '../../lib/hooks';
+import { useFilterParam, usePageParams } from '../../lib/hooks';
 import { useErrorText } from '../../i18n/error-text';
 import { useRunOperations, useRunIssues } from './run-queries';
 import type { RunStatus, IssueView } from './run-contract';
+import { OPERATION_STATUSES } from '../operations/operation-contract';
 import type { OperationView } from '../operations/operation-contract';
 import { statusBadgeProps } from './run-status';
+import { FilterSelect } from './filter-select';
+
+/** 操作动作筛选的可选值，与后端 action 枚举一致。 */
+const OPERATION_ACTIONS = ['mkdir', 'create', 'delete'] as const;
 
 const TRIGGER_CLASS =
   'group flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground data-[state=active]:bg-accent data-[state=active]:text-accent-foreground';
@@ -82,7 +87,58 @@ function TabEmpty({
   );
 }
 
-/** 渲染操作表格，序号与路径可进入操作详情。
+/** 渲染操作的状态与动作筛选；筛选值保存在 URL，修改时只把操作列表回到第一页。
+ * @param props status/action 当前筛选值；onStatus/onAction 修改回调。
+ * @returns 筛选工具栏。
+ * @throws 不适用。
+ */
+function OperationFilters({
+  status,
+  action,
+  onStatus,
+  onAction,
+}: {
+  status: string | undefined;
+  action: string | undefined;
+  onStatus: (value: string | undefined) => void;
+  onAction: (value: string | undefined) => void;
+}) {
+  const { t } = useTranslation(['runs', 'common']);
+  return (
+    <div
+      role="group"
+      aria-label={t('operations.filters')}
+      className="mb-6 flex flex-wrap items-center gap-3"
+    >
+      <FilterSelect
+        label={t('operations.statusFilter')}
+        value={status ?? ''}
+        onChange={(next) => onStatus(next || undefined)}
+      >
+        <option value="">{t('operations.allStatuses')}</option>
+        {OPERATION_STATUSES.map((value) => (
+          <option key={value} value={value}>
+            {t(`common:operationStatus.${value}`)}
+          </option>
+        ))}
+      </FilterSelect>
+      <FilterSelect
+        label={t('operations.actionFilter')}
+        value={action ?? ''}
+        onChange={(next) => onAction(next || undefined)}
+      >
+        <option value="">{t('operations.allActions')}</option>
+        {OPERATION_ACTIONS.map((value) => (
+          <option key={value} value={value}>
+            {t(`common:operationAction.${value}`)}
+          </option>
+        ))}
+      </FilterSelect>
+    </div>
+  );
+}
+
+/** 渲染操作表格，序号与路径可进入操作详情；可按状态与动作筛选。
  * @param props runId 运行 ID；status 运行状态。
  * @returns 操作列表。
  * @throws 不适用。
@@ -98,19 +154,59 @@ function OperationsTab({
     { page: 1, pageSize: 25 },
     'operations',
   );
-  const ops = useRunOperations(runId, { page, pageSize }, status);
+  const [opStatus, setOpStatus] = useFilterParam(
+    'operationsStatus',
+    'operationsPage',
+  );
+  const [opAction, setOpAction] = useFilterParam(
+    'operationsAction',
+    'operationsPage',
+  );
+  const ops = useRunOperations(
+    runId,
+    { page, pageSize, status: opStatus, action: opAction },
+    status,
+  );
   const { t } = useTranslation(['runs', 'common']);
+  const filtered = Boolean(opStatus || opAction);
+  const filters = (
+    <OperationFilters
+      status={opStatus}
+      action={opAction}
+      onStatus={setOpStatus}
+      onAction={setOpAction}
+    />
+  );
 
   if (ops.isPending)
-    return <LoadingState rows={5} label={t('operations.loading')} />;
+    return (
+      <>
+        {filters}
+        <LoadingState rows={5} label={t('operations.loading')} />
+      </>
+    );
   if (ops.isError)
-    return <ErrorState error={ops.error} onRetry={() => void ops.refetch()} />;
+    return (
+      <>
+        {filters}
+        <ErrorState error={ops.error} onRetry={() => void ops.refetch()} />
+      </>
+    );
   if (ops.data.items.length === 0)
     return (
       <>
+        {filters}
         <TabEmpty
-          title={t('operations.emptyTitle')}
-          description={t('operations.emptyDescription')}
+          title={
+            filtered
+              ? t('operations.emptyFilteredTitle')
+              : t('operations.emptyTitle')
+          }
+          description={
+            filtered
+              ? t('operations.emptyFilteredDescription')
+              : t('operations.emptyDescription')
+          }
         />
         <Pagination
           className="mt-6"
@@ -124,6 +220,7 @@ function OperationsTab({
 
   return (
     <div>
+      {filters}
       <div className="overflow-x-auto">
         <table className="w-full min-w-[40rem] text-left text-[13px]">
           <thead>

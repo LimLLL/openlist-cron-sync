@@ -90,13 +90,15 @@ export function parsePageParams(
   };
 }
 
-/** 从 URL 读取可选的字符串筛选参数。
+/** 从 URL 读取可选的字符串筛选参数；修改筛选时回到第一页。
  * @param key 参数名。
+ * @param pageKey 筛选所属列表的页码参数；同页多个列表各自翻页时传入带前缀的键。
  * @returns [当前值, 设置方法]。
  * @throws 不适用。
  */
 export function useFilterParam(
   key: string,
+  pageKey = 'page',
 ): [string | undefined, (value: string | undefined) => void] {
   const [searchParams, setSearchParams] = useSearchParams();
   const value = searchParams.get(key) ?? undefined;
@@ -108,13 +110,13 @@ export function useFilterParam(
           const params = new URLSearchParams(prev);
           if (next) params.set(key, next);
           else params.delete(key);
-          params.delete('page');
+          params.delete(pageKey);
           return params;
         },
         { replace: true },
       );
     },
-    [key, setSearchParams],
+    [key, pageKey, setSearchParams],
   );
 
   return [value, setValue];

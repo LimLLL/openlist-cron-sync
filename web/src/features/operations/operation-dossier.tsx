@@ -3,28 +3,27 @@ import { motion, useReducedMotion } from 'framer-motion';
 import { ArrowRight } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { CountUp } from '../../components/motion/count-up';
-import { ScrambleText } from '../../components/motion/scramble-text';
 import { SpecGrid } from '../../components/ui/spec-grid';
 import { formatBytes } from '../../lib/format';
 import { cn } from '../../lib/utils';
 import type { OperationView } from './operation-contract';
 import { ACTION_ICONS, splitPath } from './operation-status';
 
-/** 渲染单个端点：角色、实例短 ID、父目录与醒目的末段名称。
- * @param props role 源或目标；path 路径；instanceId 实例 ID；size 预期大小；isDir 是否目录。
+/** 渲染单个端点：角色、实例名称（悬停显示完整 ID）、父目录与醒目的末段名称。
+ * @param props role 源或目标；path 路径；instance 实例 ID 与名称；size 预期大小；isDir 是否目录。
  * @returns 端点栏。
  * @throws 不适用。
  */
 function Endpoint({
   role,
   path,
-  instanceId,
+  instance,
   size,
   isDir,
 }: {
   role: 'source' | 'target';
   path: string;
-  instanceId: string | null;
+  instance: { id: string; name: string } | null;
   size: number | null;
   isDir: boolean;
 }) {
@@ -34,10 +33,12 @@ function Endpoint({
     <div className="min-w-0 p-6 sm:p-8">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="eyebrow">{t(`detail.${role}`)}</p>
-        {instanceId && (
-          <span className="font-mono text-[11px] text-muted-foreground">
-            {t('detail.instance')}{' '}
-            <ScrambleText text={instanceId.slice(0, 8)} />
+        {instance && (
+          <span
+            className="max-w-[60%] truncate text-xs text-muted-foreground"
+            title={instance.id}
+          >
+            {instance.name}
           </span>
         )}
       </div>
@@ -114,7 +115,7 @@ export function PathDossier({ op }: { op: OperationView }) {
     <Endpoint
       role="target"
       path={op.targetPath}
-      instanceId={op.targetInstanceId}
+      instance={{ id: op.targetInstanceId, name: op.targetInstanceName }}
       size={op.expectedTargetSize ?? op.expectedSourceSize}
       isDir={op.isDir}
     />
@@ -137,7 +138,11 @@ export function PathDossier({ op }: { op: OperationView }) {
       <Endpoint
         role="source"
         path={op.sourcePath}
-        instanceId={op.sourceInstanceId}
+        instance={
+          op.sourceInstanceId && op.sourceInstanceName
+            ? { id: op.sourceInstanceId, name: op.sourceInstanceName }
+            : null
+        }
         size={op.expectedSourceSize}
         isDir={op.isDir}
       />

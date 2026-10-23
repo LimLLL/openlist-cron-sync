@@ -3,6 +3,7 @@ import Database from 'better-sqlite3';
 import { ConfigService } from '@nestjs/config';
 import { join } from 'node:path';
 import { eq, sql } from 'drizzle-orm';
+import { readMigrationFiles } from 'drizzle-orm/migrator';
 import { AppConfig } from '../src/configuration/app-config.js';
 import { DatabaseService } from '../src/database/database.service.js';
 import { jobTargets, jobs } from '../src/database/job-schema.js';
@@ -88,18 +89,19 @@ describe('per-Target create mode migration', () => {
       old.close();
       service.onModuleInit();
       for (const sample of samples) {
-        const {
-          createMode,
-          retryCount: _retryCount,
-          ...historicalJob
-        } = sample.snapshot.job;
+        const { createMode, ...historicalJob } = sample.snapshot.job;
         const expectedTargets = historicalJob.targets.map(
           /** 只为历史目标增加其 Run 的原始创建方式。
            * @param target 原目标。
            * @returns 新规范目标。
            * @throws 不适用。
            */
-          (target) => ({ ...target, createMode }),
+          (target) => ({
+            ...target,
+            createMode,
+            concurrentFiles: createMode === 'server_copy' ? 4 : 2,
+            chunkConcurrency: 2,
+          }),
         );
         const run = service.db
           .select()
@@ -108,7 +110,24 @@ describe('per-Target create mode migration', () => {
           .get();
         expect(run?.config).toEqual({
           ...sample.snapshot,
-          job: { ...historicalJob, retryCount: null, targets: expectedTargets },
+          job: {
+            ...historicalJob,
+            sourceDownloadConcurrency: 2,
+            retryCount: null,
+            targets: expectedTargets,
+          },
+          instances: Object.fromEntries(
+            Object.entries(sample.snapshot.instances).map(([id, instance]) => [
+              id,
+              {
+                ...instance,
+                limits: {
+                  maxApiConcurrency: instance.limits.maxApiConcurrency,
+                  apiRequestsPerSecond: instance.limits.apiRequestsPerSecond,
+                },
+              },
+            ]),
+          ),
         });
         expect(run).toMatchObject({
           createdAt: 1,
@@ -123,7 +142,21 @@ describe('per-Target create mode migration', () => {
             .get();
           expect(target?.config).toEqual({
             ...original.value,
-            target: { ...original.value.target, createMode },
+            instance: {
+              ...original.value.instance,
+              limits: {
+                maxApiConcurrency:
+                  original.value.instance.limits.maxApiConcurrency,
+                apiRequestsPerSecond:
+                  original.value.instance.limits.apiRequestsPerSecond,
+              },
+            },
+            target: {
+              ...original.value.target,
+              createMode,
+              concurrentFiles: createMode === 'server_copy' ? 4 : 2,
+              chunkConcurrency: 2,
+            },
           });
         }
         const current = service.db
@@ -195,10 +228,6 @@ describe('per-Target create mode migration', () => {
         .set({
           maxApiConcurrency: 0,
           apiRequestsPerSecond: Number.MAX_SAFE_INTEGER,
-          maxOutstandingTasks: 0,
-          maxDownloadConnections: 0,
-          maxUploadSessions: 0,
-          maxChunkConcurrency: 0,
         })
         .where(eq(instances.id, instanceId))
         .run();
@@ -245,7 +274,12 @@ describe('per-Target create mode migration', () => {
          * @returns 逐目标创建方式的新形状。
          * @throws 不适用。
          */
-        (target) => ({ ...target, createMode: 'server_copy' }),
+        (target) => ({
+          ...target,
+          createMode: 'server_copy',
+          concurrentFiles: 4,
+          chunkConcurrency: 2,
+        }),
       ),
     );
     expect(service.db.select().from(runTargets).all()).toEqual([]);
@@ -256,6 +290,11 @@ describe('per-Target create mode migration', () => {
    * @throws Error 断言失败。
    */
   it.each([
+    "UPDATE runs SET run_config_json = json_set(run_config_json, '$.instances', json('{}'))",
+    "UPDATE runs SET run_config_json = json_set(run_config_json, '$.job.sourceDownloadConcurrency', 2)",
+    "UPDATE run_targets SET target_snapshot_json = json_remove(target_snapshot_json, '$.instance.limits.maxUploadSessions')",
+    "UPDATE run_targets SET target_snapshot_json = json_set(target_snapshot_json, '$.instance.limits.maxChunkConcurrency', -1)",
+    "UPDATE run_targets SET target_snapshot_json = json_set(target_snapshot_json, '$.instance.limits.maxDownloadConnections', '2')",
     "UPDATE runs SET run_config_json = json_set(run_config_json, '$.job.targets[1]', json_extract(run_config_json, '$.job.targets[0]'))",
     "UPDATE runs SET run_config_json = json_remove(run_config_json, '$.job.createMode')",
     "UPDATE runs SET run_config_json = json_set(run_config_json, '$.job.createMode', null)",
@@ -310,4 +349,97 @@ describe('per-Target create mode migration', () => {
       reopened.close();
     }
   });
+
+  /** 配额升级使用各自原值；当前Instance变化不得覆盖冻结历史。
+   * @param oldChunk 旧实例分片并发。
+   * @param expected 新单文件分片并发。
+   * @returns 验证完成。
+   * @throws Error SQL或断言失败。
+   */
+  it.each([
+    [0, 2],
+    [1, 1],
+    [2, 2],
+    [8, 2],
+  ])(
+    'maps old chunk %i to %i and preserves frozen quotas',
+    (oldChunk, expected) => {
+      const old = legacyDatabase(directory.path);
+      const sample = seedLegacyRun(old, config, 'relay', 'queued');
+      old.pragma('foreign_keys = OFF');
+      old.transaction(() => {
+        for (const migration of readMigrationFiles({
+          migrationsFolder: 'drizzle',
+        }).slice(4, 6)) {
+          for (const statement of migration.sql) old.exec(statement);
+          old
+            .prepare(
+              'INSERT INTO __drizzle_migrations (hash, created_at) VALUES (?, ?)',
+            )
+            .run(migration.hash, migration.folderMillis);
+        }
+      })();
+      const id = sample.job.source.instanceId;
+      old
+        .prepare(
+          'UPDATE instances SET max_download_connections=6, max_upload_sessions=7, max_outstanding_tasks=11, max_chunk_concurrency=?',
+        )
+        .run(oldChunk);
+      const frozen = sample.snapshot.instances[id];
+      frozen.limits.maxDownloadConnections = 10;
+      frozen.limits.maxUploadSessions = 9;
+      frozen.limits.maxChunkConcurrency = oldChunk;
+      old
+        .prepare(
+          'UPDATE runs SET run_config_json=json_set(run_config_json, ?, json(?))',
+        )
+        .run(`$.instances."${id}"`, JSON.stringify(frozen));
+      for (const target of sample.targetSnapshots)
+        old
+          .prepare(
+            "UPDATE run_targets SET target_snapshot_json=json_set(target_snapshot_json, '$.instance', json(?)) WHERE id=?",
+          )
+          .run(JSON.stringify(frozen), target.id);
+      old.close();
+      service.onModuleInit();
+      expect(
+        service.db.select().from(jobs).get()?.sourceDownloadConcurrency,
+      ).toBe(6);
+      expect(
+        service.db
+          .select()
+          .from(jobTargets)
+          .all()
+          .every(
+            (target) =>
+              target.concurrentFiles === 11 &&
+              target.chunkConcurrency === expected,
+          ),
+      ).toBe(true);
+      const run = service.db.select().from(runs).get();
+      expect(run?.config.job.sourceDownloadConcurrency).toBe(10);
+      expect(
+        run?.config.job.targets.every(
+          (target) =>
+            target.concurrentFiles === 9 &&
+            target.chunkConcurrency === expected,
+        ),
+      ).toBe(true);
+      expect(run?.config.instances[id].limits).toEqual({
+        maxApiConcurrency: 4,
+        apiRequestsPerSecond: 5,
+      });
+      expect(
+        service.db
+          .select()
+          .from(runTargets)
+          .all()
+          .every(
+            (target) =>
+              target.config.target.concurrentFiles === 9 &&
+              target.config.target.chunkConcurrency === expected,
+          ),
+      ).toBe(true);
+    },
+  );
 });

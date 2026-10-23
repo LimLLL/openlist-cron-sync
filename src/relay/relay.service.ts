@@ -32,7 +32,7 @@ export class RelayService {
   /** 保存共享依赖。
    * @param client 源文件读取。
    * @param multipart 目标协议。
-   * @param resources 进程资源配额。
+   * @param resources Job/Target资源配额。
    * @param spool 本地块存储。
    * @returns 不适用。
    * @throws 不适用。
@@ -53,19 +53,6 @@ export class RelayService {
     input: RelayInput,
     progress: (downloaded: number, transferred: number) => void,
   ): Promise<PreparedTransfer> {
-    // 准入只限制尚未开始上传的预读文件数；上传开始后由upload提前归还。
-    const admission = await this.resources.admission.acquire(input.signal);
-    let admitted = true;
-    /** 幂等归还预读准入。
-     * @param 不适用。
-     * @returns 不适用。
-     * @throws 不适用。
-     */
-    const releaseAdmission = (): void => {
-      if (!admitted) return;
-      admitted = false;
-      admission();
-    };
     let releaseFile: (() => void) | undefined;
     const download = new Download(input, this.client);
     const transfer: PreparedTransfer = {
@@ -76,24 +63,23 @@ export class RelayService {
       transferredBytes: 0,
       sourceComplete: false,
       completing: false,
-      /** 一起归还文件级资源和有界准入名额。
+      /** 一起归还Job源文件和Target文件配额。
        * @param 不适用。
        * @returns 不适用。
        * @throws 不适用。
        */
       release: () => {
         releaseFile?.();
-        releaseAdmission();
       },
-      releaseAdmission,
     };
     try {
-      releaseFile = await this.resources.file(
-        input.instance,
-        input.target,
+      releaseFile = await this.resources.relayFile(
+        input.jobId,
+        input.targetResourceId,
+        input.sourceDownloadConcurrency,
+        input.targetConcurrentFiles,
         input.signal,
       );
-      await download.open();
       const size = Math.min(input.size, BLOCK_BYTES);
       const reservation = await this.spool.reserve(
         size,
@@ -101,9 +87,9 @@ export class RelayService {
         input.signal,
         false,
       );
-      let release: (() => void) | undefined;
       try {
-        release = await this.resources.downloads.acquire(input.signal, 1);
+        // 先预留首块再打开GET，等待spool空间时不占住源连接。
+        await download.open();
         transfer.first = await download.take(size || 1);
         if (transfer.first.length !== size)
           throw new RelayError('SIZE_MISMATCH');
@@ -119,7 +105,6 @@ export class RelayService {
         if (input.size <= BLOCK_BYTES && (await download.take(1)).length)
           throw new RelayError('SIZE_MISMATCH');
       } finally {
-        release?.();
         this.spool.unreserve(reservation);
       }
       return transfer;
@@ -170,8 +155,6 @@ export class RelayService {
     });
     checkpoints.session(session);
     transfer.session = session;
-    // 已开始上传的文件由目标session名额约束，不再占用预读准入。
-    transfer.releaseAdmission();
     if (
       session.chunkSize < BLOCK_BYTES ||
       session.chunkSize % BLOCK_BYTES ||
@@ -207,7 +190,8 @@ export class RelayService {
     const pending = new Set<Promise<void>>();
     try {
       for (let index = 0; index < session.totalChunks; index++) {
-        if (pending.size >= 2) await Promise.race(pending);
+        if (pending.size >= input.targetChunkConcurrency)
+          await Promise.race(pending);
         if (failure) throw failure;
         workSignal.throwIfAborted();
         const size = Math.min(
@@ -223,28 +207,20 @@ export class RelayService {
         const blocks: Block[] = [];
         try {
           for (let offset = 0; offset < size; offset += BLOCK_BYTES) {
-            const release = await this.resources.downloads.acquire(
-              workSignal,
-              0,
+            const count = Math.min(BLOCK_BYTES, size - offset);
+            const data =
+              index === 0 && offset === 0
+                ? transfer.first
+                : await transfer.download.take(count);
+            if (data.length !== count) throw new RelayError('SIZE_MISMATCH');
+            const block = await this.spool.publish(
+              input.operationId,
+              (index * session.chunkSize + offset) / BLOCK_BYTES,
+              data,
+              reservation,
             );
-            try {
-              const count = Math.min(BLOCK_BYTES, size - offset);
-              const data =
-                index === 0 && offset === 0
-                  ? transfer.first
-                  : await transfer.download.take(count);
-              if (data.length !== count) throw new RelayError('SIZE_MISMATCH');
-              const block = await this.spool.publish(
-                input.operationId,
-                (index * session.chunkSize + offset) / BLOCK_BYTES,
-                data,
-                reservation,
-              );
-              blocks.push(block);
-              transfer.blocks.add(block);
-            } finally {
-              release();
-            }
+            blocks.push(block);
+            transfer.blocks.add(block);
           }
           if (index === session.totalChunks - 1) {
             if ((await transfer.download.take(1)).length)

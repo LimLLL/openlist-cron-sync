@@ -278,6 +278,7 @@ export function mergeJob(
       'filters',
       'allowEmptySource',
       'syncEmptyDirs',
+      'sourceDownloadConcurrency',
       'relayBandwidthLimit',
       'retryCount',
       'timeoutSeconds',
@@ -337,6 +338,8 @@ export function mergeJob(
           'refresh',
           'mode',
           'createMode',
+          'concurrentFiles',
+          'chunkConcurrency',
           'deleteLimits',
         ],
         field,
@@ -368,12 +371,28 @@ export function mergeJob(
           : t.createMode;
       if (createMode !== 'relay' && createMode !== 'server_copy')
         invalid(field + '.createMode');
+      const concurrentFiles = number(
+        t.concurrentFiles === undefined
+          ? (old?.concurrentFiles ?? 2)
+          : t.concurrentFiles,
+        field + '.concurrentFiles',
+      );
+      const chunkConcurrency = number(
+        t.chunkConcurrency === undefined
+          ? (old?.chunkConcurrency ?? 2)
+          : t.chunkConcurrency,
+        field + '.chunkConcurrency',
+        1,
+        8,
+      );
       targets.push({
         ...e.value,
         id: targetId,
         position: targets.length,
         mode,
         createMode,
+        concurrentFiles,
+        chunkConcurrency,
         deleteLimits: limits(t.deleteLimits, old?.deleteLimits),
       });
       targetPasswords[targetId] = e.password;
@@ -413,6 +432,12 @@ export function mergeJob(
         ? (previous?.syncEmptyDirs ?? false)
         : v.syncEmptyDirs,
       'syncEmptyDirs',
+    ),
+    sourceDownloadConcurrency: number(
+      v.sourceDownloadConcurrency === undefined
+        ? (previous?.sourceDownloadConcurrency ?? 2)
+        : v.sourceDownloadConcurrency,
+      'sourceDownloadConcurrency',
     ),
     relayBandwidthLimit: number(
       v.relayBandwidthLimit === undefined

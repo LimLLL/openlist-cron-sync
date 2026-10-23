@@ -16,6 +16,7 @@ import {
   ApiBadRequestResponse,
   ApiBearerAuth,
   ApiConflictResponse,
+  ApiInternalServerErrorResponse,
   ApiOkResponse,
   ApiServiceUnavailableResponse,
   ApiTags,
@@ -136,6 +137,10 @@ export class RunsController {
    */
   @Get('runs/:id')
   @ApiOkResponse({ schema: runDetailSchema })
+  @ApiInternalServerErrorResponse({
+    type: ErrorDto,
+    description: 'RESOURCE_LIMIT：实时聚合超过安全整数；读取不改变Run状态',
+  })
   get(
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
     @Query() _query: EmptyQueryDto,

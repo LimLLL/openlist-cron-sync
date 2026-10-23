@@ -3,7 +3,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { and, asc, eq, gt, inArray, isNotNull, sql } from 'drizzle-orm';
 import { DatabaseService } from '../database/database.service.js';
 import { operations } from '../database/operation-schema.js';
-import type { InstanceRecord } from '../database/schema.js';
+import { runTargets } from '../database/run-schema.js';
 
 /** 等待copy额度的调用。
  * @param 不适用。
@@ -12,7 +12,8 @@ import type { InstanceRecord } from '../database/schema.js';
  */
 interface TaskWaiter {
   /** 尝试Operation ID。 */ id: string;
-  /** 同实例共享限制。 */ instance: InstanceRecord;
+  /** 稳定Target ID。 */ targetId: string;
+  /** 本Run固定的Target文件并发；0表示不限。 */ capacity: number;
   /** 发放额度。 */ resolve: () => void;
   /** 解除中止监听。 */ dispose: () => void;
 }
@@ -36,7 +37,7 @@ export class TaskResources {
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
   ) {}
-  /** 启动开放派发前恢复全部仍承担task责任的名额，允许超过当前容量。
+  /** 启动开放派发前按稳定Target恢复全部仍承担task责任的名额，允许超过当前容量。
    * @param 不适用。
    * @returns 不适用。
    * @throws Error 数据库失败。
@@ -52,9 +53,10 @@ export class TaskResources {
         const rows = this.database.db
           .select({
             id: operations.id,
-            instanceId: operations.targetInstanceId,
+            targetId: runTargets.targetId,
           })
           .from(operations)
+          .innerJoin(runTargets, eq(runTargets.id, operations.runTargetId))
           .where(
             and(
               owned,
@@ -69,29 +71,51 @@ export class TaskResources {
         if (!rows.length) break;
         for (const row of rows) {
           after = row.id;
-          this.hold(row.id, row.instanceId);
+          this.occupied.set(row.id, row.targetId);
         }
       }
     }
   }
-  /** 查询实例当前已占额度，包括恢复及未知tid。
-   * @param instanceId 实例ID。
+  /** 查询Run Target所属稳定Target当前已占额度，包括恢复、旧Run遗留及未知tid。
+   * @param runTargetId Run Target ID。
+   * @returns 已占数量。
+   * @throws Error Run Target不存在。
+   */
+  count(runTargetId: string): number {
+    return this.occupiedBy(this.targetKey(runTargetId));
+  }
+  /** 统计一个稳定Target的已占额度。
+   * @param targetId 稳定Target ID。
    * @returns 已占数量。
    * @throws 不适用。
    */
-  count(instanceId: string): number {
+  private occupiedBy(targetId: string): number {
     let count = 0;
-    for (const id of this.occupied.values()) if (id === instanceId) count++;
+    for (const id of this.occupied.values()) if (id === targetId) count++;
     return count;
+  }
+  /** 把Run Target映射到稳定Target，使旧Run的未知任务继续占用后续Run的额度。
+   * @param runTargetId Run Target ID。
+   * @returns 稳定Target ID。
+   * @throws Error Run Target不存在。
+   */
+  private targetKey(runTargetId: string): string {
+    const row = this.database.db
+      .select({ targetId: runTargets.targetId })
+      .from(runTargets)
+      .where(eq(runTargets.id, runTargetId))
+      .get();
+    if (!row) throw new Error('Task target missing');
+    return row.targetId;
   }
   /** 记录已知远程非终态，不等待新提交容量。
    * @param operationId 原尝试ID。
-   * @param instanceId 固定实例。
+   * @param runTargetId 操作所属Run Target。
    * @returns 不适用。
-   * @throws 不适用。
+   * @throws Error Run Target不存在。
    */
-  hold(operationId: string, instanceId: string): void {
-    this.occupied.set(operationId, instanceId);
+  hold(operationId: string, runTargetId: string): void {
+    this.occupied.set(operationId, this.targetKey(runTargetId));
   }
   /** 幂等释放已结束或放弃跟踪的额度。
    * @param operationId 尝试ID。
@@ -103,18 +127,21 @@ export class TaskResources {
     this.drain();
   }
   /** 在删除旧文件之前取得潜在copy task名额。
-   * @param instance 实例及固定额度。
+   * @param runTargetId 操作所属Run Target。
+   * @param capacity 本Run固定的Target文件并发；0表示不限。
    * @param id 尝试ID。
    * @param signal Run停止。
    * @returns 额度已经预留。
-   * @throws Error 等待被取消。
+   * @throws Error 等待被取消或Run Target不存在。
    */
   async reserve(
-    instance: InstanceRecord,
+    runTargetId: string,
+    capacity: number,
     id: string,
     signal: AbortSignal,
   ): Promise<void> {
     signal.throwIfAborted();
+    const targetId = this.targetKey(runTargetId);
     await new Promise<void>(
       /** 登记可取消的FIFO等待。
        * @param resolve 发放回调。
@@ -123,7 +150,13 @@ export class TaskResources {
        * @throws 不适用。
        */
       (resolve, reject) => {
-        const entry: TaskWaiter = { id, instance, resolve, dispose };
+        const entry: TaskWaiter = {
+          id,
+          targetId,
+          capacity,
+          resolve,
+          dispose,
+        };
         /** 解除监听。
          * @param 不适用。
          * @returns 不适用。
@@ -149,7 +182,7 @@ export class TaskResources {
       },
     );
   }
-  /** 向各实例尚有空间的等待者发放，不占API位等待。
+  /** 向各Target尚有空间的等待者发放，不占API位等待。
    * @param 不适用。
    * @returns 不适用。
    * @throws 不适用。
@@ -158,15 +191,15 @@ export class TaskResources {
     for (let index = 0; index < this.waiting.length;) {
       const entry = this.waiting[index];
       if (
-        entry.instance.maxOutstandingTasks !== 0 &&
-        this.count(entry.instance.id) >= entry.instance.maxOutstandingTasks
+        entry.capacity !== 0 &&
+        this.occupiedBy(entry.targetId) >= entry.capacity
       ) {
         index++;
         continue;
       }
       this.waiting.splice(index, 1);
       entry.dispose();
-      this.hold(entry.id, entry.instance.id);
+      this.occupied.set(entry.id, entry.targetId);
       entry.resolve();
     }
   }

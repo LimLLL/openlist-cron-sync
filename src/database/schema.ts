@@ -68,12 +68,6 @@ export const instances = sqliteTable(
     accountRole: integer('account_role'),
     accountPermissions: integer('account_permissions'),
     maxApiConcurrency: integer('max_api_concurrency').notNull().default(4),
-    maxOutstandingTasks: integer('max_outstanding_tasks').notNull().default(4),
-    maxDownloadConnections: integer('max_download_connections')
-      .notNull()
-      .default(2),
-    maxUploadSessions: integer('max_upload_sessions').notNull().default(2),
-    maxChunkConcurrency: integer('max_chunk_concurrency').notNull().default(4),
     apiRequestsPerSecond: integer('api_requests_per_second')
       .notNull()
       .default(5),
@@ -117,22 +111,6 @@ export const instances = sqliteTable(
     check(
       'instances_api_concurrency',
       sql`${table.maxApiConcurrency} BETWEEN 0 AND 9007199254740991`,
-    ),
-    check(
-      'instances_task_limit',
-      sql`${table.maxOutstandingTasks} BETWEEN 0 AND 9007199254740991`,
-    ),
-    check(
-      'instances_download_limit',
-      sql`${table.maxDownloadConnections} BETWEEN 0 AND 9007199254740991`,
-    ),
-    check(
-      'instances_upload_limit',
-      sql`${table.maxUploadSessions} BETWEEN 0 AND 9007199254740991`,
-    ),
-    check(
-      'instances_chunk_limit',
-      sql`${table.maxChunkConcurrency} BETWEEN 0 AND 9007199254740991`,
     ),
     check(
       'instances_api_rate',

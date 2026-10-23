@@ -17,9 +17,16 @@ import { KeysService } from '../security/keys.service.js';
 import { AppConfig } from '../configuration/app-config.js';
 import { Readiness } from '../coordination/coordination.module.js';
 import { ApiError } from '../common/errors.js';
-import { emptyStats } from '../sync/stats.js';
+import { emptyStats, PlanError } from '../sync/stats.js';
+import { liveRunResult } from '../sync/results.js';
 import { RunDispatcher } from './run-dispatcher.service.js';
-import { runView, targetView, operationView } from './views.js';
+import {
+  currentInstanceNames,
+  instanceLabel,
+  operationViews,
+  runView,
+  targetView,
+} from './views.js';
 import type { RunConfig } from './run-types.js';
 import type {
   TriggerRunDto,
@@ -27,6 +34,14 @@ import type {
   OperationQueryDto,
   PageQueryDto,
 } from './input.dto.js';
+
+/** 详情读取实时SQL聚合的状态；扫描中与终态读取已落库统计。 */
+const LIVE_STATUSES = new Set<RunRecord['status']>([
+  'planned',
+  'executing',
+  'cancelling',
+  'recovering',
+]);
 
 /** Run 入口及查询服务。
  * @param 不适用。
@@ -205,10 +220,53 @@ export class RunsService {
        */
       (a, b) => a.config.target.position - b.config.target.position,
     );
+    const live = LIVE_STATUSES.has(row.status) ? this.liveResult(row) : null;
+    const liveTargets = new Map(
+      live?.targets.map(
+        /** 转为Run Target ID与实时目标的映射条目。
+         * @param target 带实时统计的目标。
+         * @returns 映射条目。
+         * @throws 不适用。
+         */
+        (target) => [target.id, target],
+      ),
+    );
+    const sourceId = row.config.job.source.instanceId;
+    const names = currentInstanceNames(db, [
+      sourceId,
+      ...targets.map(
+        /** 读取目标所在实例。
+         * @param target Run Target 记录。
+         * @returns Instance ID。
+         * @throws 不适用。
+         */
+        (target) => target.config.target.instanceId,
+      ),
+    ]);
     return {
-      ...runView(row),
+      ...runView(live ? { ...row, stats: live.stats } : row),
       config: row.config,
-      targets: targets.map(targetView),
+      sourceInstanceName: instanceLabel(
+        sourceId,
+        row.config.instances[sourceId]?.name,
+        names,
+      ),
+      targets: targets.map(
+        /** 投影目标，活动Run使用实时统计。
+         * @param target Run Target 记录。
+         * @returns RunTargetView。
+         * @throws 不适用。
+         */
+        (target) =>
+          targetView(
+            liveTargets.get(target.id) ?? target,
+            instanceLabel(
+              target.config.target.instanceId,
+              target.config.instance.name,
+              names,
+            ),
+          ),
+      ),
       issueCount:
         db
           .select({ n: count() })
@@ -216,6 +274,24 @@ export class RunsService {
           .where(eq(scanIssues.runId, id))
           .get()?.n ?? 0,
     };
+  }
+  /** 活动Run聚合溢出时返回明确错误，读取不改变运行状态。
+   * @param row 活动Run记录。
+   * @returns 实时统计及目标行。
+   * @throws ApiError RESOURCE_LIMIT；Error 数据库失败。
+   */
+  private liveResult(row: RunRecord) {
+    try {
+      return liveRunResult(this.database.db, row);
+    } catch (error) {
+      if (error instanceof PlanError)
+        throw new ApiError(
+          500,
+          'RESOURCE_LIMIT',
+          'Run statistics exceed the safe integer range',
+        );
+      throw error;
+    }
   }
   /** 分页运行列表。
    * @param query 过滤和分页。
@@ -266,15 +342,17 @@ export class RunsService {
         : isNull(operations.causedByOperationId),
     );
     return {
-      items: db
-        .select()
-        .from(operations)
-        .where(where)
-        .orderBy(asc(operations.seq))
-        .limit(query.pageSize)
-        .offset(offset(query))
-        .all()
-        .map(operationView),
+      items: operationViews(
+        db,
+        db
+          .select()
+          .from(operations)
+          .where(where)
+          .orderBy(asc(operations.seq))
+          .limit(query.pageSize)
+          .offset(offset(query))
+          .all(),
+      ),
       page: query.page,
       pageSize: query.pageSize,
       total:

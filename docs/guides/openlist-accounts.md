@@ -72,7 +72,7 @@ OpenList 会缓存目录列表。任务的 `source.refresh` 和 `targets[].refre
 
 ### 在 Web 控制台中
 
-1. 打开“实例”页，点击“新建实例”，填写名称、地址、认证方式（令牌或密码）和凭据。下载方式与资源配额可以留空使用默认值。保存时不会访问 OpenList。
+1. 打开“实例”页，点击“新建实例”，填写名称、地址、认证方式（令牌或密码）和凭据。下载方式与 API 并发/速率配额可以留空使用默认值；relay/server-copy 传输配额在 Job/Target 中设置。保存时不会访问 OpenList。
 2. 进入实例详情页，点击“测试连接”。成功后页面显示账号、根路径（base_path）、角色、权限位、OpenList 版本和分片上传状态。
 3. 点击“浏览目录”确认能看到要同步的目录；对话框中可以输入路径密码，也可以刷新当前目录。
 
@@ -101,7 +101,7 @@ curl -X POST "$BASE/instances/$INSTANCE_ID/browse" \
 
 - `baseUrl` 必须是 http(s) 地址，可以带反向代理子路径（如 `https://example.com/openlist`），不能含用户名密码、查询参数或片段。
 - `downloadMode` 默认 `d`，relay 从 OpenList 的 `/d` 下载路由读取源文件（可能跳转到存储的直链）；`p` 改走 `/p`，由 OpenList 代理传输，需要 OpenList 允许该存储代理。
-- `limits` 控制本服务对这台 OpenList 的压力，默认值见[配置](../reference/configuration.md)。有未结束的运行引用该实例时，`limits` 和 `downloadMode` 不能修改（409 `ENDPOINT_IN_USE`）。
+- `limits` 只控制本服务对这台 OpenList 管理 API 的并发和速率，默认值见[配置](../reference/configuration.md)。有未结束的运行引用该实例时，`limits` 和 `downloadMode` 不能修改（409 `ENDPOINT_IN_USE`）。传输并发在 Job 的源下载配额及 Target 的文件/分片配额中配置。
 - 浏览结果只返回名称、大小、类型和修改时间，不返回下载签名；名称非法的条目被排除并以 `INVALID_NAME` 警告提示。
 
 ### 读懂连接测试结果

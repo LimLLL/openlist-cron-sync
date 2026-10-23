@@ -131,54 +131,6 @@ export class InstanceLimitsDto {
   @Min(0)
   @Max(Number.MAX_SAFE_INTEGER)
   apiRequestsPerSecond?: number;
-  /** 未完成复制任务数，默认 4，0 表示不限。 */
-  @ApiPropertyOptional({
-    type: 'integer',
-    default: 4,
-    minimum: 0,
-    maximum: Number.MAX_SAFE_INTEGER,
-  })
-  @Optional()
-  @IsInt()
-  @Min(0)
-  @Max(Number.MAX_SAFE_INTEGER)
-  maxOutstandingTasks?: number;
-  /** 下载连接，默认 2，0 表示不限。 */
-  @ApiPropertyOptional({
-    type: 'integer',
-    default: 2,
-    minimum: 0,
-    maximum: Number.MAX_SAFE_INTEGER,
-  })
-  @Optional()
-  @IsInt()
-  @Min(0)
-  @Max(Number.MAX_SAFE_INTEGER)
-  maxDownloadConnections?: number;
-  /** 上传会话，默认 2，0 表示不限。 */
-  @ApiPropertyOptional({
-    type: 'integer',
-    default: 2,
-    minimum: 0,
-    maximum: Number.MAX_SAFE_INTEGER,
-  })
-  @Optional()
-  @IsInt()
-  @Min(0)
-  @Max(Number.MAX_SAFE_INTEGER)
-  maxUploadSessions?: number;
-  /** 分片并发，默认 4，0 表示不限。 */
-  @ApiPropertyOptional({
-    type: 'integer',
-    default: 4,
-    minimum: 0,
-    maximum: Number.MAX_SAFE_INTEGER,
-  })
-  @Optional()
-  @IsInt()
-  @Min(0)
-  @Max(Number.MAX_SAFE_INTEGER)
-  maxChunkConcurrency?: number;
 }
 /** 实例创建输入。
  * @param 不适用。

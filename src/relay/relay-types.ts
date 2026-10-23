@@ -13,10 +13,18 @@ export interface RelayInput extends DownloadInput {
   operationId: string;
   /** Job ID，用于聚合带宽。 */
   jobId: string;
+  /** Job 源文件并发；0表示不限。 */
+  sourceDownloadConcurrency: number;
   /** 上传payload的聚合bytes/s，0不限。 */
   bandwidth: number;
   /** 目标固定身份及当前凭据。 */
   target: InstanceRecord;
+  /** 稳定Job Target ID；不同Target的文件配额独立。 */
+  targetResourceId: string;
+  /** Target 文件并发；0表示不限。 */
+  targetConcurrentFiles: number;
+  /** Target 每文件分片并发。 */
+  targetChunkConcurrency: number;
   /** 目标账号路径与修改时间。 */
   file: UploadFile;
   /** 已派发同步提交（0字节put）的响应收尾期限：停止派发后仍在宽限内等待响应；省略时与signal相同。 */
@@ -30,12 +38,10 @@ export interface PreparedTransfer {
   download: Download;
   /** 首块已成功写盘；重新预留完整chunk前可从此有界缓冲重新发布。 */
   first: Buffer;
-  /** 当前尚未释放的全部块，最多两个在途chunk和一个准备chunk。 */
+  /** 当前尚未释放的块，数量受单文件chunk窗口及spool预算限制。 */
   blocks: Set<Block>;
-  /** 释放源连接、目标session和准入位置。 */
+  /** 幂等释放Job源文件和Target文件配额。 */
   release: () => void;
-  /** 只归还预读准入位置；上传开始后调用，幂等。 */
-  releaseAdmission: () => void;
   /** 首个有效session；收到后必须先落库。 */
   session?: MultipartSnapshot;
   /** 实际交给上传流的字节，含重传。 */

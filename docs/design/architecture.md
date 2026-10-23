@@ -6,28 +6,28 @@
 
 ## 模块边界
 
-| 模块                | 职责                                                                                                                                                                                      | 导入                                                         |
-| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| ConfigModule        | 环境解析、校验、有效默认值                                                                                                                                                                | 无；只用 Node 标准库和已有验证库                             |
-| DatabaseModule      | Drizzle、迁移、事务、仓储                                                                                                                                                                 | Config                                                       |
-| SecurityModule      | 管理员 JWT、scrypt、AES-GCM、实例认证阻断与身份事实持久化、日志脱敏                                                                                                                       | Config、Database                                             |
-| CoordinationModule  | ready 标志与恢复闸门、执行位、全局 FIFO 队列状态、路径占用、隔离路径检查、每 Instance 的 API/task 信号量与请求速率限制、relay 下载连接/上传 session/chunk 名额、每 Job relay token bucket | Config、Database                                             |
-| OpenListModule      | envelope、token、路径、列表、挂载、task HTTP；每个管理 API 请求在客户端内取得该 Instance 的 API 并发位与速率令牌（含浏览、连接测试、登录）                                                | Config、Security、Coordination；Instance 配置由调用者传入    |
-| InstancesModule     | Instance CRUD、连接测试、目录浏览                                                                                                                                                         | Database、Security、OpenList                                 |
-| RelayModule         | 下载/上传 worker、spool、multipart 会话、计数、背压、限速、取消；暴露准备句柄并等待持久化检查点                                                                                           | Config、OpenList、Coordination                               |
-| SyncModule          | 扫描、纯 diff、保护检查、计划、文件协调器、依赖执行与Operation结果                                                                                                                        | Database、OpenList、Relay、Coordination                      |
-| NotificationsModule | 渠道管理、HMAC、有界投递                                                                                                                                                                  | Config、Database、Security                                   |
-| RunsModule          | 接受触发、派发、取消、启动恢复、运行视图、unknown/quarantine 管理                                                                                                                         | Database、Coordination、Sync、OpenList、Notifications        |
-| SchedulingModule    | 注册/注销 cron；触发时调用 Runs 的触发服务                                                                                                                                                | Database、Runs                                               |
-| JobsModule          | 配置校验、过滤、路径重叠检查；启停、归档或修改 cron 时通知 Scheduling                                                                                                                     | Database、Instances、Scheduling                              |
-| MaintenanceModule   | server_copy 远程任务记录清理、历史清理                                                                                                                                                    | Database、OpenList、Coordination                             |
-| SystemModule        | health/info、导入导出                                                                                                                                                                     | Config、Database、Security、Coordination；不直接操作远程文件 |
+| 模块                | 职责                                                                                                                                                                          | 导入                                                         |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| ConfigModule        | 环境解析、校验、有效默认值                                                                                                                                                    | 无；只用 Node 标准库和已有验证库                             |
+| DatabaseModule      | Drizzle、迁移、事务、仓储                                                                                                                                                     | Config                                                       |
+| SecurityModule      | 管理员 JWT、scrypt、AES-GCM、实例认证阻断与身份事实持久化、日志脱敏                                                                                                           | Config、Database                                             |
+| CoordinationModule  | ready 标志与恢复闸门、执行位、全局 FIFO 队列状态、路径占用、隔离路径检查、每 Instance 的 API 信号量与请求速率限制、每 Job/Target 文件及 chunk 名额、每 Job relay token bucket | Config、Database                                             |
+| OpenListModule      | envelope、token、路径、列表、挂载、task HTTP；每个管理 API 请求在客户端内取得该 Instance 的 API 并发位与速率令牌（含浏览、连接测试、登录）                                    | Config、Security、Coordination；Instance 配置由调用者传入    |
+| InstancesModule     | Instance CRUD、连接测试、目录浏览                                                                                                                                             | Database、Security、OpenList                                 |
+| RelayModule         | 源读取、spool、multipart 会话、计数、FIFO 背压、限速、取消；暴露准备句柄并等待持久化检查点                                                                                    | Config、OpenList、Coordination                               |
+| SyncModule          | 扫描、纯 diff、保护检查、计划、文件协调器、依赖执行与Operation结果                                                                                                            | Database、OpenList、Relay、Coordination                      |
+| NotificationsModule | 渠道管理、HMAC、有界投递                                                                                                                                                      | Config、Database、Security                                   |
+| RunsModule          | 接受触发、派发、取消、启动恢复、运行视图、unknown/quarantine 管理                                                                                                             | Database、Coordination、Sync、OpenList、Notifications        |
+| SchedulingModule    | 注册/注销 cron；触发时调用 Runs 的触发服务                                                                                                                                    | Database、Runs                                               |
+| JobsModule          | 配置校验、过滤、路径重叠检查；启停、归档或修改 cron 时通知 Scheduling                                                                                                         | Database、Instances、Scheduling                              |
+| MaintenanceModule   | server_copy 远程任务记录清理、历史清理                                                                                                                                        | Database、OpenList、Coordination                             |
+| SystemModule        | health/info、导入导出                                                                                                                                                         | Config、Database、Security、Coordination；不直接操作远程文件 |
 
 依赖规则：
 
 - 依赖图无环，不使用 forwardRef，也没有 AppModule 级的应用协调器。AppModule 只负责导入各模块。
 - CoordinationModule 是叶子模块，只依赖 Config 和 Database（读取隔离事实）。跨 Job 的 Run、启动恢复和维护任务都从它取得执行位、路径占用和配额，因此共享同一套互斥与限额；health 读取的 ready 标志也由它持有。
-- Instance 的 API 并发位与速率令牌只在 OpenList 客户端内按单个 HTTP 请求取得，调用方传入控制/提交优先级但不自行取位，避免重复占用造成死锁；浏览、连接测试和登录因此与 Run、维护共享同一限额。relay 的下载、chunk 与 complete 等待只占 relay 名额，不占 API 位（init/status/abort 仍是控制请求）；task 位由提交 copy task 的 Sync 取得。
+- Instance 的 API 并发位与速率令牌只在 OpenList 客户端内按单个 HTTP 请求取得，调用方传入控制/提交优先级但不自行取位，避免重复占用造成死锁；浏览、连接测试和登录因此与 Run、维护共享同一限额。relay 的文件读取、chunk 与 complete 等待不占 API 位（init/status/abort 仍是控制请求）；chunk/complete 由 Job/Target 文件配额和 chunkConcurrency 保护。server-copy 文件位由提交 copy task 的 Sync 取得。
 - RunsModule 拥有 Run 的接受、派发、取消和启动恢复。它通过 Database 仓储读取 Job/Instance 配置并固定快照，不导入 Jobs 或 Instances，从而避免 Jobs → Scheduling → Runs → Jobs 的循环。
 - SchedulingModule 只注册 cron，单向调用 Runs 的触发服务；手动触发由 Runs 自己的 controller 接收。
 - Run 终态事务写入 delivery 行，提交后 Runs 调用 Notifications 的投递服务；Notifications 不依赖 Runs。
@@ -98,7 +98,7 @@ SIGTERM（计划内停止）不写任何 Run 终态，完整规则见[优雅停�
 ## 状态和资源归属
 
 SQLite 存自身配置、运行及操作记录，不存跨运行文件索引。目录内容只在当前扫描中短时存在；扫描错误及受保护前缀属于 Run 诊断数据。
-网络配额归 Instance，relay 限速归 Job，path quarantine 归未知 Operation，spool 归当前进程（重启清空）。
+Instance API配额归 Instance，relay/server-copy 文件配额归 Job/Target，relay 限速归 Job，path quarantine 归未知 Operation，spool 归当前进程（重启清空）。
 跨 Job 的 Run 和维护任务都通过 CoordinationModule 取得资源；详情见[调度与恢复](scheduling-recovery.md)。
 
 ## 工程基线

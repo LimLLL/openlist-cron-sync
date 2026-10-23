@@ -54,38 +54,57 @@ describe('M3 execution safety boundaries', () => {
    * @returns 验证完成。
    * @throws Error 断言失败。
    */
-  it('keeps mkdir succeeded but blocks children when new-root refresh fails', async () => {
-    f.files.delete('/target');
-    let created = false;
-    f.fault =
-      /** 在根mkdir之后拒绝列表以验证子动作屏障。
-       * @param call 真实HTTP请求及其捕获头。
-       * @param response 正常响应；stream回调时为测试HTTP响应。
-       * @returns 本故障窗口对应的响应；其它请求保持原响应。
-       * @throws Error 测试协议数据非法。
-       */
-      (call, response) => {
-        if (call.url === '/api/fs/mkdir') created = true;
-        return created &&
-          call.url === '/api/fs/list' &&
-          object(call.json).path === '/target'
-          ? envelope(null, 500)
-          : response;
-      };
-    const result = await run();
-    expect(result.status).toBe('partial');
-    expect(plan(f, result.id)[0].status).toBe('succeeded');
-    expect(
-      f.server.calls.some(
-        /** 识别根确认失败后禁止发生的init。
+  it.each([false, true])(
+    'keeps mkdir succeeded but blocks children when new-root refresh fails (immediate mkdir=%s)',
+    async (immediate) => {
+      f.files.delete('/target');
+      f.files.set('/source/child', null);
+      f.files.set('/source/child/file.txt', Buffer.from('nested'));
+      let created = false;
+      const mkdir = f.client.mkdir.bind(f.client);
+      // 同时覆盖HTTP响应与派发器yield之前已收到成功响应的合法时序。
+      const mkdirCalls = vi
+        .spyOn(f.client, 'mkdir')
+        .mockImplementation(async (instance, path, context) => {
+          if (immediate && path === '/target') {
+            context?.beforeDispatch?.();
+            f.files.set(path, null);
+            created = true;
+            return;
+          }
+          await mkdir(instance, path, context);
+        });
+      f.fault =
+        /** 在根mkdir之后拒绝列表以验证子动作屏障。
          * @param call 真实HTTP请求及其捕获头。
-         * @returns 满足上述请求或操作条件时返回true。
-         * @throws 不适用。
+         * @param response 正常响应；stream回调时为测试HTTP响应。
+         * @returns 本故障窗口对应的响应；其它请求保持原响应。
+         * @throws Error 测试协议数据非法。
          */
-        (call) => call.url.endsWith('/init'),
-      ),
-    ).toBe(false);
-  });
+        (call, response) => {
+          if (call.url === '/api/fs/mkdir') created = true;
+          return created &&
+            call.url === '/api/fs/list' &&
+            object(call.json).path === '/target'
+            ? envelope(null, 500)
+            : response;
+        };
+      const result = await run();
+      expect(result.status).toBe('partial');
+      expect(plan(f, result.id)[0].status).toBe('succeeded');
+      expect(mkdirCalls.mock.calls.map((call) => call[1])).toEqual(['/target']);
+      expect(
+        f.server.calls.some(
+          /** 识别根确认失败后禁止发生的init。
+           * @param call 真实HTTP请求及其捕获头。
+           * @returns 满足上述请求或操作条件时返回true。
+           * @throws 不适用。
+           */
+          (call) => call.url.endsWith('/init'),
+        ),
+      ).toBe(false);
+    },
+  );
   /** 扫描之后目录变非空，不能递归删除后来出现的文件。
    * @param 不适用。
    * @returns 验证完成。

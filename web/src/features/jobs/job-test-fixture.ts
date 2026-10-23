@@ -26,6 +26,8 @@ export function mixedJobFixture(): JobView {
         position: 0,
         mode: 'incremental',
         createMode: 'server_copy',
+        concurrentFiles: 4,
+        chunkConcurrency: 2,
         deleteLimits: { enabled: true, maxCount: 1000, maxPercent: 50 },
       },
       {
@@ -36,6 +38,8 @@ export function mixedJobFixture(): JobView {
         position: 1,
         mode: 'mirror',
         createMode: 'relay',
+        concurrentFiles: 2,
+        chunkConcurrency: 2,
         deleteLimits: { enabled: true, maxCount: 1000, maxPercent: 50 },
       },
     ],
@@ -50,6 +54,7 @@ export function mixedJobFixture(): JobView {
     },
     allowEmptySource: false,
     syncEmptyDirs: false,
+    sourceDownloadConcurrency: 2,
     retryCount: null,
     relayBandwidthLimit: 12,
     timeoutSeconds: 86400,
@@ -87,6 +92,7 @@ export function mixedRunFixture(): RunDetail {
     queueDeadlineAt: job.createdAt,
     cancelRequestedAt: null,
     recoveryDeadlineAt: null,
+    sourceInstanceName: 'Source',
     config: { snapshotVersion: 1, job, instances: {}, settings: {} },
     targets: job.targets.map(
       /** 将历史目标复制为独立的 Run Target 公共值。
@@ -97,6 +103,7 @@ export function mixedRunFixture(): RunDetail {
       (target) => ({
         id: `run-${target.id}`,
         targetId: target.id,
+        instanceName: target.path,
         config: {
           target: structuredClone(target),
           instance: { name: target.path },
