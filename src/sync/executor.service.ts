@@ -30,29 +30,19 @@ type Phase = 'mkdir' | 'create' | 'files' | 'directories';
 const FETCH_SIZE = 32;
 
 /** 阶段内可同时派发的动作数，只取用户配置的配额；0表示不限。
- * 目录删除逐个进行；mkdir与文件删除受目标实例API并发约束；创建受Target文件并发及relay源并发约束。
+ * 目录删除逐个进行；mkdir与文件删除受目标实例API并发约束；创建只受Target文件并发约束。
  * @param target 当前目标。
  * @param phase 当前阶段。
- * @param context 当前Run上下文。
  * @returns 正整数或Infinity。
  * @throws 不适用。
  */
-function phaseCapacity(
-  target: RunTargetRecord,
-  phase: Phase,
-  context: ExecutionContext,
-): number {
+function phaseCapacity(target: RunTargetRecord, phase: Phase): number {
   if (phase === 'directories') return 1;
   const { instance, target: config } = target.config;
   const quotas =
     phase !== 'create'
       ? [instance.limits.maxApiConcurrency]
-      : config.createMode === 'relay'
-        ? [
-            config.concurrentFiles,
-            context.run.config.job.sourceDownloadConcurrency,
-          ]
-        : [config.concurrentFiles];
+      : [config.concurrentFiles];
   return Math.min(
     Infinity,
     ...quotas.filter(
@@ -273,10 +263,11 @@ export class Executor {
         stop,
         /** 按当前阶段执行一个动作并检查新建根的读取屏障。
          * @param op 已认领的pending动作。
+         * @param admitted relay首次源配额与首块空间就绪的通知。
          * @returns 当前动作完成。
          * @throws Error 取消或本地错误。
          */
-        async (op) => {
+        async (op, admitted) => {
           if (
             (phase === 'files' || phase === 'directories') &&
             target.extrasBlocked
@@ -299,7 +290,7 @@ export class Executor {
             store.end(op.id, { status: 'skipped', code: 'DEPENDENCY_FAILED' });
             return;
           }
-          if (phase === 'create') await files.execute(target, op);
+          if (phase === 'create') await files.execute(target, op, admitted);
           else {
             const result = await mutations.execute(target, op);
             if (
@@ -323,6 +314,7 @@ export class Executor {
   /** 在一个阶段内持续补位：任一动作结束即派发下一个，直到没有pending动作。
    * 游标按seq向后翻页并在内存中跳过已认领的逻辑动作，补位开销不随在途数量增长；
    * mkdir结束可能放行seq更早的子目录，因此从头重扫；在途清空后再从头确认没有遗留。
+   * relay每Target最多一个首次源准入未完成的协调器；准入唤醒补派，完成才归还Target容量。
    * @param target 当前目标。
    * @param phase 当前阶段。
    * @param context 观察与停止上下文。
@@ -338,9 +330,11 @@ export class Executor {
     context: ExecutionContext,
     store: OperationStore,
     stop: AbortController,
-    perform: (op: OperationRecord) => Promise<void>,
+    perform: (op: OperationRecord, admitted: () => void) => Promise<void>,
   ): Promise<void> {
-    const capacity = phaseCapacity(target, phase, context);
+    const capacity = phaseCapacity(target, phase);
+    const relay =
+      phase === 'create' && target.config.target.createMode === 'relay';
     // 已认领的逻辑动作（含协调器自行生成的重试行）在真正提交前仍是pending。
     const claimed = new Set<string>();
     const inFlight = new Set<Promise<void>>();
@@ -348,12 +342,13 @@ export class Executor {
     let cursor = -1;
     // 根mkdir会先持久化成功，再异步刷新；依赖SQL尚不能代表根已通过读取屏障。
     let confirmingRoot = false;
+    let awaitingAdmission = false;
     let wake = (): void => undefined;
     try {
       for (;;) {
         context.signal.throwIfAborted();
         const page =
-          !confirmingRoot && inFlight.size < capacity
+          !confirmingRoot && !awaitingAdmission && inFlight.size < capacity
             ? store.pending(
                 target.id,
                 phase,
@@ -369,7 +364,20 @@ export class Executor {
           const isRoot =
             phase === 'mkdir' && op.targetPath === target.config.target.path;
           if (isRoot) confirmingRoot = true;
-          const tracked: Promise<void> = perform(op)
+          if (relay) awaitingAdmission = true;
+          let admitted = false;
+          /** 先改变状态再唤醒；重试或最终收尾不得清掉后续协调器的准入等待。
+           * @param 不适用。
+           * @returns 不适用。
+           * @throws 不适用。
+           */
+          const admission = (): void => {
+            if (admitted) return;
+            admitted = true;
+            if (relay) awaitingAdmission = false;
+            wake();
+          };
+          const tracked: Promise<void> = perform(op, admission)
             .catch(
               /** 记录首个本地错误并停止同Run其余工作。
                * @param error 原始错误。
@@ -390,13 +398,15 @@ export class Executor {
               () => {
                 claimed.delete(root);
                 inFlight.delete(tracked);
+                admission();
                 if (isRoot) confirmingRoot = false;
                 if (phase === 'mkdir') cursor = -1;
                 wake();
               },
             );
           inFlight.add(tracked);
-          if (confirmingRoot || inFlight.size >= capacity) break;
+          if (confirmingRoot || awaitingAdmission || inFlight.size >= capacity)
+            break;
         }
         if (page.length) {
           // 让已启动的动作先推进，避免无限配额下连续读取占住事件循环。

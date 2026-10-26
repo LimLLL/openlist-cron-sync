@@ -136,7 +136,7 @@ curl -X POST http://localhost:3000/api/v1/auth/login \
 
 - `ADMIN_USERNAME` 和 `ADMIN_PASSWORD` 只在首次启动、数据库中还没有管理员时使用；之后以数据库中保存的账号为准。
 - 配置值不合法时，服务拒绝启动并报告是哪个字段，但不会打印该字段的值。
-- Instance 只配置 OpenList 管理 API 并发和每秒请求数。Job 的 `sourceDownloadConcurrency` 控制源端同时读取的 relay 文件数；每个 Target 的 `concurrentFiles` 控制在途文件或 server-copy 任务数，`chunkConcurrency` 控制单文件分片请求数。源下载和同时文件数填 `0` 表示不限；单文件分片并发为 1–8；不同 Job 同时运行时额度相加。server-copy 的 `0` 可能一次提交大量任务并使 OpenList 承压，请谨慎使用。
+- Instance 只配置 OpenList 管理 API 并发和每秒请求数。Job 的 `sourceDownloadConcurrency` 控制所有 Target 共享的下载阶段文件数，验证 EOF 后立即释放，spool 背压及 Range 恢复暂停仍计入；每个 Target 的 `concurrentFiles` 控制从准备到上传、等待 complete 和收尾的文件数或未结束的 server-copy 任务数，`chunkConcurrency` 控制单文件分片请求数。源下载和同时文件数填 `0` 表示不限；单文件分片并发为 1–8；不同 Job 同时运行时额度相加。server-copy 的 `0` 可能一次提交大量任务；relay 的 `0` 可积累大量已下载但尚在等待 complete 的文件，其源位虽已释放，目标会话和请求仍会占用资源。
 - 任务可设置“失败后的重试次数”（0–9），留空时使用 `RETRY_MAX_ATTEMPTS`；运行开始时固定有效次数，退避间隔仍由全局配置决定。
 - 完整说明见[配置参考](docs/reference/configuration.md)。
 

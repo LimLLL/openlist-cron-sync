@@ -48,8 +48,8 @@
 | `filters`                        | 全部文件                  | 见[过滤](#过滤)                                                                               |
 | `syncEmptyDirs`                  | `false`                   | 见[空目录](#空目录)                                                                           |
 | `allowEmptySource`               | `false`                   | 源确认为空时是否仍允许删除，见[阈值](#删除保护与阈值)                                         |
-| `sourceDownloadConcurrency`      | `2`                       | Job 同时读取的 relay 文件数；0 表示不限                                                       |
-| `targets[].concurrentFiles`      | `2`                       | relay 在途文件数或 server-copy 未终态任务数；0 表示不限                                       |
+| `sourceDownloadConcurrency`      | `2`                       | Job 所有 Target 共享的下载中文件数，下载完即释放；0 表示不限                                  |
+| `targets[].concurrentFiles`      | `2`                       | relay 在途文件数（含上传和等待 complete）或 server-copy 未终态任务数；0 表示不限              |
 | `targets[].chunkConcurrency`     | `2`                       | 单个 relay 文件的并行 chunk 请求数；范围 1–8                                                  |
 | `relayBandwidthLimit`            | `0`                       | 本任务所有 relay 目标共用的上传上限（字节/秒），0 表示不限                                    |
 | `retryCount`                     | `null`                    | 失败后的重试次数，0–9；留空继承环境 `RETRY_MAX_ATTEMPTS`，Run 接受时冻结有效尝试数            |

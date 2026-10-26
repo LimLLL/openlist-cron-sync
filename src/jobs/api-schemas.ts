@@ -72,7 +72,7 @@ const targetInputFields = {
     maximum: Number.MAX_SAFE_INTEGER,
     default: 2,
     description:
-      '此 Target 同时处理的文件数：relay 为在途文件，server_copy 为未结束的复制任务；0 不限',
+      '此 Target 同时处理的文件数：relay 包含准备、上传、等待 complete 和收尾，server_copy 为未结束的复制任务；0 不限',
   } as SchemaObject,
   chunkConcurrency: {
     type: 'integer',
@@ -118,7 +118,8 @@ const jobFields = {
     minimum: 0,
     maximum: Number.MAX_SAFE_INTEGER,
     default: 2,
-    description: '同时从源读取的 relay 文件数；0 不限',
+    description:
+      '同 Job 所有 Target 共享的 relay 下载阶段文件数；精确长度与正常 EOF 验证后立即释放，spool 背压和 Range 恢复期间仍占用；0 不限',
   } as SchemaObject,
   retryCount: {
     type: 'integer',

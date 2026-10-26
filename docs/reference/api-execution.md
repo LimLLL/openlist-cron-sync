@@ -57,7 +57,7 @@ operation.resolve只接受status=unknown且无resolution的Operation。对已aba
 
 Operation未知列表用status=unknown&unresolved=true；已resolution但历史unknown仍能用status=unknown查到。不要用状态成功数推算它们已被改写。
 Stats排除caused_by_operation_id非空的维护Operation，含Run尚未终态时的聚合及extras判断。Stats在Run终态固定；后续resolution只改变其独立记录，不改变历史同步统计或重发终态通知。
-GET /runs/:id在planned/executing/cancelling/recovering时用单条SQL聚合每个Target的当前执行统计，规则与终态聚合一致；queued/scanning显示已持久化的规划统计。issueCount读取已提交的scan_issues。下载及上传字节约每5秒持久化，因此长单文件上传中也会增长；不是逐字节更新。聚合超出安全整数返回HTTP 500 RESOURCE_LIMIT，不通过读取改变Run状态。GET /runs列表及触发/取消返回的RunView仍为持久化摘要，详情轮询使用GET /runs/:id。
+GET /runs/:id在planned/executing/cancelling/recovering时用单条SQL聚合每个Target的当前执行统计，规则与终态聚合一致；queued/scanning显示已持久化的规划统计。issueCount读取已提交的scan_issues。下载及上传字节约每5秒持久化，因此长单文件上传中也会增长；不是逐字节更新。payload全部发送完成后刷新最终字节并停止周期写入，complete等待仍保留心跳；源EOF释放配额不等于Operation成功，也不提前持久化上传的EOF检查点。聚合超出安全整数返回HTTP 500 RESOURCE_LIMIT，不通过读取改变Run状态。GET /runs列表及触发/取消返回的RunView仍为持久化摘要，详情轮询使用GET /runs/:id。
 RunDetail.sourceInstanceName、targets[].instanceName以及操作响应的sourceInstanceName/targetInstanceName按冻结名称、当前（含归档）实例名、8字符Instance ID前缀解析；操作没有源端时sourceInstanceName为null。所有原始ID仍返回。操作过滤的“全部”对应省略status/action，不能发送all；翻页参数仍为page/pageSize。
 RunDetail.config只包含当时有效的脱敏值；路径密码和download sign从不展示。
 轮询建议3s，允许客户端退避；MVP没有SSE、WS、按字节实时数据库更新承诺。

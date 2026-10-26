@@ -24,8 +24,8 @@ cron使用直接依赖cron的CronJob，由@nestjs/schedule的SchedulerRegistry�
 1. Run执行位：含扫描及执行，恢复中的Run只保留路径占用，不占新Run执行位。
 2. 路径占用：真实Run的source只读、targets写；dry-run全部endpoint只读；read/read可并行，write/write和write/read的相等/祖先后代关系互斥。
 3. 每Instance API并发和请求速率；其中至少一个API位优先服务认证/轮询/取消，正数配额下控制请求先于新提交；maxApiConcurrency=0时不设实例并发上限。chunk和complete不取API位。
-4. 每Job sourceDownloadConcurrency限制relay源文件读取数；0不设隐藏并发上限。
-5. 每Target concurrentFiles限制relay文件生命周期或server-copy未终态任务数；0不设隐藏并发上限。Target chunkConcurrency另限单文件chunk请求数（1–8）。
+4. 每Job sourceDownloadConcurrency限制所有Target共享的未完成源读取数；源位先于首块spool预留取得，验证精确长度与正常EOF并关闭源后释放。spool背压、Range恢复期间仍占位；0不设隐藏并发上限。
+5. 每Target concurrentFiles限制relay准备、上传、等待complete及收尾的文件数，或server-copy未终态任务数；0不设隐藏并发上限。Target chunkConcurrency另限单文件chunk请求数（1–8）。
 6. Job聚合带宽bucket只影响relay上传。不同Job的文件名额分别计数并相加；spool FIFO和SPOOL_RESERVE_BYTES提供唯一的磁盘背压。
 
 路径比较键同时用于第2层路径占用和跨Job的unknown保护：

@@ -8,28 +8,29 @@ relay 是每个 Target 的默认创建方式（见[创建方式](sync-engine.md#
 
 ## 总体结构
 
-每个文件同时持有 Job 源配额和 Target 文件配额，中间用本地磁盘 spool 解耦读取和上传：
+Job 源配额只覆盖未完成的源读取，Target 文件配额覆盖准备、上传、complete 和收尾；本地磁盘 spool 解耦读取和上传：
 
 ```text
 源 GET 流 ──Job源配额──▶ spool（1 MiB 块）──Target文件配额──▶ multipart chunk ──▶ complete
 ```
 
-- 文件开始前同时取得 Job 源文件配额和 Target 文件配额；Target 配额从准备阶段一直持有到 complete 或本地收尾结束。
+- 文件开始前取得 Job 源配额和 Target 文件配额，再预留首块、打开 GET。精确长度和正常 EOF 验证后立即关闭源 body/Agent、归还源配额；Target 配额一直持有到 complete 或本地收尾结束。
 - 首个 spool 块在打开源 GET 前预留。随后读取块、发布并按 FIFO/frontier 优先级发送；配额为 0 时不设置隐含进程上限。
 - 一个文件的 chunk 请求受 Target 的 chunkConcurrency 限制，complete 仍由同一个 Target 文件配额保护。
 - Sync 的文件协调器连接两端：负责删除依赖和结果落库；Relay 提供准备句柄，并等待 submitting、session 和 EOF 的持久化检查点后才继续网络操作。等待 complete 仍持有 Target 文件配额，但不占 chunkConcurrency 窗口。
 - 每个 (源文件, Target) 独立下载一次；同一文件发往多个 Target 时各自下载，不共享 spool 块。
+- 下载阶段包括首块空间等待、未完成源读取时的替换准备、spool 背压和 Range 恢复。小文件（≤1 MiB）及空文件在 prepare 中已验证 EOF，立即释放源；上传阶段不再探测已关闭的源。内存 EOF 事实与数据库 source_stream_completed_at 分开，后者仍在最后 chunk 或空 PUT 前持久化。
 
 ## 资源
 
-| 资源                          | 默认   | 说明                                                         |
-| ----------------------------- | ------ | ------------------------------------------------------------ |
-| Job sourceDownloadConcurrency | 2      | 同一 Job 从源读取的 relay 文件数；0 不限                     |
-| Target concurrentFiles        | 2      | relay 从准备到完成的文件数；server_copy 未终态任务数；0 不限 |
-| Target chunkConcurrency       | 2      | 每个 relay 文件同时发送的 chunk 请求数，范围 1–8             |
-| SPOOL_RESERVE_BYTES           | 512MiB | SQLite/WAL 保留空间；spool FIFO 背压仍是容量约束             |
+| 资源                          | 默认   | 说明                                                                   |
+| ----------------------------- | ------ | ---------------------------------------------------------------------- |
+| Job sourceDownloadConcurrency | 2      | 同 Job 所有 Target 共享的下载中文件数，EOF 后释放；0 不限              |
+| Target concurrentFiles        | 2      | relay 从准备到 complete 收尾的文件数；server_copy 未终态任务数；0 不限 |
+| Target chunkConcurrency       | 2      | 每个 relay 文件同时发送的 chunk 请求数，范围 1–8                       |
+| SPOOL_RESERVE_BYTES           | 512MiB | SQLite/WAL 保留空间；spool FIFO 背压仍是容量约束                       |
 
-数值的配置键见[配置](../reference/configuration.md)。Job 和 Target 配额按稳定的 Job/Target ID 隔离；不同 Job 同时运行时额度相加。server_copy 的 concurrentFiles=0 会持续提交所有待复制的任务，可能使 OpenList 同时承受大量任务。
+数值的配置键见[配置](../reference/configuration.md)。Job 和 Target 配额按稳定的 Job/Target ID 隔离；不同 Job 同时运行时额度相加。server_copy 的 concurrentFiles=0 会持续提交所有待复制的任务，可能使 OpenList 同时承受大量任务。relay 的 concurrentFiles=0 同样允许大量已下载文件等待 complete；它们已释放源位和已确认的 spool 块，但仍有目标请求、会话和心跳开销。源配额不再限制这种积压，spool 只约束磁盘 payload；需要限制在途总量时使用 Target concurrentFiles。
 init、status、abort 及 list/get/mkdir/remove/copy/task-info 等管理请求走目标 Instance 的 API 并发与速率令牌；chunk 和 complete 绕过该 API 配额。complete 仍受 Target 文件配额及 relay 文件总期限约束，长时间等待不会阻塞同一 Instance 的 list、取消或 status 控制通道。
 
 ## Spool
@@ -45,7 +46,7 @@ init、status、abort 及 list/get/mkdir/remove/copy/task-info 等管理请求�
 1. 以 init 返回的 chunk_size 和剩余文件大小计算 frontier 的实际 payload；为可推进的 session 保留完整 chunk 的进展额度，不把两块 1 MiB 当作足够条件。已发送但未确认的数据仍须保留供重传。
 2. 已开始上传的文件，其下一个缺失块优先于任何预读；上传优先发送最靠近 session frontier 的 chunk。
 3. 尚未开始上传的文件最多预读一个块；spool FIFO/frontier 优先级保证已有上传先消费缺块。
-4. 空间紧张时暂停新的源读取，让已有上传消费并释放块；这是容量背压，不是隐藏的并发上限。
+4. 空间紧张时暂停新的源读取，让已有上传消费并释放块；这是容量背压，不是隐藏的并发上限。源位必须在首块预留之前取得，禁止先持有首块预留再等待源位。
 
 因此 60 GB 文件不需要 60 GB spool：已确认的块持续释放。等待同样受 relay 与 Run 总期限约束。OpenList 侧另有磁盘开销（每 session 最多 8 个 chunk 的接收窗口，部分驱动还会缓存整文件）；与 OpenList 同机部署时一并估算。
 
@@ -58,7 +59,7 @@ init、status、abort 及 list/get/mkdir/remove/copy/task-info 等管理请求�
 5. **记录 session**：收到有效 init 响应后，先持久化 upload_id、state、attempt 与 chunk_size，再发送任何 chunk。chunk i 由块 `[i×k, (i+1)×k)` 拼成，k = chunk_size ÷ 1 MiB。
 6. **发送 chunk**：`PUT /api/fs/multipart/chunk`，带 `X-Upload-Id`、`X-Chunk-Index`，body 精确取自 spool。确认后释放对应块。
 7. **最后一个 chunk**：只有源正常 EOF 且累计字节恰好等于 size 后才发布；先持久化 source_stream_completed_at。源多出任何字节都在最后一个 chunk 发出前发现，按 SIZE_MISMATCH 主动 abort。
-8. **完成**：`POST /api/fs/multipart/complete` 等待驱动结果；返回 completed 即 succeeded。上传 session 名额在结果落库后释放。
+8. **完成**：`POST /api/fs/multipart/complete` 等待驱动结果；返回 completed 即 succeeded。此时源已关闭并释放配额，可下载后续文件；Target 文件名额在结果落库及收尾后释放。首块重新发布到 spool 后清空内存副本，payload 全部发送完成时刷新最终字节并停止周期进度写入；complete 等待仍保留 session 心跳。
 
 ### chunk 重试与心跳
 
@@ -129,7 +130,7 @@ abort 成功或随后 status 404 都不证明驱动已停止：OpenList 取消�
 | chunk 请求            | relay total；低带宽下单个 chunk 本来就可能很久                     |
 | complete 等待         | relay total；OpenList 驱动可能还在向云端上传                       |
 
-等待名额、spool 空间或令牌不算网络无进展，但计入 relay 与 Run 总期限。
+等待名额、spool 空间或令牌不算网络无进展，但计入 relay 与 Run 总期限。取消或源/分片/心跳失败时先停止并等待源读取退出、释放源位，再等待远端 abort、结果观察或 spool 清理；完整文件重试在退避之后重新申请源位，Range 恢复则始终持有原源位。
 
 ## 验收
 

@@ -251,9 +251,13 @@ it('shares source permits within a Job and adds concurrency across Jobs', async 
     });
   const other = await resources.relayFile('job-b', 'b-target', 1, 0, signal);
   expect(admitted).toBe(false);
-  first();
-  (await waiting)();
-  other();
+  first.source();
+  first.target();
+  const next = await waiting;
+  next.source();
+  next.target();
+  other.source();
+  other.target();
 });
 
 /** 父mkdir重试后，早于重试seq的子目录必须再次变为可派发，且重试只有一个owner。

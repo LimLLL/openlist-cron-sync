@@ -1,4 +1,4 @@
-// 连接下载和上传worker；所有远端提交都经过Sync提供的持久化检查点。
+// 连接源读取和上传流水线；源EOF释放读取配额，远端提交仍经过Sync的持久化检查点。
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { OpenListClient } from '../openlist/client.service.js';
 import {
@@ -46,14 +46,17 @@ export class RelayService {
   /** 取得名额并把源首块写盘；失败前没有目标变更。
    * @param input 固定文件尝试。
    * @param progress 源准备失败时保存已发生传输的字节，持久化失败向上传播。
+   * @param admitted 已取得源配额与首块空间时唤醒派发器；不代表文件已完成。
    * @returns 证明源可读的句柄。
    * @throws RelayError 源或spool失败；Error 取消或本地错误。
    */
   async prepare(
     input: RelayInput,
     progress: (downloaded: number, transferred: number) => void,
+    admitted?: () => void,
   ): Promise<PreparedTransfer> {
-    let releaseFile: (() => void) | undefined;
+    let releases: Awaited<ReturnType<RelayResources['relayFile']>> | undefined;
+    let sourceClosed: Promise<void> | undefined;
     const download = new Download(input, this.client);
     const transfer: PreparedTransfer = {
       input,
@@ -63,23 +66,64 @@ export class RelayService {
       transferredBytes: 0,
       sourceComplete: false,
       completing: false,
-      /** 一起归还Job源文件和Target文件配额。
+      /** 停止并等待源读取退出后归还源配额，EOF、失败和dispose共用一次收尾。
+       * @param 不适用。
+       * @returns 源已退出。
+       * @throws Error 源连接清理失败。
+       */
+      closeSource: () => {
+        // close本身也会中止源信号，先移除监听以免幂等Promise建立前重入。
+        download.input.signal.removeEventListener('abort', cancelSource);
+        sourceClosed ??= download.close().finally(
+          /** 即使源清理失败也归还账面名额，本地错误由协调器停止Run。
+           * @param 不适用。
+           * @returns 不适用。
+           * @throws 不适用。
+           */
+          () => {
+            releases?.source();
+          },
+        );
+        return sourceClosed;
+      },
+      /** 文件的远端及本地收尾结束后归还目标配额。
        * @param 不适用。
        * @returns 不适用。
        * @throws 不适用。
        */
-      release: () => {
-        releaseFile?.();
-      },
+      releaseTarget: () => releases?.target(),
+    };
+    /** Run停止或流水线中止源时立即关闭，不等待删除响应、spool写入或目标收尾。
+     * @param 不适用。
+     * @returns 不适用。
+     * @throws 不适用；异步错误保留在sourceClosed，由协调器收尾重新抛出。
+     */
+    const cancelSource = (): void => {
+      void transfer.closeSource().catch(
+        /** 防止事件回调产生未处理拒绝；原Promise仍由dispose等待并向上传播。
+         * @param error 源清理错误。
+         * @returns 不适用。
+         * @throws 不适用。
+         */
+        (error: unknown) =>
+          this.logger.error('Source cleanup failed', {
+            operationId: input.operationId,
+            errorName: error instanceof Error ? error.name : 'Unknown',
+          }),
+      );
     };
     try {
-      releaseFile = await this.resources.relayFile(
+      releases = await this.resources.relayFile(
         input.jobId,
         input.targetResourceId,
         input.sourceDownloadConcurrency,
         input.targetConcurrentFiles,
         input.signal,
       );
+      download.input.signal.addEventListener('abort', cancelSource, {
+        once: true,
+      });
+      if (download.input.signal.aborted) cancelSource();
       const size = Math.min(input.size, BLOCK_BYTES);
       const reservation = await this.spool.reserve(
         size,
@@ -89,6 +133,8 @@ export class RelayService {
       );
       try {
         // 先预留首块再打开GET，等待spool空间时不占住源连接。
+        input.signal.throwIfAborted();
+        admitted?.();
         await download.open();
         transfer.first = await download.take(size || 1);
         if (transfer.first.length !== size)
@@ -102,14 +148,17 @@ export class RelayService {
               reservation,
             ),
           );
-        if (input.size <= BLOCK_BYTES && (await download.take(1)).length)
-          throw new RelayError('SIZE_MISMATCH');
+        if (input.size <= BLOCK_BYTES) {
+          await download.verifyEOF();
+          await transfer.closeSource();
+        }
       } finally {
         this.spool.unreserve(reservation);
       }
       return transfer;
     } catch (error) {
       try {
+        await transfer.closeSource();
         progress(download.downloadedBytes, transfer.transferredBytes);
       } finally {
         await this.dispose(transfer);
@@ -132,6 +181,7 @@ export class RelayService {
     if (input.size === 0) {
       checkpoints.eof();
       transfer.sourceComplete = true;
+      checkpoints.uploaded();
       // 提交闸门仍由submitting检查停止信号；已派发的put在收尾期限内等待响应，以免把已完成写入记为unknown。
       const tasks = await this.multipart.putEmpty(target, file, {
         signal: input.control ?? signal,
@@ -171,6 +221,14 @@ export class RelayService {
     await this.releaseBlocks(transfer, [...transfer.blocks]);
     const stop = new AbortController();
     const workSignal = AbortSignal.any([signal, stop.signal]);
+    /** 分片或心跳失败必须立即打断当前GET/Range等待，保留stop上的首个错误。
+     * @param 不适用。
+     * @returns 不适用。
+     * @throws 不适用。
+     */
+    const stopReading = (): void => transfer.download.cancel(workSignal.reason);
+    workSignal.addEventListener('abort', stopReading, { once: true });
+    if (workSignal.aborted) stopReading();
     const heartbeatStop = new AbortController();
     let failure: unknown;
     const heartbeat = this.heartbeat(
@@ -221,10 +279,11 @@ export class RelayService {
             );
             blocks.push(block);
             transfer.blocks.add(block);
+            if (index === 0 && offset === 0) transfer.first = Buffer.alloc(0);
           }
           if (index === session.totalChunks - 1) {
-            if ((await transfer.download.take(1)).length)
-              throw new RelayError('SIZE_MISMATCH');
+            await transfer.download.verifyEOF();
+            await transfer.closeSource();
             checkpoints.eof();
             transfer.sourceComplete = true;
           }
@@ -273,14 +332,20 @@ export class RelayService {
       }
       await Promise.all(pending);
       if (failure) throw failure;
+      checkpoints.uploaded();
       transfer.completing = true;
       transfer.session = await this.complete(transfer, signal);
       checkpoints.session(transfer.session);
     } catch (error) {
       stop.abort(error);
-      await Promise.all(pending);
+      try {
+        await transfer.closeSource();
+      } finally {
+        await Promise.all(pending);
+      }
       throw failure ?? error;
     } finally {
+      workSignal.removeEventListener('abort', stopReading);
       heartbeatStop.abort();
       await heartbeat;
     }
@@ -405,11 +470,12 @@ export class RelayService {
    */
   async dispose(transfer: PreparedTransfer): Promise<void> {
     try {
-      await transfer.download.close();
+      await transfer.closeSource();
+      transfer.first = Buffer.alloc(0);
       await this.releaseBlocks(transfer, [...transfer.blocks]);
       await this.spool.finish(transfer.input.operationId);
     } finally {
-      transfer.release();
+      transfer.releaseTarget();
     }
   }
   /** 每块删除成功后立即解除责任，后续块失败时收尾不能重复扣减已释放空间。

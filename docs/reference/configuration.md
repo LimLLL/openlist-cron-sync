@@ -85,8 +85,8 @@ SQLite busy_timeout=5000ms、WAL/FULL/foreign_keys、令牌桶单次取用64KiB�
 | allowEmptySource                    | false       | 防止空视图清空目标                                                                                                     |
 | syncEmptyDirs                       | false       | false只建create所需父目录，从不删除目标目录；true同步目录结构，见[空目录](../design/filters-paths.md#空目录)           |
 | targets[].createMode                | relay       | relay/server_copy；server_copy要求该Target与source使用同一Instance ID，见[创建方式](../design/sync-engine.md#创建方式) |
-| sourceDownloadConcurrency           | 2           | 0–安全整数；Job同时从源读取的relay文件数；0不限                                                                        |
-| targets[].concurrentFiles           | 2           | 0–安全整数；relay为该Target在途文件数，server_copy为未终态任务数；0不限                                                |
+| sourceDownloadConcurrency           | 2           | 0–安全整数；Job所有Target共享的下载中文件数，EOF后释放；0不限                                                          |
+| targets[].concurrentFiles           | 2           | 0–安全整数；relay为该Target从准备到complete收尾的文件数，server_copy为未终态任务数；0不限                              |
 | targets[].chunkConcurrency          | 2           | 1–8；单个relay文件的chunk请求数                                                                                        |
 | retryCount                          | null        | null继承RETRY_MAX_ATTEMPTS；0–9表示失败后的重试次数，Run按值+1计算尝试次数                                             |
 | relayBandwidthLimit                 | 0           | 0不限；正数1–安全整数bytes/s，聚合该Job所有relay Target的上传payload                                                   |

@@ -46,12 +46,14 @@ export class FileCoordinator {
   /** 执行一个逻辑create及其有界重试，每次尝试独立留痕。
    * @param target 当前目标。
    * @param initial pending create。
+   * @param admitted 首次源配额和首块空间就绪时通知派发器；重试沿用同一协调器。
    * @returns 当前逻辑动作已收敛。
    * @throws Error 取消或不可恢复本地错误。
    */
   async execute(
     target: RunTargetRecord,
     initial: OperationRecord,
+    admitted?: () => void,
   ): Promise<void> {
     const relayOutcome = new RelayOutcome(this.context, this.relay);
     const copy = new CopyFile(this.context, this.store, this.copies);
@@ -146,6 +148,7 @@ export class FileCoordinator {
              */
             (downloaded, transferred) =>
               this.store.bytes(op.id, downloaded, transferred),
+            admitted,
           );
           const progress = transfer;
           progressTimer = setInterval(
@@ -218,7 +221,8 @@ export class FileCoordinator {
           retryable = result.status === 'failed';
         } else {
           if (!transfer) throw new Error('Relay preparation missing');
-          await this.relay.upload(transfer, {
+          const uploading = transfer;
+          await this.relay.upload(uploading, {
             /** 在实际派发前提交submitting事务并复查停止信号。
              * @param 不适用。
              * @returns 不适用。
@@ -237,12 +241,28 @@ export class FileCoordinator {
              * @throws Error 持久化失败。
              */
             eof: () => this.store.eof(op.id),
+            /** payload已发送完，停止在长complete期间重复写入不变的字节数。
+             * @param 不适用。
+             * @returns 不适用。
+             * @throws Error 进度持久化失败，向上传播停止Run。
+             */
+            uploaded: () => {
+              if (progressTimer) clearInterval(progressTimer);
+              progressTimer = undefined;
+              this.store.bytes(
+                op.id,
+                uploading.download.downloadedBytes,
+                uploading.transferredBytes,
+              );
+            },
           });
           this.store.end(op.id, { status: 'succeeded' });
         }
         if (this.store.get(op.id).status === 'succeeded')
           this.supersede(target, op);
       } catch (error) {
+        // 在远端abort、结果观察和spool清理之前停止源，不能让这些等待占住下载配额。
+        if (transfer) await transfer.closeSource();
         if (persistenceFailure) throw persistenceFailure;
         if (serverCopy && !(error instanceof OpenListError)) throw error;
         if (

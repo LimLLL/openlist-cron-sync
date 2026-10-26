@@ -1,5 +1,6 @@
 // 验证异常收尾释放已取得的spool承诺、连接和Job/Target配额，且不会重复扣减块。
 import { randomUUID } from 'node:crypto';
+import { setImmediate as yieldTurn } from 'node:timers/promises';
 import { AppConfig } from '../src/configuration/app-config.js';
 import { RelayResources } from '../src/coordination/relay-resources.js';
 import { RelayService } from '../src/relay/relay.service.js';
@@ -103,7 +104,10 @@ describe('relay failure cleanup', () => {
       resources.relayFile('job', 'target', 0, 0, signal),
       resources.relayFile('job', 'target', 0, 0, signal),
     ]);
-    for (const release of releases) release();
+    for (const release of releases) {
+      release.source();
+      release.target();
+    }
   });
   /** 在Job/Target permit等待时取消，下一文件仍可使用全部容量。
    * @param 不适用。
@@ -120,7 +124,8 @@ describe('relay failure cleanup', () => {
       stop.abort();
       await expect(preparing).rejects.toThrow();
     } finally {
-      release();
+      release.source();
+      release.target();
     }
     const next = await relay.prepare(
       input(AbortSignal.timeout(1000)),
@@ -207,5 +212,163 @@ describe('relay failure cleanup', () => {
     vi.spyOn(spool, 'available').mockResolvedValue(25);
     const next = await spool.reserve(20, 20, AbortSignal.timeout(1000), true);
     spool.unreserve(next);
+  });
+  /** EOF前取消在不同准备窗口都归还源位，后续文件无需等待目标收尾。
+   * @param stage 取消发生的窗口。
+   * @returns 验证完成。
+   * @throws Error 资源操作或断言失败。
+   */
+  it.each(['spool', 'open', 'read'] as const)(
+    'releases source capacity when cancelled during %s',
+    async (stage) => {
+      const entered = latch();
+      const release = latch();
+      const stop = new AbortController();
+      const resources = f.app.get(RelayResources);
+      if (stage === 'spool') {
+        vi.spyOn(spool, 'available').mockImplementation(async () => {
+          entered.release();
+          return 0;
+        });
+      } else {
+        f.fault = async (call, response) => {
+          if (!call.url.startsWith('/d/')) return response;
+          if (stage === 'open') {
+            entered.release();
+            await release.promise;
+            return response;
+          }
+          return {
+            ...response,
+            stream: async (output) => {
+              output.write(Buffer.from('h'));
+              entered.release();
+            },
+          };
+        };
+      }
+      const preparing = relay.prepare(
+        { ...input(stop.signal), sourceDownloadConcurrency: 1 },
+        progress,
+      );
+      const failed = preparing.catch((error: unknown) => error);
+      try {
+        await entered.promise;
+        stop.abort(new Error('Cancelled preparation'));
+        expect(await failed).toBeInstanceOf(Error);
+        const next = await resources.relayFile(
+          'job',
+          'other',
+          1,
+          0,
+          AbortSignal.timeout(1000),
+        );
+        next.source();
+        next.target();
+      } finally {
+        release.release();
+      }
+    },
+  );
+  /** EOF提前释放与失败收尾都幂等，重复dispose不能释放后一个读者的名额。
+   * @param eof 是否先完成源EOF。
+   * @returns 验证完成。
+   * @throws Error 资源操作或断言失败。
+   */
+  it.each([true, false])(
+    'releases the source exactly once across early close and repeated disposal (EOF=%s)',
+    async (eof) => {
+      const size = eof ? 12 : 2 * 1048576;
+      f.files.set('/source/new.txt', Buffer.alloc(size));
+      const transfer = await relay.prepare(
+        {
+          ...input(AbortSignal.timeout(5000)),
+          size,
+          sourceDownloadConcurrency: 1,
+        },
+        progress,
+      );
+      expect(transfer.download.verifiedEOF).toBe(eof);
+      await transfer.closeSource();
+      const resources = f.app.get(RelayResources);
+      const next = await resources.relayFile(
+        'job',
+        'next',
+        1,
+        0,
+        AbortSignal.timeout(1000),
+      );
+      await transfer.closeSource();
+      await relay.dispose(transfer);
+      await relay.dispose(transfer);
+      let admitted = false;
+      const waiting = resources
+        .relayFile('job', 'third', 1, 0, AbortSignal.timeout(1000))
+        .then((lease) => {
+          admitted = true;
+          return lease;
+        });
+      // 已有源占位时，不能因为旧transfer重复收尾而让第三个读者插入。
+      await yieldTurn();
+      expect(admitted).toBe(false);
+      next.source();
+      next.target();
+      const third = await waiting;
+      third.source();
+      third.target();
+    },
+  );
+  /** 同Job按进入顺序发放源位，释放源不应归还仍在收尾的Target位。
+   * @returns 验证完成。
+   * @throws Error 配额等待或断言失败。
+   */
+  it('shares a FIFO source pool across Targets and keeps their file slots separate', async () => {
+    const resources = f.app.get(RelayResources);
+    const signal = AbortSignal.timeout(2000);
+    const first = await resources.relayFile('job', 'a', 1, 1, signal);
+    const order: string[] = [];
+    const second = resources
+      .relayFile('job', 'b', 1, 1, signal)
+      .then((lease) => {
+        order.push('b');
+        return lease;
+      });
+    const third = resources
+      .relayFile('job', 'c', 1, 1, signal)
+      .then((lease) => {
+        order.push('c');
+        return lease;
+      });
+    const other = await resources.relayFile(
+      'another-job',
+      'other',
+      1,
+      1,
+      signal,
+    );
+    first.source();
+    const b = await second;
+    expect(order).toEqual(['b']);
+    b.source();
+    const c = await third;
+    expect(order).toEqual(['b', 'c']);
+    c.source();
+    let targetFree = false;
+    const sameTarget = resources
+      .relayFile('job', 'a', 1, 1, signal)
+      .then((lease) => {
+        targetFree = true;
+        return lease;
+      });
+    await yieldTurn();
+    expect(targetFree).toBe(false);
+    first.target();
+    const a = await sameTarget;
+    a.source();
+    a.target();
+    b.target();
+    c.target();
+    other.source();
+    other.target();
   });
 });

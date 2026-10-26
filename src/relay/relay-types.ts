@@ -13,7 +13,7 @@ export interface RelayInput extends DownloadInput {
   operationId: string;
   /** Job ID，用于聚合带宽。 */
   jobId: string;
-  /** Job 源文件并发；0表示不限。 */
+  /** Job未完成源读取的文件并发，EOF后释放；暂停的下载仍计入，0表示不限。 */
   sourceDownloadConcurrency: number;
   /** 上传payload的聚合bytes/s，0不限。 */
   bandwidth: number;
@@ -40,8 +40,10 @@ export interface PreparedTransfer {
   first: Buffer;
   /** 当前尚未释放的块，数量受单文件chunk窗口及spool预算限制。 */
   blocks: Set<Block>;
-  /** 幂等释放Job源文件和Target文件配额。 */
-  release: () => void;
+  /** 幂等停止并等待源读取退出，然后归还Job源配额。 */
+  closeSource: () => Promise<void>;
+  /** 幂等归还Target配额，必须在文件收尾后调用。 */
+  releaseTarget: () => void;
   /** 首个有效session；收到后必须先落库。 */
   session?: MultipartSnapshot;
   /** 实际交给上传流的字节，含重传。 */
@@ -59,4 +61,6 @@ export interface RelayCheckpoints {
   session: (snapshot: MultipartSnapshot) => void;
   /** 先保存精确EOF，再开放最后chunk。 */
   eof: () => void;
+  /** 上传payload全部完成后刷新最终字节并停止进度计时；不停止session心跳。 */
+  uploaded: () => void;
 }

@@ -7,6 +7,7 @@ import { terminal, plan } from './m2-fixture.js';
 import { F1Server, latch } from './openlist-fixture.js';
 import { Spool } from '../src/relay/spool.js';
 import { BandwidthBucket, Permits } from '../src/coordination/permits.js';
+import { RelayResources } from '../src/coordination/relay-resources.js';
 
 /** 注册传输资源和HTTP行为测试。
  * @param 不适用。
@@ -94,6 +95,7 @@ describe('M3 streaming resources', () => {
   it.each(['206', '200', '416', 'changed', 'size-changed'] as const)(
     'handles resumed source response %s with If-Range',
     async (mode) => {
+      const reservations = vi.spyOn(f.app.get(RelayResources), 'relayFile');
       const data = Buffer.alloc(2 * 1048576 + 31, 31);
       f.files.set('/source/new.txt', data);
       f.files.set('/target/new.txt', Buffer.from('old'));
@@ -163,6 +165,7 @@ describe('M3 streaming resources', () => {
       );
       if (mode === '206' || mode === '200') {
         expect(result.status).toBe('succeeded');
+        expect(reservations).toHaveBeenCalledTimes(1);
         const actual = f.files.get('/target/new.txt');
         expect(Buffer.isBuffer(actual) && actual.equals(data)).toBe(true);
       } else {

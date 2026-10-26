@@ -69,14 +69,14 @@ export class RelayResources {
       throw error;
     }
   }
-  /** 同时预留一个Job源文件名额与一个Target文件名额，持有到文件结束。
+  /** 预留一个Job源名额与一个Target文件名额，分别在源结束及文件收尾后释放。
    * 所有调用都先取源再取目标，固定获取顺序避免交叉等待死锁。
    * @param jobId Job ID；同Job的全部Target共用源名额。
    * @param targetId 稳定Target ID。
    * @param sourceCapacity Job源下载并发；0表示不限。
    * @param targetCapacity Target文件并发；0表示不限。
    * @param signal 准入停止信号。
-   * @returns 释放全部名额的函数。
+   * @returns 两个独立且幂等的释放函数。
    * @throws Error 取消时撤销所有已取得名额。
    */
   async relayFile(
@@ -85,27 +85,23 @@ export class RelayResources {
     sourceCapacity: number,
     targetCapacity: number,
     signal: AbortSignal,
-  ): Promise<() => void> {
-    const releases: (() => void)[] = [];
+  ): Promise<{ source: () => void; target: () => void }> {
+    const source = await this.acquire(
+      `job:${jobId}:source`,
+      sourceCapacity,
+      signal,
+    );
     try {
-      releases.push(
-        await this.acquire(`job:${jobId}:source`, sourceCapacity, signal),
+      const target = await this.acquire(
+        `target:${targetId}:files`,
+        targetCapacity,
+        signal,
       );
-      releases.push(
-        await this.acquire(`target:${targetId}:files`, targetCapacity, signal),
-      );
+      return { source, target };
     } catch (error) {
-      for (const release of releases.reverse()) release();
+      source();
       throw error;
     }
-    /** 文件退出时归还全部已取得名额。
-     * @param 不适用。
-     * @returns 不适用。
-     * @throws 不适用。
-     */
-    return () => {
-      for (const release of releases) release();
-    };
   }
   /** 取得Job共享上传桶；同Job的所有Target和重传共用。
    * @param jobId Job ID。

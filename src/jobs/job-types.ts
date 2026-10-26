@@ -40,7 +40,7 @@ export interface Target extends Endpoint {
   mode: 'incremental' | 'mirror';
   /** 此目标的文件创建方式；默认 relay。 */
   createMode: 'relay' | 'server_copy';
-  /** 此目标同时处理的文件或远程复制任务数；0 不限。 */
+  /** 此目标从准备到complete及收尾的文件数或未结束复制任务数；0不限。 */
   concurrentFiles: number;
   /** 每个 relay 文件同时发送的分片数。 */
   chunkConcurrency: number;
@@ -69,7 +69,7 @@ export interface Job {
   allowEmptySource: boolean;
   /** 是否同步目录结构。 */
   syncEmptyDirs: boolean;
-  /** 同时从源读取的 relay 文件数；0 不限。 */
+  /** Job所有Target共享的未完成源读取数；EOF释放，暂停仍计入，0不限。 */
   sourceDownloadConcurrency: number;
   /** 此 Job 所有 relay Target 的聚合上传 bytes/s；0 不限。 */
   relayBandwidthLimit: number;

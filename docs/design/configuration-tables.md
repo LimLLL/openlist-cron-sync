@@ -55,7 +55,7 @@ M1 已实现本表，并将 `secret_enc` 登记到生产 ENC 清单；AAD 为 `i
 | source_path                     | STR             | 规范化账号相对绝对形式，如 /照片                            |
 | source_password_enc             | ENC?            | 路径密码                                                    |
 | source_refresh                  | BOOL            | 0                                                           |
-| source_download_concurrency     | INT             | 2；0不限，Job同时从源读取的relay文件数                      |
+| source_download_concurrency     | INT             | 2；0不限，Job各Target共享的下载中文件数，EOF即释放          |
 | cron                            | STR?            | NULL=仅手动；5段，分钟精度                                  |
 | timezone                        | STR             | UTC，IANA名                                                 |
 | include_globs_json              | JSON            | []                                                          |

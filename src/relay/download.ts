@@ -36,6 +36,13 @@ export interface DownloadInput {
  */
 export class Download {
   private readonly agent: Agent;
+  private readonly stop = new AbortController();
+  private closing?: Promise<void>;
+  private reading?: Promise<Buffer>;
+  /** 合并文件期限与源独立停止信号后的输入。 */
+  readonly input: DownloadInput;
+  /** 已验证精确长度和正常EOF；独立于Operation的持久化检查点。 */
+  verifiedEOF = false;
   private readonly logger = new Logger(Download.name);
   private streamError: unknown;
   private body?: Readable;
@@ -54,9 +61,13 @@ export class Download {
    * @throws 不适用。
    */
   constructor(
-    readonly input: DownloadInput,
+    input: DownloadInput,
     private readonly client: OpenListClient,
   ) {
+    this.input = {
+      ...input,
+      signal: AbortSignal.any([input.signal, this.stop.signal]),
+    };
     this.agent = new Agent({
       connectTimeout: input.settings.connectTimeoutMs,
       pipelining: 1,
@@ -326,6 +337,21 @@ export class Download {
    * @throws RelayError 长度/源变化或重试耗尽；Error 取消。
    */
   async take(length: number): Promise<Buffer> {
+    this.input.signal.throwIfAborted();
+    const reading = this.read(length);
+    this.reading = reading;
+    try {
+      return await reading;
+    } finally {
+      this.reading = undefined;
+    }
+  }
+  /** 执行一次读取及其Range恢复；外层take负责登记活动读取供close等待。
+   * @param length 请求字节数。
+   * @returns 本次读取到的数据。
+   * @throws RelayError 读取失败；Error 取消。
+   */
+  private async read(length: number): Promise<Buffer> {
     let reconnect = false;
     for (;;) {
       try {
@@ -352,6 +378,26 @@ export class Download {
       }
     }
   }
+  /** 验证已消费精确大小且源正常结束；已经验证时不再探测已关闭的连接。
+   * @param 不适用。
+   * @returns EOF事实已确认。
+   * @throws RelayError 长度不匹配或读取失败；Error 取消。
+   */
+  async verifyEOF(): Promise<void> {
+    if (this.verifiedEOF) return;
+    if (this.offset !== this.input.size || (await this.take(1)).length)
+      throw new RelayError('SIZE_MISMATCH');
+    this.verifiedEOF = true;
+  }
+  /** 停止源请求和Range退避，不取消目标的独立收尾请求。
+   * @param reason 首个流水线失败或取消原因。
+   * @returns 不适用。
+   * @throws 不适用。
+   */
+  cancel(reason?: unknown): void {
+    this.stop.abort(reason);
+    this.body?.destroy();
+  }
   /** 安全销毁尚未建立迭代器的错误/跳转响应。
    * @param body 需要关闭的响应流。
    * @returns 流已关闭。
@@ -373,8 +419,28 @@ export class Download {
    * @returns 本地连接已退出。
    * @throws Error 连接池销毁失败。
    */
-  async close(): Promise<void> {
-    this.body?.destroy();
-    await this.agent.destroy();
+  close(): Promise<void> {
+    this.closing ??= this.closeReader();
+    return this.closing;
+  }
+  /** 销毁连接池并等待当前读取退出，再丢弃网络缓冲及流引用。
+   * @param 不适用。
+   * @returns 源已停止，调用方可安全归还并发位。
+   * @throws Error 连接池销毁失败。
+   */
+  private async closeReader(): Promise<void> {
+    this.cancel();
+    // 读取的错误仍由原take调用方分类；这里仅等待它退出，避免释放配额后旧读取仍活动。
+    const settled = this.reading
+      ? Promise.allSettled([this.reading])
+      : undefined;
+    try {
+      await this.agent.destroy();
+    } finally {
+      await settled;
+      this.body = undefined;
+      this.iterator = undefined;
+      this.buffered = Buffer.alloc(0);
+    }
   }
 }

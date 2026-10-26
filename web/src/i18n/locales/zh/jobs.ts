@@ -59,12 +59,13 @@ export default {
     refreshHint: '列目录前先让 OpenList 刷新缓存。',
     sourceDownloadConcurrency: '源下载并发',
     sourceDownloadConcurrencyHint:
-      '同时从源读取的中转文件数，本任务所有目标共享；0 表示不限。',
+      '同时处于下载阶段的文件数，本任务所有目标共享；下载完成后立即释放，上传和等待完成不占用。0 表示不限。',
     targets: '目标',
     targetsDesc:
       '每个目标独立选择同步模式、创建方式、并发和删除阈值，最多 32 个。并发按任务分别计算，多个任务同时访问同一存储时会相加。',
     concurrentFiles: '同时文件数',
-    concurrentFilesRelayHint: '同时中转到此目标的文件数；0 表示不限。',
+    concurrentFilesRelayHint:
+      '同时中转到此目标的文件数，包含上传和等待完成；0 表示不限。',
     concurrentFilesCopyHint: '此目标尚未结束的复制任务数；0 表示不限。',
     concurrentFilesCopyUnlimited:
       '不限会一次提交所有待复制的任务，可能让 OpenList 不堪重负。',

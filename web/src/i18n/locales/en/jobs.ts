@@ -58,13 +58,13 @@ export default {
     refreshHint: 'Ask OpenList to refresh its cache before listing.',
     sourceDownloadConcurrency: 'Source download concurrency',
     sourceDownloadConcurrencyHint:
-      'Relay files read from the source at once, shared by all targets; 0 = unlimited.',
+      'Files in the download phase at once, shared by all targets. A slot is released as soon as its download finishes; uploading and waiting for completion do not count. 0 = unlimited.',
     targets: 'Targets',
     targetsDesc:
       'Every target chooses its sync mode, create mode, concurrency and delete limits. Up to 32 targets. Concurrency is counted per job, so jobs running at the same time against the same storage add up.',
     concurrentFiles: 'Concurrent files',
     concurrentFilesRelayHint:
-      'Files relayed to this target at once; 0 = unlimited.',
+      'Files relayed to this target at once, including uploading and waiting for completion; 0 = unlimited.',
     concurrentFilesCopyHint:
       'Outstanding copy tasks for this target; 0 = unlimited.',
     concurrentFilesCopyUnlimited:
