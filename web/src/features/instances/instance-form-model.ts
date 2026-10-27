@@ -1,27 +1,18 @@
 // 校验实例编辑值并生成最小补丁，避免认证模式修改被静默忽略。
-import type {
-  Instance,
-  InstanceInput,
-  InstanceLimits,
-} from './instance-contract';
+import type { Instance, InstanceInput } from './instance-contract';
 import type en from '../../i18n/locales/en/instances';
-import { LIMIT_FIELDS } from './instance-display';
 
 /** instances 命名空间 validation 下的文案键。 */
 export type InstanceValidationKey = keyof (typeof en)['validation'];
 
 /** 本地校验错误；message 为文案键，由表单按当前语言翻译。 */
 export class InstanceFormError extends Error {
-  /** 创建带文案键与插值参数的校验错误。
+  /** 创建带文案键的校验错误。
    * @param key validation 文案键。
-   * @param limit 配额非法时的字段。
    * @returns 不适用。
    * @throws 不适用。
    */
-  constructor(
-    readonly key: InstanceValidationKey,
-    readonly limit?: { field: keyof InstanceLimits },
-  ) {
+  constructor(readonly key: InstanceValidationKey) {
     super(key);
     this.name = 'InstanceFormError';
   }
@@ -41,8 +32,6 @@ export interface InstanceFormValues {
   secret: string;
   /** 下载方式。 */
   downloadMode: 'd' | 'p';
-  /** 已填写的配额。 */
-  limits: Partial<InstanceLimits>;
 }
 
 /** 校验本地约束并构建创建请求或最小更新补丁。
@@ -102,16 +91,6 @@ export function buildInstanceInput(
       secret: values.secret,
       ...(values.authMode === 'password' ? { username: values.username } : {}),
     };
-  const limits: Partial<InstanceLimits> = {};
-  for (const { key, defaultValue } of LIMIT_FIELDS) {
-    // 编辑时清空表示恢复默认值；新建时留空交给后端默认值。
-    const value = values.limits[key] ?? (existing ? defaultValue : undefined);
-    if (value === undefined) continue;
-    if (!Number.isSafeInteger(value) || value < 0)
-      throw new InstanceFormError('limit', { field: key });
-    if (!existing || value !== existing.limits[key]) limits[key] = value;
-  }
-  if (Object.keys(limits).length) body.limits = limits;
   if (!Object.keys(body).length) throw new InstanceFormError('noChanges');
   return body;
 }

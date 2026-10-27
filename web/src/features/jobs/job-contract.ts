@@ -54,8 +54,10 @@ export interface Target extends Endpoint {
   mode: 'incremental' | 'mirror';
   /** 此目标的文件创建方式。 */
   createMode: 'relay' | 'server_copy';
-  /** 同时处理的文件数：中转为在途文件，服务端复制为未结束的复制任务；0 不限。 */
+  /** 同时处理的文件数：中转为在途文件，服务端复制为未结束的复制任务；也控制建目录与删除多余文件；0 不限。 */
   concurrentFiles: number;
+  /** 目标列目录、建目录与删除请求的最小开始间隔，整数秒 0–3600；0 不间隔。 */
+  scanIntervalSeconds: number;
   /** 每个中转文件同时发送的分片数，1–8。 */
   chunkConcurrency: number;
   /** 删除阈值。 */
@@ -86,6 +88,8 @@ export interface JobView {
   syncEmptyDirs: boolean;
   /** 同时从源读取的中转文件数，所有目标共享；0 不限。 */
   sourceDownloadConcurrency: number;
+  /** 源列目录请求的最小开始间隔，整数秒 0–3600；0 不间隔。 */
+  sourceScanIntervalSeconds: number;
   /** 失败后的重试次数；null 表示继承进程默认值。 */
   retryCount: number | null;
   /** 此 Job 所有 relay Target 的聚合上传 bytes/s。 */
@@ -216,6 +220,10 @@ export function parseTarget(value: unknown, index: number): Target {
       value.concurrentFiles,
       `targets[${index}].concurrentFiles`,
     ),
+    scanIntervalSeconds: expectNumber(
+      value.scanIntervalSeconds,
+      `targets[${index}].scanIntervalSeconds`,
+    ),
     chunkConcurrency: expectNumber(
       value.chunkConcurrency,
       `targets[${index}].chunkConcurrency`,
@@ -248,6 +256,10 @@ export function parseJob(value: unknown): JobView {
     sourceDownloadConcurrency: expectNumber(
       value.sourceDownloadConcurrency,
       'sourceDownloadConcurrency',
+    ),
+    sourceScanIntervalSeconds: expectNumber(
+      value.sourceScanIntervalSeconds,
+      'sourceScanIntervalSeconds',
     ),
     retryCount: nullableNumber(value.retryCount, 'retryCount'),
     relayBandwidthLimit: expectNumber(

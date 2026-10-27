@@ -305,7 +305,6 @@ export async function componentFixture(
       mode === 'token'
         ? { mode, secret: 'static-token' }
         : { mode, username: 'admin', secret: 'openlist-password' },
-    limits: { apiRequestsPerSecond: 100, maxApiConcurrency: 8 },
   });
   const fixture: ComponentFixture = {
     directory,

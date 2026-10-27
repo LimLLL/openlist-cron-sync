@@ -39,9 +39,6 @@ export default {
       authHint: '凭据加密保存，之后不会再明文显示。',
       transfer: '传输',
       transferHint: '中转复制时，如何从这台服务器读取文件内容。',
-      limits: 'API 配额',
-      limitsHint:
-        '限制本控制台调用这台服务器管理接口（列目录、建目录、删除、提交复制等）的并发与频率。留空即使用默认值；传输并发在任务中按源和目标分别设置。',
     },
     name: '名称',
     namePlaceholder: '我的 OpenList 服务器',
@@ -62,13 +59,8 @@ export default {
     downloadDirectHint: '使用下载接口（d），对大多数存储最快。',
     downloadProxy: '代理流式',
     downloadProxyHint: '经由 OpenList 代理传输（p），直链不可用时使用。',
-    limitHint: '默认 {{value}} · 0 表示不限',
     save: '保存修改',
     create: '创建实例',
-  },
-  limits: {
-    maxApiConcurrency: 'API 并发数',
-    apiRequestsPerSecond: '每秒 API 请求数',
   },
   validation: {
     name: '名称需为 1–100 个字符。',
@@ -76,7 +68,6 @@ export default {
     urlParts: '请使用不含凭据、查询参数或片段的 HTTP(S) 地址。',
     authChange: '修改认证时，需要填写该方式下完整的用户名和凭据。',
     secretFormat: '请输入未遮挡的凭据；令牌只能包含可见的 ASCII 字符。',
-    limit: '{{field}}必须是不小于 0 的整数。',
     noChanges: '没有需要保存的修改。',
     invalid: '实例配置无效。',
   },
@@ -100,10 +91,9 @@ export default {
     enabled: '已开启',
     disabled: '未开启',
     unknown: '未知',
-    limits: '配额与传输',
-    limitsHint:
-      '管理接口的并发与频率上限，以及读取文件的方式。传输并发在任务中设置。',
-    unlimited: '不限',
+    transfer: '传输',
+    transferHint:
+      '中转复制时读取文件的方式，以及是否支持分片上传。对这台服务器的请求压力由任务里的并发与扫描间隔控制。',
     downloadMode: '下载方式',
     timeline: '时间线',
     timelineHint: '配置与验证的历史。',

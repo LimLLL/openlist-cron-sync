@@ -148,7 +148,7 @@ describe('M1 protocol boundaries' /** 注册本组 M1 行为验收用例。
    * @returns undefined，使用默认上游响应。
    * @throws 不适用。
    */, async () => {
-    fixture = await componentFixture();
+    fixture = await componentFixture('password', { RETRY_MAX_MS: '1000' });
     let reads = 0;
     const times: number[] = [];
     fixture.server.responder =

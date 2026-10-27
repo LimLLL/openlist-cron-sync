@@ -32,7 +32,7 @@
 | MAX_QUEUED_RUNS                | 100            | 1–10000；防止无界内存/DB积压                                                                                |
 | QUEUE_TIMEOUT_SECONDS          | 3600           | 60–86400；过期工作不长期排队                                                                                |
 | OPENLIST_CONNECT_TIMEOUT_MS    | 10000          | 1000–120000                                                                                                 |
-| OPENLIST_API_TIMEOUT_MS        | 30000          | 1000–300000；控制请求超时，不用于chunk请求与complete等待                                                    |
+| OPENLIST_API_TIMEOUT_MS        | 30000          | 1000–300000；普通请求单次期限，含建连、协议协商与响应；等待规则见下文；不用于chunk/complete                 |
 | OPENLIST_TASK_POLL_MS          | 3000           | 500–60000；请求均匀加±20%抖动                                                                               |
 | RETRY_MAX_ATTEMPTS             | 3              | 1–10，含首次；未设置Job重试次数时使用，不含OpenList内部重试                                                 |
 | RETRY_BASE_MS                  | 1000           | 100–60000                                                                                                   |
@@ -59,18 +59,16 @@
 | PLAN_BATCH_SIZE                | 500            | 1–5000；短事务与吞吐折中                                                                                    |
 
 扫描/规划期的资源上限（SCAN_MAX_DIRECTORY_ENTRIES、扫描列表响应的OPENLIST_MAX_JSON_BYTES、MAX_OPERATIONS_PER_RUN、MAX_SCAN_ISSUES_PER_RUN）超限时Run failed（RESOURCE_LIMIT），不执行任何计划动作。SCAN_MAX_DEPTH例外：只保护超深子树，因此该Target（源侧超深时为所有Target）的删除禁止，其他create继续。执行期refresh读取超限只阻断相关动作。
-退避：delay=min(RETRY_MAX_MS, RETRY_BASE_MS×2^(attempt-1)×U[0.5,1.5])，attempt为刚失败的尝试序号（从1起），因此RETRY_MAX_MS是含抖动的真实上限；最终截到剩余deadline。Retry-After若有效且更长使用它，超出deadline则失败，不提前撞限流。
+退避：delay=min(RETRY_MAX_MS, RETRY_BASE_MS×2^(attempt-1)×U[0.5,1.5])，attempt为刚失败的尝试序号（从1起），因此RETRY_MAX_MS是含抖动的真实上限。读取最多尝试RETRY_MAX_ATTEMPTS次，每次尝试各自使用完整的OPENLIST_API_TIMEOUT_MS；实例API配额队列已删除；扫描间隔仍按storage分组FIFO排队，间隔等待、登录等待和退避都不计入请求期限，连接与协议协商计入。Retry-After若有效且更长使用它；超过RETRY_MAX_MS或调用方期限先到时直接返回最后错误，不缩短等待、不提前撞限流。
 OpenList task info轮询：单次info请求的网络错误、5xx、JSON500按RETRY_*重试；重试耗尽不改变Operation状态，继续按OPENLIST_TASK_POLL_MS轮询，直到Run的deadlineAt（随后进入取消流程，CANCEL_GRACE_SECONDS后仍无终态则unknown），恢复期间则到recoveryDeadlineAt。task not found（JSON404）立即unknown。MVP不设单独的info失败次数上限。
 内部远程维护启动后30s、此后每小时，历史UTC03:00；共用串行runner。候选每页100个Run，引用及子记录每批256条并在提交后yield；小时周期不保证一小时内处理完每行。测试delivery（run_id为NULL）保留30天，Run关联的delivery随所属Run按RUN_RETENTION_DAYS清理。这些作为实现常量集中声明，MVP不增加额外运行时开关。
 SQLite busy_timeout=5000ms、WAL/FULL/foreign_keys、令牌桶单次取用64KiB、spool块1MiB、session status心跳60s、redirect上限5为固定基线；每个Target的chunkConcurrency控制单文件chunk窗口（1–8），变更需更新设计与测试。
 
 ## Instance默认值
 
-| API字段                     | 默认 | 范围/理由                           |
-| --------------------------- | ---- | ----------------------------------- |
-| limits.maxApiConcurrency    | 4    | 0–安全整数；0不限，限制管理请求并发 |
-| limits.apiRequestsPerSecond | 5    | 0–安全整数；0不限，正数按间隔限速   |
-| downloadMode                | d    | d/p；p须OpenList允许                |
+| API字段      | 默认 | 范围/理由            |
+| ------------ | ---- | -------------------- |
+| downloadMode | d    | d/p；p须OpenList允许 |
 
 ## Job与Target默认值
 
@@ -86,7 +84,9 @@ SQLite busy_timeout=5000ms、WAL/FULL/foreign_keys、令牌桶单次取用64KiB�
 | syncEmptyDirs                       | false       | false只建create所需父目录，从不删除目标目录；true同步目录结构，见[空目录](../design/filters-paths.md#空目录)           |
 | targets[].createMode                | relay       | relay/server_copy；server_copy要求该Target与source使用同一Instance ID，见[创建方式](../design/sync-engine.md#创建方式) |
 | sourceDownloadConcurrency           | 2           | 0–安全整数；Job所有Target共享的下载中文件数，EOF后释放；0不限                                                          |
-| targets[].concurrentFiles           | 2           | 0–安全整数；relay为该Target从准备到complete收尾的文件数，server_copy为未终态任务数；0不限                              |
+| targets[].concurrentFiles           | 2           | 0–安全整数；relay为该Target从准备到complete收尾的文件数，server_copy为未终态任务数；同时约束mkdir与文件extras；0不限   |
+| sourceScanIntervalSeconds           | 0           | 0–3600整数秒；相邻两次源列目录请求开始的最小间隔，0不间隔，见[扫描间隔](../design/scheduling-recovery.md#扫描间隔)     |
+| targets[].scanIntervalSeconds       | 0           | 0–3600整数秒；该Target列目录、mkdir、remove请求开始的最小间隔，0不间隔                                                 |
 | targets[].chunkConcurrency          | 2           | 1–8；单个relay文件的chunk请求数                                                                                        |
 | retryCount                          | null        | null继承RETRY_MAX_ATTEMPTS；0–9表示失败后的重试次数，Run按值+1计算尝试次数                                             |
 | relayBandwidthLimit                 | 0           | 0不限；正数1–安全整数bytes/s，聚合该Job所有relay Target的上传payload                                                   |

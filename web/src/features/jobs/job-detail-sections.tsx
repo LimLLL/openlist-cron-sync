@@ -1,4 +1,5 @@
 // 任务详情的编辑式分节：定时、目标与删除阈值、过滤规则、高级设置、时间线。
+import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
 import { EditorialSection } from '../../components/ui/editorial-section';
 import { Badge } from '../../components/ui/badge';
@@ -13,6 +14,18 @@ import {
 import { useNextFireTimes } from './job-queries';
 import { MonoChip, useInstanceName } from './job-ui';
 import type { JobView } from './job-contract';
+
+/** 扫描间隔的展示值，0 显示为“不间隔”。
+ * @param t 绑定 jobs 命名空间的翻译函数。
+ * @param seconds 间隔秒数。
+ * @returns 展示文本。
+ * @throws 不适用。
+ */
+function scanInterval(t: TFunction<'jobs'>, seconds: number): string {
+  return seconds === 0
+    ? t('detail.scanIntervalNone')
+    : t('detail.scanIntervalValue', { value: seconds });
+}
 
 /** 渲染定时分节：Cron、时区、状态与下次触发时间。
  * @param props job 任务；index 分节编号。
@@ -166,6 +179,11 @@ export function TargetsSection({
                     ]
                   : []),
                 {
+                  label: t('detail.scanInterval'),
+                  value: scanInterval(t, target.scanIntervalSeconds),
+                  mono: target.scanIntervalSeconds !== 0,
+                },
+                {
                   label: t('detail.deleteLimits'),
                   value: target.deleteLimits.enabled
                     ? t('detail.limitsEnabled')
@@ -315,6 +333,11 @@ export function AdvancedSection({
                 ? t('detail.unlimited')
                 : String(job.sourceDownloadConcurrency),
             mono: job.sourceDownloadConcurrency !== 0,
+          },
+          {
+            label: t('detail.sourceScanInterval'),
+            value: scanInterval(t, job.sourceScanIntervalSeconds),
+            mono: job.sourceScanIntervalSeconds !== 0,
           },
           {
             label: t('detail.bandwidth'),

@@ -26,12 +26,12 @@ describe('M2 instance responsibility', () => {
       if (f) await f.close();
     },
   );
-  /** 存在非终态 Run 时拒绝修改实例身份与限制，但允许改名和修复凭据。
+  /** 存在非终态 Run 时拒绝修改实例身份与下载模式，但允许改名和修复凭据。
    * @param 不适用。
    * @returns 完成 Promise。
    * @throws Error 断言或夹具失败。
    */
-  it('blocks identity and limits changes for nonterminal Runs but permits names and credential repair', async () => {
+  it('blocks identity and download mode changes for nonterminal Runs but permits names and credential repair', async () => {
     f = await m2Fixture();
     const release = latch();
     const entered = latch();
@@ -61,14 +61,6 @@ describe('M2 instance responsibility', () => {
        * @throws Error 预期的 Instance has outstanding responsibility。
        */
       () => service.patch(f.id, { baseUrl: f.server.baseUrl + '/changed' }),
-    ).toThrow('Instance has outstanding responsibility');
-    expect(
-      /** 修改实例 API 并发限制。
-       * @param 不适用。
-       * @returns 不适用。
-       * @throws Error 预期的 Instance has outstanding responsibility。
-       */
-      () => service.patch(f.id, { limits: { maxApiConcurrency: 1 } }),
     ).toThrow('Instance has outstanding responsibility');
     expect(
       /** 修改实例下载模式。

@@ -1,4 +1,4 @@
-// 实例创建/编辑表单：按标识、认证、传输、配额四个编辑式分节组织，表单 id 允许顶栏按钮提交。
+// 实例创建/编辑表单：按标识、认证、传输三个编辑式分节组织，表单 id 允许顶栏按钮提交。
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { LoaderCircle, Save } from 'lucide-react';
@@ -10,12 +10,7 @@ import { Segmented } from '../../components/ui/segmented';
 import { EditorialSection } from '../../components/ui/editorial-section';
 import { ErrorState } from '../../components/states';
 import { buildInstanceInput, InstanceFormError } from './instance-form-model';
-import { LIMIT_FIELDS } from './instance-display';
-import type {
-  Instance,
-  InstanceInput,
-  InstanceLimits,
-} from './instance-contract';
+import type { Instance, InstanceInput } from './instance-contract';
 
 /** 表单属性。 */
 interface InstanceFormProps {
@@ -62,10 +57,6 @@ export function InstanceForm({
   const [downloadMode, setDownloadMode] = useState<'d' | 'p'>(
     instance?.downloadMode ?? 'd',
   );
-  const [limits, setLimits] = useState<Partial<InstanceLimits>>({
-    maxApiConcurrency: instance?.limits.maxApiConcurrency,
-    apiRequestsPerSecond: instance?.limits.apiRequestsPerSecond,
-  });
 
   /** 构建请求体并提交。
    * @param event 表单事件。
@@ -77,7 +68,7 @@ export function InstanceForm({
     if (pending) return;
     try {
       const body = buildInstanceInput(
-        { name, baseUrl, authMode, username, secret, downloadMode, limits },
+        { name, baseUrl, authMode, username, secret, downloadMode },
         instance,
       );
       setValidationError(null);
@@ -96,24 +87,7 @@ export function InstanceForm({
    */
   function localize(failure: Error): Error {
     if (!(failure instanceof InstanceFormError)) return failure;
-    if (failure.key === 'limit' && failure.limit)
-      return new Error(
-        t('validation.limit', { field: t(`limits.${failure.limit.field}`) }),
-      );
-    return failure.key === 'limit'
-      ? new Error(t('validation.invalid'))
-      : new Error(t(`validation.${failure.key}`));
-  }
-
-  /** 更新单个配额字段；空字符串表示使用默认值。
-   * @param key 配额字段名。
-   * @param value 输入框原始值。
-   * @returns 不适用。
-   * @throws 不适用。
-   */
-  function setLimit(key: keyof InstanceLimits, value: string) {
-    const parsed = value === '' ? undefined : Number(value);
-    setLimits((prev) => ({ ...prev, [key]: parsed }));
+    return new Error(t(`validation.${failure.key}`));
   }
 
   return (
@@ -222,29 +196,6 @@ export function InstanceForm({
               ? t('form.downloadDirectHint')
               : t('form.downloadProxyHint')}
           </p>
-        </div>
-      </EditorialSection>
-
-      <EditorialSection
-        index="04"
-        title={t('form.sections.limits')}
-        description={t('form.sections.limitsHint')}
-      >
-        <div className="grid gap-x-6 gap-y-5 sm:grid-cols-2">
-          {LIMIT_FIELDS.map((field) => (
-            <InputField
-              key={field.key}
-              id={`${formId}-limit-${field.key}`}
-              label={t(`limits.${field.key}`)}
-              type="number"
-              inputMode="numeric"
-              min={0}
-              value={limits[field.key] ?? ''}
-              onChange={(e) => setLimit(field.key, e.target.value)}
-              placeholder={String(field.defaultValue)}
-              hint={t('form.limitHint', { value: field.defaultValue })}
-            />
-          ))}
         </div>
       </EditorialSection>
 

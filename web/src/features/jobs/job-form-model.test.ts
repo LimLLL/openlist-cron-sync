@@ -22,6 +22,7 @@ function fixture(): JobFormValues {
     sourcePassword: '',
     sourceRefresh: false,
     sourceDownloadConcurrency: '2',
+    sourceScanIntervalSeconds: '0',
     targets: [
       {
         ...emptyTarget(),
@@ -151,6 +152,24 @@ describe('job form payload', () => {
     expect(() => buildJobInput(values)).toThrow('Chunks per file');
     values.targets[1].chunkConcurrency = '9';
     expect(() => buildJobInput(values)).toThrow('Chunks per file');
+  });
+  it('round-trips scan intervals and enforces whole seconds from 0 to 3600', () => {
+    const values = fixture();
+    values.targets = targetsFromJob(mixedJobFixture());
+    expect(emptyTarget().scanIntervalSeconds).toBe('0');
+    values.sourceScanIntervalSeconds = '3600';
+    const body = buildJobInput(values);
+    expect(body.sourceScanIntervalSeconds).toBe(3600);
+    expect(body.targets.map((target) => target.scanIntervalSeconds)).toEqual([
+      0, 3,
+    ]);
+    for (const value of ['3601', '-1', '1.5', '']) {
+      values.sourceScanIntervalSeconds = value;
+      expect(() => buildJobInput(values)).toThrow('Source scan interval');
+    }
+    values.sourceScanIntervalSeconds = '0';
+    values.targets[1].scanIntervalSeconds = '3601';
+    expect(() => buildJobInput(values)).toThrow('Target scan interval');
   });
   it('writes a browsed path and password back to the chosen endpoint only', () => {
     const values = fixture();

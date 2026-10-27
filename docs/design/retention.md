@@ -7,7 +7,7 @@
 ## 维护调度
 
 进程启动完成后30秒执行一次维护周期，此后每小时一次；每天UTC03:00另外执行本地历史清理。不补跑错过的维护时刻。
-每小时周期只处理server_copy遗留的远程任务记录：清理已持久化终态的task（[远程任务清理](openlist-integration.md#任务跟踪)），以及轮询REMOTE_TASK_CHANGED。维护请求由OpenList客户端取得共享API配额；维护器不重复取位。
+每小时周期只处理server_copy遗留的远程任务记录：清理已持久化终态的task（[远程任务清理](openlist-integration.md#任务跟踪)），以及轮询REMOTE_TASK_CHANGED。维护请求直接发出，不受扫描间隔约束。
 维护器不删除、不移动目标上的任何文件；删除产生的删除只发生在Run中。
 
 ## SQLite历史

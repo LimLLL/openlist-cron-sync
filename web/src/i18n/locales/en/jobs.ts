@@ -59,16 +59,24 @@ export default {
     sourceDownloadConcurrency: 'Source download concurrency',
     sourceDownloadConcurrencyHint:
       'Files in the download phase at once, shared by all targets. A slot is released as soon as its download finishes; uploading and waiting for completion do not count. 0 = unlimited.',
+    sourceScanInterval: 'Source scan interval (seconds)',
+    sourceScanIntervalHint:
+      'Minimum time between the starts of two source directory listings, 0–3600 seconds, to stay clear of cloud-drive rate controls. On the same instance, sources and targets whose full path (including the account base path) has the same first segment share the last start time; each waits by its own interval. 0 = no spacing.',
     targets: 'Targets',
     targetsDesc:
       'Every target chooses its sync mode, create mode, concurrency and delete limits. Up to 32 targets. Concurrency is counted per job, so jobs running at the same time against the same storage add up.',
     concurrentFiles: 'Concurrent files',
     concurrentFilesRelayHint:
-      'Files relayed to this target at once, including uploading and waiting for completion; 0 = unlimited.',
+      'Files relayed to this target at once, including uploading and waiting for completion. Also caps simultaneous folder creations and extra-file deletes. 0 = unlimited.',
     concurrentFilesCopyHint:
-      'Outstanding copy tasks for this target; 0 = unlimited.',
+      'Outstanding copy tasks for this target. Also caps simultaneous folder creations and extra-file deletes. 0 = unlimited.',
+    concurrentFilesRelayUnlimited:
+      'Unlimited can accumulate files waiting for upload completion and places no concurrency limit on folder creation or extra-file deletes. This may overload OpenList and its cloud drive; scan intervals, dependencies and phase ordering still apply.',
     concurrentFilesCopyUnlimited:
-      'Unlimited submits every pending copy task at once and may overload OpenList.',
+      'Unlimited places no concurrency limit on copy tasks, folder creation or extra-file deletes and may overload OpenList. Scan intervals, dependencies and phase ordering still apply.',
+    scanInterval: 'Scan interval (seconds)',
+    scanIntervalHint:
+      'Minimum time between the starts of two directory listings, folder creations or deletes on this target, 0–3600 seconds. Single-entry checks such as delete confirmation are not delayed. On the same instance, jobs whose full path (including the account base path) has the same first segment share the last start time. 0 = no spacing.',
     chunkConcurrency: 'Chunks per file',
     chunkConcurrencyHint: 'Chunks uploaded in parallel for each file, 1–8.',
     chunkConcurrencyCopyHint: 'Only used by relay.',
@@ -185,8 +193,12 @@ export default {
     retryCount: 'Retries after failure',
     retryInherited: 'Global default',
     sourceDownloadConcurrency: 'Source download concurrency',
+    sourceScanInterval: 'Source scan interval',
     concurrentFiles: 'Concurrent files',
     chunkConcurrency: 'Chunks per file',
+    scanInterval: 'Scan interval',
+    scanIntervalValue: '{{value}} s',
+    scanIntervalNone: 'None',
     timeout: 'Timeout',
     sourceRefresh: 'Refresh source on scan',
     sourcePassword: 'Source password',
@@ -248,7 +260,9 @@ export default {
     retryCount: 'Retries after failure',
     timeout: 'Timeout',
     sourceDownloadConcurrency: 'Source download concurrency',
+    sourceScanInterval: 'Source scan interval',
     concurrentFiles: 'Concurrent files',
+    targetScanInterval: 'Target scan interval',
     chunkConcurrency: 'Chunks per file',
   },
 } as const;

@@ -114,7 +114,6 @@ describe('M3 quarantine and deletion safety', () => {
       name: 'Alias',
       baseUrl: f.server.baseUrl,
       auth: { mode: 'token', secret: 'alias-token' },
-      limits: { apiRequestsPerSecond: 100 },
     });
     await f.app.get(InstanceOperations).test(alias.id, { retryAuth: false });
     const job = f.job({ targets: [{ instanceId: alias.id, path: '/target' }] });

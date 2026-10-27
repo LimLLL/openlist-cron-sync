@@ -27,6 +27,8 @@ export class JobInputDto {
   @Allow() syncEmptyDirs?: unknown;
   /** 未完成源读取的文件数；EOF立即释放，暂停仍计入，0表示不限。 */
   @Allow() sourceDownloadConcurrency?: unknown;
+  /** 源扫描间隔，整数秒，0–3600。 */
+  @Allow() sourceScanIntervalSeconds?: unknown;
   /** 此 Job 所有 relay Target 的聚合上传 bytes/s。 */
   @Allow() relayBandwidthLimit?: unknown;
   /** 失败后的重试次数；null 继承进程默认值。 */

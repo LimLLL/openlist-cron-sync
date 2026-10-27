@@ -1,30 +1,6 @@
 // 定义实例公共响应，所有可空字段显式返回 null。
 import { ApiProperty } from '@nestjs/swagger';
 
-/** 所有有效实例配额。
- * @param 不适用。
- * @returns 不适用。
- * @throws 不适用。
- */
-export class LimitsView {
-  /** 有效值，默认 4，0 表示不限。 */
-  @ApiProperty({
-    type: 'integer',
-    default: 4,
-    minimum: 0,
-    maximum: Number.MAX_SAFE_INTEGER,
-  })
-  maxApiConcurrency: number;
-  /** 有效值，默认 5，0 表示不限。 */
-  @ApiProperty({
-    type: 'integer',
-    default: 5,
-    minimum: 0,
-    maximum: Number.MAX_SAFE_INTEGER,
-  })
-  apiRequestsPerSecond: number;
-}
-
 /** 凭据状态，不包含原文或密文。
  * @param 不适用。
  * @returns 不适用。
@@ -80,9 +56,6 @@ export class InstanceView {
   /** 认证公开视图。 */
   @ApiProperty({ type: AuthView })
   auth: AuthView;
-  /** 全部有效配额。 */
-  @ApiProperty({ type: LimitsView })
-  limits: LimitsView;
   /** 下载模式。 */
   @ApiProperty({ enum: ['d', 'p'] })
   downloadMode: 'd' | 'p';

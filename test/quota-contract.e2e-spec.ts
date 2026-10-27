@@ -62,8 +62,17 @@ describe('Job quota and operation label contract', () => {
       job.properties.targets.items.properties.chunkConcurrency,
     ).toMatchObject({ minimum: 1, maximum: 8, default: 2 });
     expect(
-      Object.keys(document.components.schemas.LimitsView.properties).sort(),
-    ).toEqual(['apiRequestsPerSecond', 'maxApiConcurrency']);
+      document.components.schemas.InstanceView.properties,
+    ).not.toHaveProperty('limits');
+    expect(job.properties.sourceScanIntervalSeconds).toMatchObject({
+      type: 'integer',
+      minimum: 0,
+      maximum: 3600,
+      default: 0,
+    });
+    expect(
+      job.properties.targets.items.properties.scanIntervalSeconds,
+    ).toMatchObject({ type: 'integer', minimum: 0, maximum: 3600, default: 0 });
     const run = document.paths['/api/v1/runs/{id}'].get.responses;
     expect(
       run['200'].content['application/json'].schema.properties
@@ -97,7 +106,10 @@ describe('Job quota and operation label contract', () => {
       .expect(201);
     expect(created.body).toMatchObject({
       sourceDownloadConcurrency: 2,
-      targets: [{ concurrentFiles: 2, chunkConcurrency: 2 }],
+      sourceScanIntervalSeconds: 0,
+      targets: [
+        { concurrentFiles: 2, chunkConcurrency: 2, scanIntervalSeconds: 0 },
+      ],
     });
     const id = created.body.id as string;
     const targetId = f.jobs().get(id).targets[0].id;
@@ -143,6 +155,8 @@ describe('Job quota and operation label contract', () => {
         .send({ targets: [{ id: targetId, chunkConcurrency: value }] })
         .expect(400);
     for (const key of [
+      'maxApiConcurrency',
+      'apiRequestsPerSecond',
       'maxDownloadConnections',
       'maxUploadSessions',
       'maxOutstandingTasks',
@@ -157,10 +171,80 @@ describe('Job quota and operation label contract', () => {
       .get(`/api/v1/instances/${f.id}`)
       .auth(token, { type: 'bearer' })
       .expect(200);
-    expect(instance.body.limits).toEqual({
-      maxApiConcurrency: 8,
-      apiRequestsPerSecond: 100,
+    expect(instance.body).not.toHaveProperty('limits');
+  });
+
+  /** interval 输入、PATCH 合并和历史 Run 冻结与公开 schema 一致。
+   * @param 不适用。
+   * @returns 验证完成。
+   * @throws Error HTTP 或断言失败。
+   */
+  it('validates scan intervals, preserves omissions, clears zero and freezes snapshots', async () => {
+    const job = f.job();
+    const targetId = job.targets[0].id;
+    const url = `/api/v1/jobs/${job.id}`;
+    await request(base)
+      .patch(url)
+      .auth(token, { type: 'bearer' })
+      .send({
+        sourceScanIntervalSeconds: 3600,
+        targets: [{ id: targetId, scanIntervalSeconds: 7 }],
+      })
+      .expect(200);
+    const kept = await request(base)
+      .patch(url)
+      .auth(token, { type: 'bearer' })
+      .send({ name: 'Keep interval', targets: [{ id: targetId }] })
+      .expect(200);
+    expect(kept.body).toMatchObject({
+      sourceScanIntervalSeconds: 3600,
+      targets: [{ scanIntervalSeconds: 7 }],
     });
+    for (const value of [null, -1, 1.5, '1', 3601]) {
+      for (const input of [
+        { sourceScanIntervalSeconds: value },
+        { targets: [{ id: targetId, scanIntervalSeconds: value }] },
+      ]) {
+        const rejected = await request(base)
+          .patch(url)
+          .auth(token, { type: 'bearer' })
+          .send(input)
+          .expect(400);
+        expect(rejected.body.error.code).toBe('VALIDATION_ERROR');
+      }
+    }
+    const cleared = await request(base)
+      .patch(url)
+      .auth(token, { type: 'bearer' })
+      .send({
+        sourceScanIntervalSeconds: 0,
+        targets: [{ id: targetId, scanIntervalSeconds: 0 }],
+      })
+      .expect(200);
+    expect(cleared.body).toMatchObject({
+      sourceScanIntervalSeconds: 0,
+      targets: [{ scanIntervalSeconds: 0 }],
+    });
+    const run = await preview(f, f.jobs().get(job.id));
+    await request(base)
+      .patch(url)
+      .auth(token, { type: 'bearer' })
+      .send({
+        sourceScanIntervalSeconds: 3,
+        targets: [{ id: targetId, scanIntervalSeconds: 2 }],
+      })
+      .expect(200);
+    const frozen = await request(base)
+      .get(`/api/v1/runs/${run.id}`)
+      .auth(token, { type: 'bearer' })
+      .expect(200);
+    expect(frozen.body.config.job).toMatchObject({
+      sourceScanIntervalSeconds: 0,
+      targets: [{ scanIntervalSeconds: 0 }],
+    });
+    expect(frozen.body.targets[0].config.target.scanIntervalSeconds).toBe(0);
+    expect(frozen.body.targets[0].config.instance).not.toHaveProperty('limits');
+    expect(frozen.body.config.instances[f.id]).not.toHaveProperty('limits');
   });
 
   /** 所有操作响应和Run目标名称使用冻结值，缺失才查含归档的当前Instance。

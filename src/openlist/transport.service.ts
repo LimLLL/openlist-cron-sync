@@ -7,8 +7,7 @@ import { finished } from 'node:stream/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 import { AppConfig } from '../configuration/app-config.js';
 import { Readiness } from '../coordination/coordination.module.js';
-import { ApiQuota } from '../coordination/api-quota.service.js';
-import type { ApiLimits } from '../coordination/api-quota.service.js';
+import { ScanPacing } from '../coordination/scan-pacing.service.js';
 import { errorTraits } from '../common/errors.js';
 import type { RequestContext } from './request-context.js';
 import { OpenListError, object, protocol } from './errors.js';
@@ -21,8 +20,6 @@ export interface HttpCall extends RequestContext {
   method: 'GET' | 'POST' | 'PUT';
   /** 仅读取可自动重试。 */
   read?: boolean;
-  /** 控制请求优先。 */
-  control?: boolean;
   /** JSON 请求值；undefined 不发送 body。 */
   json?: unknown;
   /** 上传字节；不自动重放。 */
@@ -31,11 +28,13 @@ export interface HttpCall extends RequestContext {
   headers?: Record<string, string>;
   /** 父任务的取消或截止信号。 */
   signal?: AbortSignal;
-  /** chunk/complete 由 relay 控制期限且不占 API 位。 */
+  /** chunk/complete 由 relay 控制期限，不使用普通 API 超时。 */
   transfer?: boolean;
 }
 /** 实例网络配置。 */
-export interface HttpInstance extends ApiLimits {
+export interface HttpInstance {
+  /** 实例标识。 */
+  id: string;
   /** 已规范化的实例地址。 */
   baseUrl: string;
 }
@@ -50,20 +49,41 @@ export class OpenListTransport
 {
   private readonly agents = new Map<number, Agent>();
   private readonly shutdown = new AbortController();
+  private readonly cleanupDeadline = new AbortController();
   private readonly logger = new Logger(OpenListTransport.name);
   /** 创建不带 redirect/retry interceptor 的连接池。
    * @param config 已验证配置。
-   * @param quota 共享实例配额。
+   * @param pacing 跨任务目录请求间隔。
    * @param readiness 进程就绪状态；模块销毁时先广播关闭。
    * @returns 不适用。
    * @throws 不适用。
    */
   constructor(
     @Inject(AppConfig) private readonly config: AppConfig,
-    @Inject(ApiQuota) private readonly quota: ApiQuota,
+    @Inject(ScanPacing) private readonly pacing: ScanPacing,
     @Inject(Readiness) private readonly readiness: Readiness,
   ) {
     this.dispatcher(config.openlistConnectTimeoutMs);
+    this.readiness.shutdown.signal.addEventListener(
+      'abort',
+      /** 为所有收尾请求及共享认证叠加进程关闭宽限，不绑定单个 Run 的取消。
+       * @param 不适用。
+       * @returns 不适用。
+       * @throws 不适用。
+       */
+      () => {
+        this.shutdown.abort();
+        const grace = this.readiness.cleanupSignal;
+        if (!grace || grace.aborted) this.cleanupDeadline.abort();
+        else
+          grace.addEventListener(
+            'abort',
+            this.cleanupDeadline.abort.bind(this.cleanupDeadline),
+            { once: true },
+          );
+      },
+      { once: true },
+    );
   }
   /** 按实际建连期限共享连接池，旧 queued 快照不采用新进程期限。
    * @param connectTimeout 建连毫秒。
@@ -79,7 +99,7 @@ export class OpenListTransport
     return agent;
   }
   /** 执行请求与有界读取退避，认证恢复由上层处理。
-   * @param instance 实例地址和配额。
+   * @param instance 实例地址和标识。
    * @param call 请求协议。
    * @param token 裸 token；公开请求不传。
    * @returns 已验证 envelope 的 data，仍需端点验证。
@@ -93,16 +113,16 @@ export class OpenListTransport
     const settings = call.settings ?? this.config.execution;
     if (call.transfer && !call.signal)
       throw new Error('Transfer requests require a deadline signal');
-    const deadlineAt = call.transfer
-      ? Infinity
-      : Date.now() + settings.apiTimeoutMs;
-    const timeout = call.transfer
-      ? call.signal
-      : AbortSignal.timeout(settings.apiTimeoutMs);
-    const signals: AbortSignal[] = call.cleanup ? [] : [this.shutdown.signal];
-    if (timeout) signals.push(timeout);
+    const signals = [
+      call.cleanup ? this.cleanupDeadline.signal : this.shutdown.signal,
+    ];
     if (call.signal) signals.push(call.signal);
     const signal = AbortSignal.any(signals);
+    const waiting = AbortSignal.any([
+      signal,
+      ...(call.dispatchSignal ? [call.dispatchSignal] : []),
+      ...(call.pacing ? [this.shutdown.signal] : []),
+    ]);
     const attempts = call.read ? settings.retryMaxAttempts : 1;
     for (let attempt = 1; ; attempt++) {
       try {
@@ -115,7 +135,7 @@ export class OpenListTransport
           (status === null ||
             status === 429 ||
             (status >= 500 && status <= 599));
-        if (!retryable || signal.aborted || attempt >= attempts) {
+        if (!retryable || waiting.aborted || attempt >= attempts) {
           this.logger.warn('OpenList request failed', {
             instanceId: instance.id,
             errorCode: error.code,
@@ -129,11 +149,11 @@ export class OpenListTransport
           settings.retryBaseMs * 2 ** (attempt - 1) * (0.5 + Math.random()),
         );
         const waitMs = Math.max(backoff, error.retryAfterMs);
-        // 超出请求期限时直接结束，避免巨大 Retry-After 溢出 Node 定时器并提前重试。
-        if (waitMs >= deadlineAt - Date.now()) throw error;
+        // 不截短 Retry-After；超出退避上限直接返回，避免大数溢出计时器后提前重试。
+        if (waitMs > settings.retryMaxMs) throw error;
         try {
           await delay(waitMs, undefined, {
-            signal,
+            signal: waiting,
           });
         } catch (cause) {
           this.logger.warn('OpenList retry deadline reached', {
@@ -145,11 +165,11 @@ export class OpenListTransport
       }
     }
   }
-  /** 执行一次 HTTP 请求，并在释放名额前完整消费受限响应。
+  /** 在间隔等待后开始单次 HTTP 期限，并完整消费受限响应。
    * @param instance 实例配置。
    * @param call 请求参数。
    * @param token 裸 token。
-   * @param signal 请求期限。
+   * @param parent 调用方及进程生命周期，不含本次尝试的 API 超时。
    * @returns data。
    * @throws OpenListError 协议或传输失败。
    */
@@ -157,20 +177,23 @@ export class OpenListTransport
     instance: HttpInstance,
     call: HttpCall,
     token: string | undefined,
-    signal: AbortSignal,
+    parent: AbortSignal,
   ): Promise<unknown> {
     const settings = call.settings ?? this.config.execution;
-    let release: (() => void) | undefined;
+    let finish: ((started: boolean) => void) | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new AbortController();
+    const signal = AbortSignal.any([parent, timeout.signal]);
+    const waiting = AbortSignal.any([
+      parent,
+      ...(call.dispatchSignal ? [call.dispatchSignal] : []),
+      ...(call.pacing ? [this.shutdown.signal] : []),
+    ]);
     let dispatched = false;
     let checkpoint = false;
     try {
-      if (!call.transfer)
-        release = await this.quota.acquire(
-          instance,
-          call.control ?? true,
-          signal,
-        );
-      signal.throwIfAborted();
+      if (call.pacing) finish = await this.pacing.acquire(call.pacing, waiting);
+      waiting.throwIfAborted();
       const headers: Record<string, string> = {
         accept: 'application/json',
         ...call.headers,
@@ -180,7 +203,14 @@ export class OpenListTransport
       checkpoint = true;
       call.beforeDispatch?.();
       checkpoint = false;
-      signal.throwIfAborted();
+      waiting.throwIfAborted();
+      // 同步检查点之后不再 await；间隔只记录请求开始，响应等待不持有队列顺序。
+      finish?.(true);
+      if (!call.transfer)
+        timer = setTimeout(
+          timeout.abort.bind(timeout),
+          settings.apiTimeoutMs,
+        ).unref();
       dispatched = true;
       const response = await request(instance.baseUrl + call.endpoint, {
         dispatcher: this.dispatcher(settings.connectTimeoutMs),
@@ -277,7 +307,7 @@ export class OpenListTransport
       });
       throw new OpenListError(
         'OPENLIST_ERROR',
-        signal.aborted
+        waiting.aborted || signal.aborted
           ? 'OpenList request deadline or cancellation'
           : 'OpenList network request failed',
         null,
@@ -287,10 +317,11 @@ export class OpenListTransport
         dispatched,
       );
     } finally {
-      release?.();
+      if (timer) clearTimeout(timer);
+      finish?.(false);
     }
   }
-  /** 在数据库关闭前取消在途请求与尚未取得配额的等待。
+  /** 在数据库关闭前取消在途请求与尚未派发的间隔等待。
    * @param 不适用。
    * @returns 不适用。
    * @throws 不适用。
@@ -328,5 +359,6 @@ function retryAfterMs(value: string | string[] | undefined): number {
   const milliseconds = /^\d+$/.test(value)
     ? Number(value) * 1000
     : Date.parse(value) - Date.now();
-  return Number.isFinite(milliseconds) && milliseconds > 0 ? milliseconds : 0;
+  // 数字溢出的合法秒数保持 Infinity，交由退避上限拒绝，不能当作零提前重试。
+  return milliseconds > 0 ? milliseconds : 0;
 }

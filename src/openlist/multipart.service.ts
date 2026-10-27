@@ -146,8 +146,6 @@ export class OpenListMultipart {
         ...context,
         endpoint: '/api/fs/multipart/init',
         method: 'POST',
-        // init 一经执行即启动驱动写入，属于新提交，不占用控制请求的优先位置。
-        control: false,
         headers: { ...uploadHeaders(file), 'X-File-Size': String(size) },
       }),
     );
@@ -280,7 +278,6 @@ export class OpenListMultipart {
       ...context,
       endpoint: '/api/fs/put',
       method: 'PUT',
-      control: false,
       body: Buffer.alloc(0),
       headers: {
         ...uploadHeaders(file),

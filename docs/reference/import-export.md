@@ -7,9 +7,9 @@
 ## ExportDocument v1
 
 形状为{formatVersion:1,exportedAt:Time,instances:ExportInstance[],jobs:ExportJob[],notificationChannels:ExportChannel[]}。
-ExportInstance={id,name,baseUrl,auth:{mode,username:string|null,hasSecret:boolean},limits,downloadMode}。
+ExportInstance={id,name,baseUrl,auth:{mode,username:string|null,hasSecret:boolean},downloadMode}。
 ExportChannel={id,name,type:'webhook',url:string,hasSecret:boolean,enabled,events,needsUrlReview:boolean}。导出时url只写原URL的源站部分`scheme://host[:port]`。needsUrlReview为已保存的needs_url_review与本次是否截去非根path/query的逻辑或；不能因为上次导入只剩origin，就在再次导出时清除尚未完成的复核要求。
-ExportTarget=EndpointView+{id,position,mode,createMode:'relay'|'server_copy',deleteLimits:完整值}；createMode为必填的逐目标配置。
+ExportTarget=EndpointView+{id,position,mode,createMode:'relay'|'server_copy',concurrentFiles,scanIntervalSeconds,chunkConcurrency,deleteLimits:完整值}；createMode与资源配置取完整TargetView，扫描间隔同样随配置导出。
 ExportJob使用JobView的配置字段及id，不含Entity时间、archivedAt；source/targets仅带hasPassword，不带password。引用instanceId和notificationChannelIds保留导出UUID；Job顶层不含createMode。同一Job允许混合创建方式，导入时按最终引用校验每个server_copy Target与source的Instance ID相同，不自动切换。
 导出只包含活动配置；实例token/password、路径密码、Webhook secret、JWT key、master key、管理员hash一律省略，不输出******占位符。
 Webhook URL按秘密处理：很多接收端把密钥放在path中（例如Bark、ServerChan），query也可能含用户放入的secret，因此导出删除path和query，只保留源站，并按上式设置needsUrlReview。

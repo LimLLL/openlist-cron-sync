@@ -47,6 +47,8 @@ function initialValues(existing?: JobView): JobFormValues {
     sourceRefresh: existing?.source.refresh ?? false,
     sourceDownloadConcurrency:
       existing?.sourceDownloadConcurrency.toString() ?? '2',
+    sourceScanIntervalSeconds:
+      existing?.sourceScanIntervalSeconds.toString() ?? '0',
     targets: existing ? targetsFromJob(existing) : [emptyTarget()],
     cron: existing?.cron ?? '',
     timezone: existing?.timezone ?? 'UTC',

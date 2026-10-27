@@ -17,7 +17,7 @@ interface TaskWaiter {
   /** 发放额度。 */ resolve: () => void;
   /** 解除中止监听。 */ dispose: () => void;
 }
-/** 单进程task资源；API请求额度由OpenList客户端另行取得。
+/** 单进程task资源；按 Target 文件并发管理任务责任，不限制 HTTP 请求。
  * @param 不适用。
  * @returns 不适用。
  * @throws 不适用。
@@ -182,7 +182,7 @@ export class TaskResources {
       },
     );
   }
-  /** 向各Target尚有空间的等待者发放，不占API位等待。
+  /** 向各Target尚有空间的等待者发放，等待期间不提交远程请求。
    * @param 不适用。
    * @returns 不适用。
    * @throws 不适用。

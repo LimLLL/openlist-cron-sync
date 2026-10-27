@@ -31,8 +31,6 @@
 | account_base_path                    | STR?         | /api/me成功后写入；未连接时NULL                              |
 | account_role                         | INTEGER?     | OpenList role原值                                            |
 | account_permissions                  | INT?         | /api/me位图                                                  |
-| max_api_concurrency                  | INT          | 4，范围0–安全整数；0不限，正数为实例管理API并发上限          |
-| api_requests_per_second              | INT          | 5，范围0–安全整数；0不限，正数按间隔限速                     |
 | download_mode                        | ENUM         | d / p，默认d                                                 |
 | last_test_at                         | TS?          | 最近连接测试                                                 |
 | openlist_version / multipart_enabled | STR? / BOOL? | 最近一次连接测试从/api/public/settings读到的值；未测试为NULL |
@@ -56,6 +54,7 @@ M1 已实现本表，并将 `secret_enc` 登记到生产 ENC 清单；AAD 为 `i
 | source_password_enc             | ENC?            | 路径密码                                                    |
 | source_refresh                  | BOOL            | 0                                                           |
 | source_download_concurrency     | INT             | 2；0不限，Job各Target共享的下载中文件数，EOF即释放          |
+| source_scan_interval_seconds    | INT             | 0；0–3600整数秒，源列目录请求开始的最小间隔                 |
 | cron                            | STR?            | NULL=仅手动；5段，分钟精度                                  |
 | timezone                        | STR             | UTC，IANA名                                                 |
 | include_globs_json              | JSON            | []                                                          |
@@ -81,7 +80,8 @@ M1 已实现本表，并将 `secret_enc` 登记到生产 ENC 清单；AAD 为 `i
 | position                | INT             | 从0开始；同Job成员唯一                                                              |
 | mode                    | ENUM            | incremental / mirror；默认incremental                                               |
 | create_mode             | ENUM            | relay / server_copy，默认relay；仅该目标生效，见[创建方式](sync-engine.md#创建方式) |
-| concurrent_files        | INT             | 2；0不限；relay为在途文件数，server_copy为未终态任务数                              |
+| concurrent_files        | INT             | 2；0不限；relay为在途文件数，server_copy为未终态任务数；也约束mkdir与文件extras     |
+| scan_interval_seconds   | INT             | 0；0–3600整数秒，该Target列目录、mkdir、remove请求开始的最小间隔                    |
 | chunk_concurrency       | INT             | 2；1–8；单个relay文件的chunk请求数                                                  |
 | refresh                 | BOOL            | 0                                                                                   |
 | delete_limits_enabled   | BOOL            | 1                                                                                   |

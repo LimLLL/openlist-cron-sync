@@ -127,7 +127,7 @@ curl -X POST http://localhost:3000/api/v1/auth/login \
 | `JWT_SECRET`                     | 自动生成         | 令牌签名密钥：32 字节，标准 base64 编码                   |
 | `ENCRYPTION_MASTER_KEY`          | 自动生成         | 凭据加密主密钥：32 字节，标准 base64 编码                 |
 | `OPENLIST_CONNECT_TIMEOUT_MS`    | `10000`          | 连接 OpenList 的建连超时，单位为毫秒                      |
-| `OPENLIST_API_TIMEOUT_MS`        | `30000`          | 一次 OpenList 管理请求（含读取重试）的期限，单位为毫秒    |
+| `OPENLIST_API_TIMEOUT_MS`        | `30000`          | 普通请求单次尝试的期限（毫秒），含连接与完整响应          |
 | `RETRY_MAX_ATTEMPTS`             | `3`              | 失败时的总尝试次数（含首次）；任务可单独设置              |
 | `RETRY_BASE_MS` / `RETRY_MAX_MS` | `1000` / `30000` | 读取重试的指数退避基数与上限，单位为毫秒                  |
 | `OPENLIST_AUTH_COOLDOWN_SECONDS` | `600`            | OpenList 登录被限流（429）后暂停登录的时长，单位为秒      |
@@ -136,9 +136,9 @@ curl -X POST http://localhost:3000/api/v1/auth/login \
 
 - `ADMIN_USERNAME` 和 `ADMIN_PASSWORD` 只在首次启动、数据库中还没有管理员时使用；之后以数据库中保存的账号为准。
 - 配置值不合法时，服务拒绝启动并报告是哪个字段，但不会打印该字段的值。
-- Instance 只配置 OpenList 管理 API 并发和每秒请求数。Job 的 `sourceDownloadConcurrency` 控制所有 Target 共享的下载阶段文件数，验证 EOF 后立即释放，spool 背压及 Range 恢复暂停仍计入；每个 Target 的 `concurrentFiles` 控制从准备到上传、等待 complete 和收尾的文件数或未结束的 server-copy 任务数，`chunkConcurrency` 控制单文件分片请求数。源下载和同时文件数填 `0` 表示不限；单文件分片并发为 1–8；不同 Job 同时运行时额度相加。server-copy 的 `0` 可能一次提交大量任务；relay 的 `0` 可积累大量已下载但尚在等待 complete 的文件，其源位虽已释放，目标会话和请求仍会占用资源。
+- Instance 上没有 API 并发或速率设置，实例 API 配额队列已删除；目录扫描与同步 mkdir/remove 仍按扫描间隔 FIFO 排队。Job 的 `sourceDownloadConcurrency` 控制所有 Target 共享的下载阶段文件数，验证 EOF 后立即释放，spool 背压及 Range 恢复暂停仍计入；每个 Target 的 `concurrentFiles` 控制从准备到上传、等待 complete 和收尾的文件数或未结束的 server-copy 任务数，`chunkConcurrency` 控制单文件分片请求数；建目录和删除多余文件也按 `concurrentFiles` 并发。Job 的 `sourceScanIntervalSeconds` 和每个 Target 的 `scanIntervalSeconds`（0–3600 整数秒，默认 0）分别约束源树扫描，以及目标目录扫描、建目录和 delete 请求；单项验证与观察不受间隔约束。同一 Instance ID 下，拼接账号根路径后的全局路径首段相同，就共享上次开始时间；每次请求使用本端配置的间隔，从开始到开始计时，0 不增加间隔但仍遵守 FIFO，见[扫描间隔](docs/design/scheduling-recovery.md#扫描间隔)。源下载和同时文件数填 `0` 表示不限；单文件分片并发为 1–8；不同 Job 同时运行时额度相加。server-copy 的 `0` 可能一次提交大量任务；relay 的 `0` 可积累大量已下载但尚在等待 complete 的文件，其源位虽已释放，目标会话和请求仍会占用资源。
 - 任务可设置“失败后的重试次数”（0–9），留空时使用 `RETRY_MAX_ATTEMPTS`；运行开始时固定有效次数，退避间隔仍由全局配置决定。
-- 完整说明见[配置参考](docs/reference/configuration.md)。
+- 普通 API 每次尝试从调用 HTTP 客户端前计时，含建连、协议协商和完整响应，不含扫描间隔、认证等待或退避；完整说明见[配置参考](docs/reference/configuration.md)。
 
 ## 数据与备份
 

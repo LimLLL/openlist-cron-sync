@@ -8,7 +8,7 @@ export interface ExecutionSettings {
   queueTimeoutSeconds: number;
   /** 建连期限，毫秒。 */
   connectTimeoutMs: number;
-  /** 控制请求总期限，毫秒。 */
+  /** 普通请求每次尝试的期限，含连接及响应、不含间隔/认证等待与退避，毫秒。 */
   apiTimeoutMs: number;
   /** 任务轮询间隔，毫秒。 */
   taskPollMs: number;

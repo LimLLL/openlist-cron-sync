@@ -42,14 +42,15 @@ erDiagram
 run_config_json 持久化规范化后的 Job 公共字段、Target完整列表、目标稳定UUID、Instance id/baseUrl/authMode/username/accountBasePath、全部有效默认值、通知channel id、snapshotVersion=1。
 不存解密secret、JWT、sign、storage.addition、下载URL、Webhook URL。source/target路径密码放 runs.secret_snapshot_enc，内容仅为按endpoint id键控的密码；没有路径密码时为NULL。
 
-run_config_json的精确形状为{snapshotVersion:1,job:JobView,instances:Record<instanceId,InstanceSnapshot>,settings:ExecutionSettings}。JobView为当时的完整公共形状，每个targets[]对象包含必填createMode、concurrentFiles（默认2，0不限）和chunkConcurrency（默认2，1–8）；Job包含sourceDownloadConcurrency（默认2，0不限）。retryCount在迁移中对历史Run补为null，settings.retryMaxAttempts仍保留接受Run时的有效尝试次数。Job本身不含Target级createMode；InstanceSnapshot={id,name,baseUrl,authMode,username:string|null,accountUsername:string|null,accountBasePath,accountRole,accountPermissions,limits:{maxApiConcurrency,apiRequestsPerSecond},downloadMode}，不含authState、error或secret。run_targets.target_snapshot_json={target:JobView.targets中对应对象,instance:对应InstanceSnapshot}。
+run_config_json的精确形状为{snapshotVersion:1,job:JobView,instances:Record<instanceId,InstanceSnapshot>,settings:ExecutionSettings}。JobView为当时的完整公共形状，每个targets[]对象包含必填createMode、concurrentFiles（默认2，0不限）、scanIntervalSeconds（默认0，0–3600）和chunkConcurrency（默认2，1–8）；Job包含sourceDownloadConcurrency（默认2，0不限）与sourceScanIntervalSeconds（默认0，0–3600）。扫描间隔在迁移中对历史Run补为0，同时删除旧快照里的Instance limits。retryCount在迁移中对历史Run补为null，settings.retryMaxAttempts仍保留接受Run时的有效尝试次数。Job本身不含Target级createMode；InstanceSnapshot={id,name,baseUrl,authMode,username:string|null,accountUsername:string|null,accountBasePath,accountRole,accountPermissions,downloadMode}，不含authState、error或secret。run_targets.target_snapshot_json={target:JobView.targets中对应对象,instance:对应InstanceSnapshot}。
 ExecutionSettings使用[配置](../reference/configuration.md)定义的映射。secret_snapshot_enc解密形状为{sourcePassword:string|null,targetPasswords:Record<targetId,string|null>}，无任何路径密码时整个字段NULL。
 Instance 的连接配置在[未决责任](#responsibility)引用它时禁止修改地址/账号/删除；允许原地址同账号更新token/password恢复认证。账号是否相同以 /api/me 返回的 username 与 base_path 为准，见[OpenList集成](openlist-integration.md#认证与实例身份)。
-Instance.limits/downloadMode在被非终态Run引用时也禁止修改；name允许修改但不回写旧snapshot。API配额属于Instance；relay/server-copy文件配额属于Job/Target，并在Run快照中冻结。全局执行位/队列容量为进程级配置，不是每个Run各自建立一套配额。
+Instance.downloadMode在被非终态Run引用时也禁止修改；name允许修改但不回写旧snapshot。Instance不再有API配额；relay/server-copy文件配额与扫描间隔属于Job/Target，并在Run快照中冻结。全局执行位/队列容量为进程级配置，不是每个Run各自建立一套配额。
 Job 编辑在存在非终态Run时409；无活动Run时可编辑，但旧target逻辑归档，稳定id不复用。old runs永远读自己的JSON，不联表读取新Job配置决定远程操作。
 获取运行配置和插入queued在同一短事务；启动时不重新套用新的默认值。
 
 迁移0006把现有Job的源下载配额从其源Instance当前值继承，把relay Target的文件配额从目标Instance上传session值继承，把server_copy Target的文件配额从目标Instance task值继承；旧chunk值按0→2、1→1、≥2→2映射。历史Run和run_targets按各自冻结的旧Instance值重写为同一个snapshotVersion=1形状，坏快照直接中止迁移；迁移结束执行外键检查。
+迁移0007–0009删除Instance的两列API配额及其约束，为Job与Target新增扫描间隔列（默认0，0–3600）；同一事务内从冻结快照改写全部runs.run_config_json与run_targets.target_snapshot_json（补入间隔0、删除Instance limits），包括子记录已被清理的终态Run。任一快照形状不符或外键检查不通过时整体回滚。
 
 ## 事务边界
 

@@ -50,7 +50,7 @@ export function safetyTracked(fact: TaskFact): boolean {
     (fact.child?.status === 'unknown' && fact.child.resolutionKind === null)
   );
 }
-/** 为终态历史取得固定身份、当前凭据和当前实例额度。
+/** 为终态历史取得固定身份与当前凭据。
  * @param db 共享连接。
  * @param op 任务所属操作。
  * @returns 请求实例，不读取旧路径密码。

@@ -23,15 +23,15 @@ Job 源配额只覆盖未完成的源读取，Target 文件配额覆盖准备、
 
 ## 资源
 
-| 资源                          | 默认   | 说明                                                                   |
-| ----------------------------- | ------ | ---------------------------------------------------------------------- |
-| Job sourceDownloadConcurrency | 2      | 同 Job 所有 Target 共享的下载中文件数，EOF 后释放；0 不限              |
-| Target concurrentFiles        | 2      | relay 从准备到 complete 收尾的文件数；server_copy 未终态任务数；0 不限 |
-| Target chunkConcurrency       | 2      | 每个 relay 文件同时发送的 chunk 请求数，范围 1–8                       |
-| SPOOL_RESERVE_BYTES           | 512MiB | SQLite/WAL 保留空间；spool FIFO 背压仍是容量约束                       |
+| 资源                          | 默认   | 说明                                                                                               |
+| ----------------------------- | ------ | -------------------------------------------------------------------------------------------------- |
+| Job sourceDownloadConcurrency | 2      | 同 Job 所有 Target 共享的下载中文件数，EOF 后释放；0 不限                                          |
+| Target concurrentFiles        | 2      | relay 从准备到 complete 收尾的文件数；server_copy 未终态任务数；也约束 mkdir 与文件 extras；0 不限 |
+| Target chunkConcurrency       | 2      | 每个 relay 文件同时发送的 chunk 请求数，范围 1–8                                                   |
+| SPOOL_RESERVE_BYTES           | 512MiB | SQLite/WAL 保留空间；spool FIFO 背压仍是容量约束                                                   |
 
 数值的配置键见[配置](../reference/configuration.md)。Job 和 Target 配额按稳定的 Job/Target ID 隔离；不同 Job 同时运行时额度相加。server_copy 的 concurrentFiles=0 会持续提交所有待复制的任务，可能使 OpenList 同时承受大量任务。relay 的 concurrentFiles=0 同样允许大量已下载文件等待 complete；它们已释放源位和已确认的 spool 块，但仍有目标请求、会话和心跳开销。源配额不再限制这种积压，spool 只约束磁盘 payload；需要限制在途总量时使用 Target concurrentFiles。
-init、status、abort 及 list/get/mkdir/remove/copy/task-info 等管理请求走目标 Instance 的 API 并发与速率令牌；chunk 和 complete 绕过该 API 配额。complete 仍受 Target 文件配额及 relay 文件总期限约束，长时间等待不会阻塞同一 Instance 的 list、取消或 status 控制通道。
+本地没有 Instance 级 API 并发或速率配额：init、status、abort、chunk、complete 及 get/copy/task-info 不等待实例 API 名额，也不受扫描间隔约束；传输仍遵守已有的文件、分片与带宽规则，观察和清理不另取文件名额；只有扫描列目录、mkdir 与 remove 按 Job/Target 扫描间隔拉开开始时间，见[扫描间隔](scheduling-recovery.md#扫描间隔)。complete 受 Target 文件配额及 relay 文件总期限约束，长时间等待不会阻塞同一 Instance 的 list、取消或 status 请求。
 
 ## Spool
 
@@ -126,7 +126,7 @@ abort 成功或随后 status 404 都不证明驱动已停止：OpenList 取消�
 | 计时                  | 规则                                                               |
 | --------------------- | ------------------------------------------------------------------ |
 | 下载 idle             | 只在正向源索取数据而没有字节到达时计时；spool 背压和令牌等待不计入 |
-| init / status / abort | 普通控制 API 超时                                                  |
+| init / status / abort | 每次尝试独立的普通 API 超时，含建连与响应，不含认证等待和退避      |
 | chunk 请求            | relay total；低带宽下单个 chunk 本来就可能很久                     |
 | complete 等待         | relay total；OpenList 驱动可能还在向云端上传                       |
 

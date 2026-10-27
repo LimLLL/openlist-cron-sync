@@ -1,9 +1,8 @@
-// 实例只读详情：关键事实条、实时测试结果、最近错误，以及账号、配额、时间线三个编辑式分节。
+// 实例只读详情：关键事实条、实时测试结果、最近错误，以及账号、传输、时间线三个编辑式分节。
 import type { UseMutationResult } from '@tanstack/react-query';
 import { AnimatePresence } from 'framer-motion';
 import { CircleAlert } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { CountUp } from '../../components/motion/count-up';
 import { EditorialSection } from '../../components/ui/editorial-section';
 import { SpecGrid } from '../../components/ui/spec-grid';
 import { StatusDot } from '../../components/ui/status-dot';
@@ -13,7 +12,7 @@ import type { TimelineItem } from '../../components/ui/timeline';
 import { ErrorState } from '../../components/states';
 import { formatRelative, formatTimeFull } from '../../lib/format';
 import { useErrorText } from '../../i18n/error-text';
-import { instanceStatus, LIMIT_FIELDS, shortVersion } from './instance-display';
+import { instanceStatus, shortVersion } from './instance-display';
 import type { InstanceStatus } from './instance-display';
 import { InstanceTestPanel } from './instance-test-panel';
 import type { Instance, TestResult } from './instance-contract';
@@ -224,24 +223,12 @@ export function InstanceDetailView({
 
         <EditorialSection
           index="02"
-          title={t('detail.limits')}
-          description={t('detail.limitsHint')}
+          title={t('detail.transfer')}
+          description={t('detail.transferHint')}
         >
           <SpecGrid
-            columns={4}
+            columns={2}
             items={[
-              ...LIMIT_FIELDS.map((field) => ({
-                label: t(`limits.${field.key}`),
-                value: (
-                  <span className="font-display text-3xl font-medium tracking-tight">
-                    {instance.limits[field.key] === 0 ? (
-                      t('detail.unlimited')
-                    ) : (
-                      <CountUp value={instance.limits[field.key]} />
-                    )}
-                  </span>
-                ),
-              })),
               {
                 label: t('detail.downloadMode'),
                 value:

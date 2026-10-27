@@ -42,6 +42,8 @@ export interface Target extends Endpoint {
   createMode: 'relay' | 'server_copy';
   /** 此目标从准备到complete及收尾的文件数或未结束复制任务数；0不限。 */
   concurrentFiles: number;
+  /** 目标扫描、mkdir 和 delete 请求的最小开始间隔，整数秒，0–3600。 */
+  scanIntervalSeconds: number;
   /** 每个 relay 文件同时发送的分片数。 */
   chunkConcurrency: number;
   /** 每目标删除阈值。 */
@@ -71,6 +73,8 @@ export interface Job {
   syncEmptyDirs: boolean;
   /** Job所有Target共享的未完成源读取数；EOF释放，暂停仍计入，0不限。 */
   sourceDownloadConcurrency: number;
+  /** 源目录扫描请求的最小开始间隔，整数秒，0–3600。 */
+  sourceScanIntervalSeconds: number;
   /** 此 Job 所有 relay Target 的聚合上传 bytes/s；0 不限。 */
   relayBandwidthLimit: number;
   /** 失败后的重试次数；null 继承进程默认尝试次数。 */

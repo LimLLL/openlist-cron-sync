@@ -137,7 +137,7 @@ Error={error:{code:string,message:string,details:FieldError[]},requestId:string}
 | POST /instances/:id/test   | TestRequest                    | 200 TestResult；只读测试不上传探测文件               |
 | POST /instances/:id/browse | BrowseRequest                  | 200 BrowseResult；上游失败502                        |
 
-M2 已接入非归档Job引用和完整未决责任谓词：DELETE有引用时409，PATCH身份变化有责任时409，limits/downloadMode在非终态Run引用时409；name和同身份凭据修复仍允许。
+M2 已接入非归档Job引用和完整未决责任谓词：DELETE有引用时409，PATCH身份变化有责任时409，downloadMode在非终态Run引用时409（limits字段已删除，带上返回400）；name和同身份凭据修复仍允许。
 
 浏览使用POST避免路径密码进URL。分页为本服务切分OpenList列表，不保证云端游标一致性。
 PATCH本身不调用OpenList。地址、账号（password模式的username）或base_path变化在存在[未决责任](../design/data-model.md#responsibility)时返回409 ENDPOINT_IN_USE；同地址同账号的凭据修复允许。

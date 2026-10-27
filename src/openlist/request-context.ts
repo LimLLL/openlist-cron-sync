@@ -1,4 +1,5 @@
 // 传递运行固定参数与取消信号，认证 single-flight 的等待可独立取消。
+import type { ScanInterval } from '../coordination/scan-pacing.service.js';
 import type { ExecutionSettings } from '../configuration/execution-settings.js';
 
 /** 调用方上下文；普通浏览省略时使用进程配置。 */
@@ -7,7 +8,11 @@ export interface RequestContext {
   settings?: ExecutionSettings;
   /** 调用方停止信号，不取消其他调用方共用的登录。 */
   signal?: AbortSignal;
-  /** 在认证/配额就绪后、实际提交前等待持久化；读取不传。 */
+  /** 只约束实际派发前的认证/间隔等待，不中断已发出的请求。 */
+  dispatchSignal?: AbortSignal;
+  /** 调用点显式声明扫描或目录变更间隔；单项观察不传。 */
+  pacing?: ScanInterval;
+  /** 在认证/间隔就绪后、实际提交前持久化；读取不传。 */
   beforeDispatch?: () => void;
   /** 关闭收尾允许使用独立期限，仍不允许新的文件写入。 */
   cleanup?: boolean;

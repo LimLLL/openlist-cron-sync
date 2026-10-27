@@ -59,9 +59,8 @@ function TargetBlock({
   const createMode = targetCreateModeState(sourceInstanceId, target);
   const modeHintId = `target-${index}-create-mode-hint`;
   const serverCopy = target.createMode === 'server_copy';
-  // 服务端复制不限时会一次提交全部待复制任务，在提示位置给出风险说明。
-  const unlimitedCopy =
-    serverCopy &&
+  // 不限时不设文件、建目录和多余文件 delete 的并发上限；间隔、依赖与阶段顺序仍生效。
+  const unlimited =
     target.concurrentFiles.trim() !== '' &&
     Number(target.concurrentFiles) === 0;
   return (
@@ -168,13 +167,15 @@ function TargetBlock({
           value={target.concurrentFiles}
           onChange={(event) => onChange('concurrentFiles', event.target.value)}
           hint={
-            unlimitedCopy
-              ? t('form.concurrentFilesCopyUnlimited')
+            unlimited
+              ? serverCopy
+                ? t('form.concurrentFilesCopyUnlimited')
+                : t('form.concurrentFilesRelayUnlimited')
               : serverCopy
                 ? t('form.concurrentFilesCopyHint')
                 : t('form.concurrentFilesRelayHint')
           }
-          hintTone={unlimitedCopy ? 'warning' : undefined}
+          hintTone={unlimited ? 'warning' : undefined}
         />
         <InputField
           id={`target-${index}-chunk-concurrency`}
@@ -192,6 +193,20 @@ function TargetBlock({
               ? t('form.chunkConcurrencyCopyHint')
               : t('form.chunkConcurrencyHint')
           }
+        />
+        <InputField
+          id={`target-${index}-scan-interval`}
+          label={t('form.scanInterval')}
+          type="number"
+          inputMode="numeric"
+          min={0}
+          max={3600}
+          required
+          value={target.scanIntervalSeconds}
+          onChange={(event) =>
+            onChange('scanIntervalSeconds', event.target.value)
+          }
+          hint={t('form.scanIntervalHint')}
         />
         <InputField
           id={`target-${index}-password`}

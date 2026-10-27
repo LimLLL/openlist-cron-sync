@@ -98,6 +98,7 @@ export function seedLegacyRun(
   const {
     retryCount: _retryCount,
     sourceDownloadConcurrency: _sourceQuota,
+    sourceScanIntervalSeconds: _sourceInterval,
     ...jobWithoutRetryCount
   } = job;
   const historicalJob = {
@@ -113,6 +114,7 @@ export function seedLegacyRun(
         createMode: _mode,
         concurrentFiles: _files,
         chunkConcurrency: _chunks,
+        scanIntervalSeconds: _scanInterval,
         ...target
       }) => target,
     ),
@@ -145,7 +147,8 @@ export function seedLegacyRun(
   const frozenInstance = {
     ...instanceSnapshot(instance),
     limits: {
-      ...instanceSnapshot(instance).limits,
+      maxApiConcurrency: 4,
+      apiRequestsPerSecond: 5,
       maxOutstandingTasks: 4,
       maxDownloadConnections: 2,
       maxUploadSessions: 2,

@@ -52,6 +52,14 @@ const filterFields = {
   minSizeBytes: { ...nullable(sizeSchema), default: null },
   maxSizeBytes: { ...nullable(sizeSchema), default: null },
 };
+const scanIntervalSchema: SchemaObject = {
+  type: 'integer',
+  minimum: 0,
+  maximum: 3600,
+  default: 0,
+  description:
+    '同 Instance 的全局路径首段共享开始时间；按调用方间隔 FIFO 派发，0 不增加间隔，单位秒',
+};
 const targetInputFields = {
   ...endpointInput,
   mode: {
@@ -66,13 +74,14 @@ const targetInputFields = {
     description:
       '此 Target 的创建方式；新目标省略为 relay，已有目标 PATCH 省略保留；server_copy 要求与源同 Instance ID',
   } as SchemaObject,
+  scanIntervalSeconds: scanIntervalSchema,
   concurrentFiles: {
     type: 'integer',
     minimum: 0,
     maximum: Number.MAX_SAFE_INTEGER,
     default: 2,
     description:
-      '此 Target 同时处理的文件数：relay 包含准备、上传、等待 complete 和收尾，server_copy 为未结束的复制任务；0 不限',
+      '此 Target 同时处理的文件数：relay 包含准备、上传、等待 complete 和收尾，server_copy 为未结束的复制任务；也控制 mkdir 与文件 extras，目录 extras 串行；0 不限',
   } as SchemaObject,
   chunkConcurrency: {
     type: 'integer',
@@ -113,6 +122,7 @@ const jobFields = {
   filters: objectSchema(filterFields, []),
   allowEmptySource: { type: 'boolean', default: false } as SchemaObject,
   syncEmptyDirs: { type: 'boolean', default: false } as SchemaObject,
+  sourceScanIntervalSeconds: scanIntervalSchema,
   sourceDownloadConcurrency: {
     type: 'integer',
     minimum: 0,
@@ -188,6 +198,7 @@ export const targetViewSchema = objectSchema({
   mode: targetInputFields.mode,
   createMode: targetInputFields.createMode,
   concurrentFiles: targetInputFields.concurrentFiles,
+  scanIntervalSeconds: targetInputFields.scanIntervalSeconds,
   chunkConcurrency: targetInputFields.chunkConcurrency,
   deleteLimits: objectSchema(deleteLimitFields),
 });

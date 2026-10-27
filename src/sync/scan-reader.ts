@@ -1,4 +1,5 @@
 // 读取当前目录并映射挂载、协议和根存在性事实，不把上游错误当缺失。
+import { scanInterval } from '../coordination/scan-pacing.service.js';
 import { Logger } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
@@ -108,7 +109,7 @@ export class ScanReader {
       .get();
     const snapshot = this.writer.run.config.instances[id];
     if (!current || !snapshot) throw new Error('Run instance missing');
-    return { ...current, ...snapshot, ...snapshot.limits };
+    return { ...current, ...snapshot };
   }
   /** 判断错误是否可映射为扫描问题；资源和本地错误向上抛出。
    * @param error 读取异常。
@@ -148,6 +149,13 @@ export class ScanReader {
       : this.secrets.sourcePassword;
     const forced = target && this.quarantine.refresh(target.row, path);
     const context = {
+      pacing: scanInterval(
+        snapshot,
+        path,
+        target
+          ? target.row.config.target.scanIntervalSeconds
+          : this.writer.run.config.job.sourceScanIntervalSeconds,
+      ),
       signal: this.signal,
       settings: this.writer.run.config.settings,
     };

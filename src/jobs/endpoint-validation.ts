@@ -132,10 +132,6 @@ export function instanceSnapshot(row: InstanceRecord): InstanceSnapshot {
     accountBasePath: row.accountBasePath,
     accountRole: row.accountRole,
     accountPermissions: row.accountPermissions,
-    limits: {
-      maxApiConcurrency: row.maxApiConcurrency,
-      apiRequestsPerSecond: row.apiRequestsPerSecond,
-    },
     downloadMode: row.downloadMode,
   };
 }

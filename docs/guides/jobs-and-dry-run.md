@@ -35,30 +35,34 @@
 }
 ```
 
-| 字段                             | 默认                      | 说明                                                                                          |
-| -------------------------------- | ------------------------- | --------------------------------------------------------------------------------------------- |
-| `source` / `targets[]` 的 `path` | 必填                      | 账号内路径，`/` 指账号 base_path，见[base_path 与路径](openlist-accounts.md#base_path-与路径) |
-| `password`                       | 无                        | OpenList 路径密码；修改任务时省略表示保留，`null` 清除，空字符串返回 400                      |
-| `refresh`                        | `false`                   | 常规扫描时是否让 OpenList 刷新缓存，见[刷新](openlist-accounts.md#刷新refresh)                |
-| `targets[].mode`                 | `incremental`             | `incremental` 或 `mirror`，见[目标模式](#目标模式)                                            |
-| `targets[].createMode`           | `relay`                   | `relay` 或 `server_copy`，见[创建方式](#创建方式)                                             |
-| `targets[].deleteLimits`         | 见[阈值](#删除保护与阈值) | 本目标的删除数量与比例阈值                                                                    |
-| `enabled`                        | `false`                   | 是否按 cron 自动运行；新建任务默认不自动运行                                                  |
-| `cron` / `timezone`              | `null` / `UTC`            | 见[定时](#定时)                                                                               |
-| `filters`                        | 全部文件                  | 见[过滤](#过滤)                                                                               |
-| `syncEmptyDirs`                  | `false`                   | 见[空目录](#空目录)                                                                           |
-| `allowEmptySource`               | `false`                   | 源确认为空时是否仍允许删除，见[阈值](#删除保护与阈值)                                         |
-| `sourceDownloadConcurrency`      | `2`                       | Job 所有 Target 共享的下载中文件数，下载完即释放；0 表示不限                                  |
-| `targets[].concurrentFiles`      | `2`                       | relay 在途文件数（含上传和等待 complete）或 server-copy 未终态任务数；0 表示不限              |
-| `targets[].chunkConcurrency`     | `2`                       | 单个 relay 文件的并行 chunk 请求数；范围 1–8                                                  |
-| `relayBandwidthLimit`            | `0`                       | 本任务所有 relay 目标共用的上传上限（字节/秒），0 表示不限                                    |
-| `retryCount`                     | `null`                    | 失败后的重试次数，0–9；留空继承环境 `RETRY_MAX_ATTEMPTS`，Run 接受时冻结有效尝试数            |
-| `timeoutSeconds`                 | `86400`                   | 60–604800；从开始扫描算起（不含排队），超时后运行以 `RUN_TIMEOUT` 取消                        |
+| 字段                             | 默认                      | 说明                                                                                                            |
+| -------------------------------- | ------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `source` / `targets[]` 的 `path` | 必填                      | 账号内路径，`/` 指账号 base_path，见[base_path 与路径](openlist-accounts.md#base_path-与路径)                   |
+| `password`                       | 无                        | OpenList 路径密码；修改任务时省略表示保留，`null` 清除，空字符串返回 400                                        |
+| `refresh`                        | `false`                   | 常规扫描时是否让 OpenList 刷新缓存，见[刷新](openlist-accounts.md#刷新refresh)                                  |
+| `targets[].mode`                 | `incremental`             | `incremental` 或 `mirror`，见[目标模式](#目标模式)                                                              |
+| `targets[].createMode`           | `relay`                   | `relay` 或 `server_copy`，见[创建方式](#创建方式)                                                               |
+| `targets[].deleteLimits`         | 见[阈值](#删除保护与阈值) | 本目标的删除数量与比例阈值                                                                                      |
+| `enabled`                        | `false`                   | 是否按 cron 自动运行；新建任务默认不自动运行                                                                    |
+| `cron` / `timezone`              | `null` / `UTC`            | 见[定时](#定时)                                                                                                 |
+| `filters`                        | 全部文件                  | 见[过滤](#过滤)                                                                                                 |
+| `syncEmptyDirs`                  | `false`                   | 见[空目录](#空目录)                                                                                             |
+| `allowEmptySource`               | `false`                   | 源确认为空时是否仍允许删除，见[阈值](#删除保护与阈值)                                                           |
+| `sourceDownloadConcurrency`      | `2`                       | Job 所有 Target 共享的下载中文件数，下载完即释放；0 表示不限                                                    |
+| `sourceScanIntervalSeconds`      | `0`                       | 源树扫描请求的最小开始间隔，0–3600 整数秒；0 不增加间隔                                                         |
+| `targets[].concurrentFiles`      | `2`                       | relay 在途文件数（含上传和等待 complete）或 server-copy 未终态任务数；也约束建目录和多余文件 delete；0 表示不限 |
+| `targets[].scanIntervalSeconds`  | `0`                       | 目标目录扫描、mkdir 和 remove 的最小开始间隔，0–3600 整数秒；单项观察不受间隔约束                               |
+| `targets[].chunkConcurrency`     | `2`                       | 单个 relay 文件的并行 chunk 请求数；范围 1–8                                                                    |
+| `relayBandwidthLimit`            | `0`                       | 本任务所有 relay 目标共用的上传上限（字节/秒），0 表示不限                                                      |
+| `retryCount`                     | `null`                    | 失败后的重试次数，0–9；留空继承环境 `RETRY_MAX_ATTEMPTS`，Run 接受时冻结有效尝试数                              |
+| `timeoutSeconds`                 | `86400`                   | 60–604800；从开始扫描算起（不含排队），超时后运行以 `RUN_TIMEOUT` 取消                                          |
 
 - 修改任务（`PATCH /api/v1/jobs/:id`）时，`filters` 和已有目标的字段按字段合并；`targets` 数组决定完整的目标集合：已有目标带 `id` 修改，新目标不带 `id`，数组中去掉的目标被归档。
 - 任务有未结束的运行时，修改配置返回 409 `JOB_BUSY`；启用和停用定时不受此限制。已开始的运行始终按接受时的配置快照执行。
 - `retryCount` 的值分别用于 Run 内的外层文件、chunk、下载、读取、完成和 task-info 重试循环；这些循环各自计数，可能产生乘积效果。退避基数和上限仍由全局环境配置决定。
 - 并发配额在 Run 接受时冻结；不同 Job 同时运行时各自额度相加。把 server-copy 的 `concurrentFiles` 设为 0 会持续提交所有待复制的任务，可能使 OpenList 任务队列和驱动承压。
+
+扫描间隔在 Run 接受时冻结；创建省略为 0，PATCH 省略保留，显式 0 清除。同一 Instance ID 与拼接账号根路径后的全局路径首段共享上次开始时间，按调用方间隔 FIFO 派发，详见[扫描间隔](../design/scheduling-recovery.md#扫描间隔)。
 
 ### 路径规则
 

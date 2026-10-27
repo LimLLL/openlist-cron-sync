@@ -109,10 +109,16 @@ export class OpenListAuth implements BeforeApplicationShutdown {
    * @throws OpenListError 认证阻断或上游失败；Error 持久化失败。
    */
   async call(instance: InstanceRecord, call: HttpCall): Promise<unknown> {
-    call.signal?.throwIfAborted();
+    const waiting = call.dispatchSignal
+      ? AbortSignal.any([
+          call.dispatchSignal,
+          ...(call.signal ? [call.signal] : []),
+        ])
+      : call.signal;
+    waiting?.throwIfAborted();
     const session = await waitForAuthentication(
       this.ready(instance, false, call),
-      call.signal,
+      waiting,
     );
     const token = session.token;
     try {
@@ -134,7 +140,7 @@ export class OpenListAuth implements BeforeApplicationShutdown {
       // 上游只在认证中间件或处理器入口的身份检查返回 401，请求尚未执行，重放一次是安全的。
       await waitForAuthentication(
         this.refresh(session, token, false, call),
-        call.signal,
+        waiting,
       );
       return this.transport.call(
         instance,

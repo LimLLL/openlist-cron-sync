@@ -1,7 +1,7 @@
-// 实例展示辅助：统一的状态判定与标签、版本号缩写、配额字段元数据，列表、详情与表单共用。
+// 实例展示辅助：统一的状态判定与标签、版本号缩写，列表与详情共用。
 import { useTranslation } from 'react-i18next';
 import { Badge } from '../../components/ui/badge';
-import type { Instance, InstanceLimits } from './instance-contract';
+import type { Instance } from './instance-contract';
 
 /** 实例在界面上的综合状态：阻止优先，其次是最近错误，再看认证状态。 */
 export type InstanceStatus = 'ready' | 'auth_blocked' | 'untested' | 'error';
@@ -43,12 +43,3 @@ export function shortVersion(version: string | null): string | null {
   if (!version) return null;
   return /^v?\d+(\.\d+)*/.exec(version.trim())?.[0] ?? version;
 }
-
-/** 配额字段及其后端默认值，顺序即展示顺序；取值为 0（不限）或正整数，无上限。 */
-export const LIMIT_FIELDS: ReadonlyArray<{
-  key: keyof InstanceLimits;
-  defaultValue: number;
-}> = [
-  { key: 'maxApiConcurrency', defaultValue: 4 },
-  { key: 'apiRequestsPerSecond', defaultValue: 5 },
-];

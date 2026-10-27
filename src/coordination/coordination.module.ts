@@ -1,10 +1,10 @@
-// 协调叶子模块持有就绪标志与每实例 API 配额。
+// 协调叶子模块持有就绪标志与跨任务目录请求间隔。
 import { DatabaseModule } from '../database/database.module.js';
 import { Quarantine } from './quarantine.js';
 import { PathOccupancy } from './path-occupancy.js';
 import { RelayResources } from './relay-resources.js';
 import { ConfigurationModule } from '../configuration/configuration.module.js';
-import { ApiQuota } from './api-quota.service.js';
+import { ScanPacing } from './scan-pacing.service.js';
 import { RunQueue } from './run-queue.js';
 import { Module } from '@nestjs/common';
 import { Readiness } from './readiness.js';
@@ -23,7 +23,7 @@ export { Readiness } from './readiness.js';
     Readiness,
     FatalError,
     TaskResources,
-    ApiQuota,
+    ScanPacing,
     RunQueue,
     PathOccupancy,
     RelayResources,
@@ -33,7 +33,7 @@ export { Readiness } from './readiness.js';
     Readiness,
     FatalError,
     TaskResources,
-    ApiQuota,
+    ScanPacing,
     RunQueue,
     PathOccupancy,
     RelayResources,

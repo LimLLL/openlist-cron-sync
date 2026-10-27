@@ -56,13 +56,6 @@ export interface InstanceSnapshot {
   accountRole: number;
   /** 已核实权限位图。 */
   accountPermissions: number;
-  /** 实例资源限制。 */
-  limits: {
-    /** API 并发数。 */
-    maxApiConcurrency: number;
-    /** 每秒 API 请求数。 */
-    apiRequestsPerSecond: number;
-  };
   /** 下载模式。 */
   downloadMode: 'd' | 'p';
 }

@@ -67,7 +67,7 @@ export class CopyTracker {
     if (changed.changes !== 1)
       throw new Error('Task response outside submitting');
   }
-  /** 公平轮询一个tid；各task独立等待且只在HTTP请求期间占API位。
+  /** 公平轮询一个tid；各task按固定轮询间隔独立等待，不使用扫描间隔。
    * @param context Run身份、停止及收尾期限。
    * @param initial 已持久化tid的操作。
    * @param recovering 是否使用持久恢复时钟。

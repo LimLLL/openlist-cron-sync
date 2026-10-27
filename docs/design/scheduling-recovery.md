@@ -6,7 +6,7 @@
 
 ## 职责归属
 
-CoordinationModule是叶子模块，只依赖Config与Database，在进程内持有Run执行位、全局FIFO队列状态、路径占用、隔离路径检查、每Instance的API信号量与请求速率限制、每Job/Target的relay和server-copy文件名额，以及每Job的relay令牌桶。
+CoordinationModule是叶子模块，只依赖Config与Database，在进程内持有Run执行位、全局FIFO队列状态、路径占用、隔离路径检查、按Instance ID与全局路径首段共享的扫描间隔、每Job/Target的relay和server-copy文件名额，以及每Job的relay令牌桶。
 RunsModule负责接受触发（建立queued Run）、派发、取消和启动恢复；SchedulingModule只注册cron，并在触发时调用RunsModule的触发服务。MaintenanceModule、SyncModule、RelayModule都通过CoordinationModule使用同一套占用与配额，不另建资源池。模块依赖见[架构](architecture.md)。
 
 现有FIFO、执行位、队列过期、Run期限、路径互斥和恢复被cron、relay及server_copy共用。恢复闸门仅等待责任及task额度重建，不等待远程task全部结束。
@@ -23,9 +23,9 @@ cron使用直接依赖cron的CronJob，由@nestjs/schedule的SchedulerRegistry�
 
 1. Run执行位：含扫描及执行，恢复中的Run只保留路径占用，不占新Run执行位。
 2. 路径占用：真实Run的source只读、targets写；dry-run全部endpoint只读；read/read可并行，write/write和write/read的相等/祖先后代关系互斥。
-3. 每Instance API并发和请求速率；其中至少一个API位优先服务认证/轮询/取消，正数配额下控制请求先于新提交；maxApiConcurrency=0时不设实例并发上限。chunk和complete不取API位。
+3. 扫描间隔：Job sourceScanIntervalSeconds与每Target scanIntervalSeconds只拉开目录请求的开始时间，见[扫描间隔](#扫描间隔)。本地不再有每Instance的API并发或速率配额；需间隔的请求等待FIFO派发顺序，其余请求不经过该队列。
 4. 每Job sourceDownloadConcurrency限制所有Target共享的未完成源读取数；源位先于首块spool预留取得，验证精确长度与正常EOF并关闭源后释放。spool背压、Range恢复期间仍占位；0不设隐藏并发上限。
-5. 每Target concurrentFiles限制relay准备、上传、等待complete及收尾的文件数，或server-copy未终态任务数；0不设隐藏并发上限。Target chunkConcurrency另限单文件chunk请求数（1–8）。
+5. 每Target concurrentFiles限制relay准备、上传、等待complete及收尾的文件数，或server-copy未终态任务数；mkdir与文件extras阶段也按同一值派发，目录extras逐个执行；0不设隐藏并发上限。Target chunkConcurrency另限单文件chunk请求数（1–8）。
 6. Job聚合带宽bucket只影响relay上传。不同Job的文件名额分别计数并相加；spool FIFO和SPOOL_RESERVE_BYTES提供唯一的磁盘背压。
 
 路径比较键同时用于第2层路径占用和跨Job的unknown保护：
@@ -36,6 +36,17 @@ cron使用直接依赖cron的CronJob，由@nestjs/schedule的SchedulerRegistry�
 
 跨Job的未知Operation也保护路径。没有活动Run时，unknown不占整个Job名额。
 以下迟到写入不在进程互斥保证内：无法观察的别名；OpenList已受理、仍在云端后台进行的复制（见[ADR 0005](../adr/0005-openlist-success.md)）；隔离到期后旧请求的迟到动作（见[ADR 0004](../adr/0004-quarantine-expiry.md)）。Run结束并释放路径占用，不代表这些云端动作已经结束。
+
+## 扫描间隔
+
+间隔按“Instance ID + 规范化全局路径（accountBasePath与账号路径按POSIX段连接）的第一段”分组，全局根路径`/`单独成组；同组由所有Job、Target以及源/目标角色共享，进程内存保存上次实际开始时间，Run结束后仍保留，重启清空。例如账号根为`/drive/team`、账号路径为`/photos`时，分组首段为`drive`；相同URL的不同Instance ID不共享间隔。
+
+- 无历史开始时间时首个请求立即开始；之后每组FIFO发放开始顺序；每个调用方用自己冻结的间隔对比上次实际开始时间（开始到开始），因此同组不同间隔不会合成单一速率，0间隔的请求也不越过先到者。
+- 只约束请求开始，不占用响应期容量：上一个请求未返回也可按时开始下一个。
+- 源间隔覆盖源树扫描（含刷新与回退列举）。目标间隔覆盖目标树扫描、强制刷新、根/父目录证明、mkdir后的根目录校验、目录删除前的空目录检查，以及同步发出的全部mkdir和remove（文件extras、目录extras、替换链删除、重试清理）。
+- 不受间隔约束：fs/get、下载、multipart全部请求、空文件put、复制提交、单条目观察（删除确认、恢复结果检查、server_copy源校验、中转签名刷新，即使底层用fs/list）、task查询/取消/删除、实例测试与浏览、登录、/me、公开设置及存储发现。
+- 等待受Run停止、文件期限和进程关闭约束；排队中被取消的请求不派发、不进入submitting，也不推进开始时间。读取重试先退避再重新排队；401后的重放在认证恢复后重新排队。
+- 间隔等待不计入OPENLIST_API_TIMEOUT_MS，但计入Run期限及适用的文件期限。执行期已准入动作在等待期间仍占Target名额；扫描期不占文件名额。已派发的写请求使用已有的在途/收尾期限，Run停止不再直接截断这些写请求的响应；扫描读取仍随Run停止中止。
 
 ## 取消与超时
 

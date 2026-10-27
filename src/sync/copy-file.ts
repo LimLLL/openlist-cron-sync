@@ -46,6 +46,7 @@ export class CopyFile {
     const list = await this.context.list(
       sourceTarget,
       directory,
+      'entry',
       undefined,
       this.context.secrets.sourcePassword ?? '',
     );

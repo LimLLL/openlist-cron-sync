@@ -72,7 +72,7 @@ OpenList 会缓存目录列表。任务的 `source.refresh` 和 `targets[].refre
 
 ### 在 Web 控制台中
 
-1. 打开“实例”页，点击“新建实例”，填写名称、地址、认证方式（令牌或密码）和凭据。下载方式与 API 并发/速率配额可以留空使用默认值；relay/server-copy 传输配额在 Job/Target 中设置。保存时不会访问 OpenList。
+1. 打开“实例”页，点击“新建实例”，填写名称、地址、认证方式（令牌或密码）和凭据。下载方式可以使用默认值；实例上没有并发或速率设置，对这台 OpenList 的请求压力由 Job/Target 的并发与扫描间隔控制。保存时不会访问 OpenList。
 2. 进入实例详情页，点击“测试连接”。成功后页面显示账号、根路径（base_path）、角色、权限位、OpenList 版本和分片上传状态。
 3. 点击“浏览目录”确认能看到要同步的目录；对话框中可以输入路径密码，也可以刷新当前目录。
 
@@ -101,7 +101,7 @@ curl -X POST "$BASE/instances/$INSTANCE_ID/browse" \
 
 - `baseUrl` 必须是 http(s) 地址，可以带反向代理子路径（如 `https://example.com/openlist`），不能含用户名密码、查询参数或片段。
 - `downloadMode` 默认 `d`，relay 从 OpenList 的 `/d` 下载路由读取源文件（可能跳转到存储的直链）；`p` 改走 `/p`，由 OpenList 代理传输，需要 OpenList 允许该存储代理。
-- `limits` 只控制本服务对这台 OpenList 管理 API 的并发和速率，默认值见[配置](../reference/configuration.md)。有未结束的运行引用该实例时，`limits` 和 `downloadMode` 不能修改（409 `ENDPOINT_IN_USE`）。传输并发在 Job 的源下载配额及 Target 的文件/分片配额中配置。
+- 有未结束的运行引用该实例时，`downloadMode` 不能修改（409 `ENDPOINT_IN_USE`）。实例不再接受 `limits`，请求中带上该字段（包括空对象）返回 400 `VALIDATION_ERROR`；请求压力在 Job 的源下载并发、源扫描间隔及 Target 的文件/分片并发、扫描间隔中配置。
 - 浏览结果只返回名称、大小、类型和修改时间，不返回下载签名；名称非法的条目被排除并以 `INVALID_NAME` 警告提示。
 
 ### 读懂连接测试结果
@@ -137,7 +137,7 @@ curl -X POST "$BASE/instances/$INSTANCE_ID/browse" \
 
 ## 修改与归档实例
 
-- `PATCH /api/v1/instances/:id` 只改提供的字段，`limits` 按字段合并，`auth` 整体替换；修改时不访问 OpenList。
+- `PATCH /api/v1/instances/:id` 只改提供的字段，`auth` 整体替换；修改时不访问 OpenList。
 - 修改 `auth` 或 `baseUrl` 后实例回到“未测试”，必须重新测试，引用它的任务才能再次运行。
 - 实例仍有未处理的执行责任（例如结果未知的操作）时，修改地址、认证方式或用户名返回 409 `ENDPOINT_IN_USE`；同地址、同账号更新密码或令牌仍然允许。token 方式更换令牌时无法当场确认它属于哪个账号，下次连接测试或首次使用时若发现账号变了，实例会以 `ACCOUNT_CHANGED` 阻止。
 - `DELETE /api/v1/instances/:id` 归档实例并清除凭据。仍被未归档任务引用或仍有未处理责任时返回 409 `ENDPOINT_IN_USE`，需先归档或修改这些任务。

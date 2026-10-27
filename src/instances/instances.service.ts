@@ -118,7 +118,6 @@ export class InstancesService {
         name: input.name,
         baseUrl,
         ...auth,
-        ...input.limits,
         downloadMode: input.downloadMode ?? 'd',
         createdAt: now,
         updatedAt: now,
@@ -155,22 +154,12 @@ export class InstancesService {
           (input.auth?.mode === 'password' &&
             input.auth.username !==
               (current.username ?? current.accountUsername));
-        const limitsChanged =
-          (input.downloadMode !== undefined &&
-            input.downloadMode !== current.downloadMode) ||
-          Object.entries(input.limits ?? {}).some(
-            /** 判断单个补丁限额是否改变当前值。
-             * @param entry 限额字段名与补丁值。
-             * @returns 该字段是否被提供且不同于当前记录。
-             * @throws 不适用。
-             */
-            ([key, value]) =>
-              value !== undefined &&
-              current[key as keyof InstanceRecord] !== value,
-          );
+        const downloadModeChanged =
+          input.downloadMode !== undefined &&
+          input.downloadMode !== current.downloadMode;
         if (
           (identityChanged && hasResponsibility(this.database.db, id)) ||
-          (limitsChanged && activeRunReference(this.database.db, id))
+          (downloadModeChanged && activeRunReference(this.database.db, id))
         )
           throw new ApiError(
             409,
@@ -178,7 +167,6 @@ export class InstancesService {
             'Instance has outstanding responsibility',
           );
         const changes: InstanceChanges = {
-          ...input.limits,
           updatedAt: Date.now(),
         };
         if (input.name !== undefined) changes.name = input.name;
@@ -303,10 +291,6 @@ export function instanceView(row: InstanceRecord): InstanceView {
       mode: row.authMode,
       username: row.username,
       hasSecret: row.secretEnc !== null,
-    },
-    limits: {
-      maxApiConcurrency: row.maxApiConcurrency,
-      apiRequestsPerSecond: row.apiRequestsPerSecond,
     },
     downloadMode: row.downloadMode,
     authState: row.authState,

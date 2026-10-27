@@ -60,7 +60,7 @@ describe('M1 instances API' /** 注册本组 M1 行为验收用例。
         .expect(401);
     }
   });
-  it('creates, merges limits, reads pages and archives with the exact public shape' /** 验证当前场景的协议输入、输出与副作用。
+  it('creates, patches names, reads pages and archives with the exact public shape' /** 验证当前场景的协议输入、输出与副作用。
    * @param 不适用。
    * @returns 断言完成；异步用例返回完成 Promise。
    * @throws Error 断言或测试资源操作失败。
@@ -76,7 +76,6 @@ describe('M1 instances API' /** 注册本组 M1 行为验收用例。
           username: 'admin',
           secret: 'SECRET-NEVER-RETURNED',
         },
-        limits: { maxApiConcurrency: 3 },
       })
       .expect(201);
     const data = object(created.body);
@@ -85,10 +84,6 @@ describe('M1 instances API' /** 注册本组 M1 行为验收用例。
       name: 'New',
       baseUrl: fixture.server.baseUrl,
       auth: { mode: 'password', username: 'admin', hasSecret: true },
-      limits: {
-        maxApiConcurrency: 3,
-        apiRequestsPerSecond: 5,
-      },
       authState: 'untested',
       accountUsername: null,
       lastError: null,
@@ -100,11 +95,10 @@ describe('M1 instances API' /** 注册本组 M1 行为验收用例。
     const updated = await request(base)
       .patch('/api/v1/instances/' + id)
       .auth(token, { type: 'bearer' })
-      .send({ limits: { maxApiConcurrency: 2 }, name: 'Renamed' })
+      .send({ name: 'Renamed' })
       .expect(200);
     expect(updated.body).toMatchObject({
       name: 'Renamed',
-      limits: { maxApiConcurrency: 2, apiRequestsPerSecond: 5 },
     });
     expect(fixture.server.calls).toHaveLength(0);
     const page = await request(base)
@@ -139,30 +133,40 @@ describe('M1 instances API' /** 注册本组 M1 行为验收用例。
       items: [{ id, auth: { hasSecret: false } }, { id: fixture.id }],
     });
   });
-  it('accepts zero and the safe-integer ceiling for every API quota' /** 0 表示不限，正数没有产品上限，只受安全整数约束。
+  /** 旧配额属性整体拒绝，不接受空对象，也不默默丢弃旧值。
    * @param 不适用。
-   * @returns 断言完成；异步用例返回完成 Promise。
-   * @throws Error 断言或测试资源操作失败。
-   */, async () => {
-    const limits = {
-      maxApiConcurrency: 0,
-      apiRequestsPerSecond: 0,
-    };
-    const zero = await request(base)
-      .patch('/api/v1/instances/' + fixture.id)
+   * @returns 验证完成。
+   * @throws Error HTTP 或断言失败。
+   */
+  it('rejects the removed limits property on create and patch', async () => {
+    for (const limits of [
+      {},
+      { maxApiConcurrency: 0 },
+      { apiRequestsPerSecond: 5 },
+    ]) {
+      const patch = await request(base)
+        .patch('/api/v1/instances/' + fixture.id)
+        .auth(token, { type: 'bearer' })
+        .send({ limits })
+        .expect(400);
+      expect(patch.body.error.code).toBe('VALIDATION_ERROR');
+      const created = await request(base)
+        .post('/api/v1/instances')
+        .auth(token, { type: 'bearer' })
+        .send({
+          name: 'Old client',
+          baseUrl: fixture.server.baseUrl,
+          auth: { mode: 'token', secret: 'secret' },
+          limits,
+        })
+        .expect(400);
+      expect(created.body.error.code).toBe('VALIDATION_ERROR');
+    }
+    const current = await request(base)
+      .get('/api/v1/instances/' + fixture.id)
       .auth(token, { type: 'bearer' })
-      .send({ limits })
       .expect(200);
-    expect(zero.body.limits).toEqual(limits);
-    const ceiling = Object.fromEntries(
-      Object.keys(limits).map((key) => [key, Number.MAX_SAFE_INTEGER]),
-    );
-    const max = await request(base)
-      .patch('/api/v1/instances/' + fixture.id)
-      .auth(token, { type: 'bearer' })
-      .send({ limits: ceiling })
-      .expect(200);
-    expect(max.body.limits).toEqual(ceiling);
+    expect(current.body).not.toHaveProperty('limits');
   });
   it('rejects invalid, unknown, null and discriminator inputs without contacting OpenList' /** 验证当前场景的协议输入、输出与副作用。
    * @param 不适用。
@@ -396,6 +400,11 @@ describe('M1 instances API' /** 注册本组 M1 行为验收用例。
         'archivedAt',
       ]),
     );
+    expect(properties).not.toHaveProperty('limits');
+    expect(schemas).not.toHaveProperty('LimitsView');
+    expect(
+      object(object(schemas.InstanceCreateDto).properties),
+    ).not.toHaveProperty('limits');
     expect(JSON.stringify(schemas)).not.toMatch(
       /"(?:secret_enc|secretEnc|raw_url|addition)":/,
     );

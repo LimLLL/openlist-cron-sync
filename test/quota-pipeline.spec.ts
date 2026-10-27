@@ -4,9 +4,6 @@ import { copyFixture } from './copy-fixture.js';
 import { terminal, plan } from './m2-fixture.js';
 import { envelope, latch } from './openlist-fixture.js';
 import { object } from '../src/openlist/errors.js';
-import { InstancesService } from '../src/instances/instances.service.js';
-import { ApiQuota } from '../src/coordination/api-quota.service.js';
-import { OpenListMultipart } from '../src/openlist/multipart.service.js';
 import { RelayResources } from '../src/coordination/relay-resources.js';
 
 /** 慢文件不能阻止其他文件完成后立即补充；执行中统计读取已落库字节。
@@ -58,9 +55,6 @@ it('refills relay slots while a slow first file remains in flight', async () => 
 it('submits more than two fetch batches with unlimited server-copy files', async () => {
   const f = await copyFixture();
   try {
-    f.app.get(InstancesService).patch(f.id, {
-      limits: { maxApiConcurrency: 0, apiRequestsPerSecond: 0 },
-    });
     f.files.delete('/source/new.txt');
     for (let index = 0; index < 70; index++)
       f.files.set(`/source/${index}.txt`, Buffer.from('payload'));
@@ -139,62 +133,6 @@ it.each([1, 3, 8])(
   },
   15_000,
 );
-
-/** 控制位全部被占时chunk/complete仍可完成，status/abort必须等待API配额。
- * @returns 验证完成。
- * @throws Error 请求或断言失败。
- */
-it('keeps chunk and complete outside the API quota while status and abort use it', async () => {
-  const f = await relayFixture();
-  let release: (() => void) | undefined;
-  try {
-    f.app.get(InstancesService).patch(f.id, {
-      limits: { maxApiConcurrency: 1, apiRequestsPerSecond: 0 },
-    });
-    const instance = f.record();
-    const multipart = f.app.get(OpenListMultipart);
-    const quota = f.app.get(ApiQuota);
-    const signal = AbortSignal.timeout(5000);
-    const session = await multipart.init(
-      instance,
-      { directory: '/target', name: 'quota.txt' },
-      1,
-      { signal },
-    );
-    release = await quota.acquire(instance, true, signal);
-    const requests = f.server.calls.length;
-    const status = multipart
-      .status(instance, session.uploadId, { signal })
-      .catch((error: unknown) => error);
-    const abort = multipart
-      .abort(instance, session.uploadId, { signal })
-      .catch((error: unknown) => error);
-    await multipart.chunk(
-      instance,
-      session.uploadId,
-      0,
-      Buffer.from('x'),
-      signal,
-    );
-    await multipart.complete(instance, session.uploadId, signal);
-    expect(f.server.calls.slice(requests).map((call) => call.url)).toEqual([
-      '/api/fs/multipart/chunk',
-      '/api/fs/multipart/complete',
-    ]);
-    release();
-    release = undefined;
-    await Promise.all([status, abort]);
-    expect(
-      f.server.calls.some((call) => call.url.includes('/multipart/status')),
-    ).toBe(true);
-    expect(
-      f.server.calls.some((call) => call.url.endsWith('/multipart/abort')),
-    ).toBe(true);
-  } finally {
-    release?.();
-    await f.close();
-  }
-});
 
 /** 文件并发10必须允许十个complete同时等待，不能退回隐藏的4文件批次。
  * @returns 验证完成。

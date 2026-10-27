@@ -101,37 +101,6 @@ export class AuthInputDto {
   @Length(1)
   secret: string;
 }
-/** 配额字段按字段合并，所有单位与范围见配置参考。
- * @param 不适用。
- * @returns 不适用。
- * @throws 不适用。
- */
-export class InstanceLimitsDto {
-  /** API 并发，默认 4，0 表示不限。 */
-  @ApiPropertyOptional({
-    type: 'integer',
-    default: 4,
-    minimum: 0,
-    maximum: Number.MAX_SAFE_INTEGER,
-  })
-  @Optional()
-  @IsInt()
-  @Min(0)
-  @Max(Number.MAX_SAFE_INTEGER)
-  maxApiConcurrency?: number;
-  /** 每秒 API 请求数，默认 5，0 表示不限。 */
-  @ApiPropertyOptional({
-    type: 'integer',
-    default: 5,
-    minimum: 0,
-    maximum: Number.MAX_SAFE_INTEGER,
-  })
-  @Optional()
-  @IsInt()
-  @Min(0)
-  @Max(Number.MAX_SAFE_INTEGER)
-  apiRequestsPerSecond?: number;
-}
 /** 实例创建输入。
  * @param 不适用。
  * @returns 不适用。
@@ -196,27 +165,13 @@ export class InstanceCreateDto {
     () => AuthInputDto,
   )
   auth: AuthInputDto;
-  /** 可省略的配额配置，未给字段使用默认值。 */
-  @ApiPropertyOptional({ type: InstanceLimitsDto })
-  @Optional()
-  @IsObject()
-  @ValidateNested()
-  @Type(
-    /** 提供嵌套 DTO 的运行时类型。
-     * @param 不适用。
-     * @returns 字段的 DTO 构造器。
-     * @throws 不适用。
-     */
-    () => InstanceLimitsDto,
-  )
-  limits?: InstanceLimitsDto;
   /** 下载模式，默认 d。 */
   @ApiPropertyOptional({ enum: ['d', 'p'], default: 'd' })
   @Optional()
   @IsIn(['d', 'p'])
   downloadMode?: 'd' | 'p';
 }
-/** 实例补丁；至少一个字段，limits 合并，auth 整体替换。
+/** 实例补丁；至少一个字段，auth 整体替换。
  * @param 不适用。
  * @returns 不适用。
  * @throws 不适用。

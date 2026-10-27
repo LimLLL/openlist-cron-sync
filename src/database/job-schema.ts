@@ -32,6 +32,9 @@ export const jobs = sqliteTable(
     sourceRefresh: integer('source_refresh', { mode: 'boolean' })
       .notNull()
       .default(false),
+    sourceScanIntervalSeconds: integer('source_scan_interval_seconds')
+      .notNull()
+      .default(0),
     sourceDownloadConcurrency: integer('source_download_concurrency')
       .notNull()
       .default(2),
@@ -66,6 +69,10 @@ export const jobs = sqliteTable(
   (t) => [
     index('jobs_enabled_archive').on(t.enabled, t.archivedAt),
     index('jobs_source').on(t.sourceInstanceId),
+    check(
+      'jobs_scan_interval',
+      sql`typeof(${t.sourceScanIntervalSeconds}) = 'integer' AND ${t.sourceScanIntervalSeconds} BETWEEN 0 AND 3600`,
+    ),
     check('jobs_name', sql`length(${t.name}) BETWEEN 1 AND 100`),
     check(
       'jobs_booleans',
@@ -129,6 +136,7 @@ export const jobTargets = sqliteTable(
     createMode: text('create_mode', { enum: ['relay', 'server_copy'] })
       .notNull()
       .default('relay'),
+    scanIntervalSeconds: integer('scan_interval_seconds').notNull().default(0),
     concurrentFiles: integer('concurrent_files').notNull().default(2),
     chunkConcurrency: integer('chunk_concurrency').notNull().default(2),
     refresh: integer('refresh', { mode: 'boolean' }).notNull().default(false),
@@ -154,6 +162,10 @@ export const jobTargets = sqliteTable(
       .where(sql`${t.archivedAt} IS NULL`),
     index('job_targets_instance_archive').on(t.instanceId, t.archivedAt),
     check('job_targets_position_nonnegative', sql`${t.position} >= 0`),
+    check(
+      'job_targets_scan_interval',
+      sql`typeof(${t.scanIntervalSeconds}) = 'integer' AND ${t.scanIntervalSeconds} BETWEEN 0 AND 3600`,
+    ),
     check('job_targets_mode', sql`${t.mode} IN ('incremental','mirror')`),
     check(
       'job_targets_create_mode',

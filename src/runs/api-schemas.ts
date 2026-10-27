@@ -45,18 +45,6 @@ const instanceSchema = objectSchema({
   accountRole: sizeSchema,
   accountPermissions: sizeSchema,
   downloadMode: { type: 'string', enum: ['d', 'p'] },
-  limits: objectSchema(
-    Object.fromEntries(
-      ['maxApiConcurrency', 'apiRequestsPerSecond'].map(
-        /** 为一个实例限额字段生成非负整数属性。
-         * @param key 实例限额字段名。
-         * @returns 字段名与整数 schema 的属性条目。
-         * @throws 不适用。
-         */
-        (key) => [key, sizeSchema],
-      ),
-    ),
-  ),
 });
 export const runViewSchema = objectSchema({
   id: idSchema,

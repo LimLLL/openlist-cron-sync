@@ -28,14 +28,6 @@ export interface AuthView {
   hasSecret: boolean;
 }
 
-/** 实例管理 API 配额；传输并发属于任务与目标。 */
-export interface InstanceLimits {
-  /** API 并发数。 */
-  maxApiConcurrency: number;
-  /** 每秒 API 请求数。 */
-  apiRequestsPerSecond: number;
-}
-
 /** 实例公共视图。 */
 export interface Instance {
   /** UUIDv4。 */
@@ -46,8 +38,6 @@ export interface Instance {
   baseUrl: string;
   /** 认证公开视图。 */
   auth: AuthView;
-  /** 全部有效配额。 */
-  limits: InstanceLimits;
   /** 下载模式。 */
   downloadMode: 'd' | 'p';
   /** 认证状态。 */
@@ -144,8 +134,6 @@ export interface InstanceInput {
   baseUrl?: string;
   /** 认证（整体替换）。 */
   auth?: { mode: 'token' | 'password'; username?: string; secret: string };
-  /** 配额（按字段合并）。 */
-  limits?: Partial<InstanceLimits>;
   /** 下载模式。 */
   downloadMode?: 'd' | 'p';
 }
@@ -176,26 +164,6 @@ function parseAuth(value: unknown): AuthView {
   };
 }
 
-/** 解析实例配额。
- * @param value 未信任的 JSON。
- * @returns 配额对象。
- * @throws ApiError 格式不合法。
- */
-function parseLimits(value: unknown): InstanceLimits {
-  if (!isRecord(value))
-    throw new ApiError(0, 'INVALID_RESPONSE', 'Invalid limits view.');
-  return {
-    maxApiConcurrency: expectNumber(
-      value.maxApiConcurrency,
-      'maxApiConcurrency',
-    ),
-    apiRequestsPerSecond: expectNumber(
-      value.apiRequestsPerSecond,
-      'apiRequestsPerSecond',
-    ),
-  };
-}
-
 /** 校验单个实例响应。
  * @param value 未信任的 JSON。
  * @returns 类型安全的实例对象。
@@ -209,7 +177,6 @@ export function parseInstance(value: unknown): Instance {
     name: expectString(value.name, 'name'),
     baseUrl: expectString(value.baseUrl, 'baseUrl'),
     auth: parseAuth(value.auth),
-    limits: parseLimits(value.limits),
     downloadMode: expectEnum(value.downloadMode, ['p', 'd'], 'downloadMode'),
     authState: expectEnum(
       value.authState,

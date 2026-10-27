@@ -114,7 +114,6 @@ export class OpenListTasks {
         ...context,
         endpoint: '/api/fs/copy',
         method: 'POST',
-        control: false,
         json: {
           src_dir: normalizePath(source),
           dst_dir: normalizePath(destination),

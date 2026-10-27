@@ -14,11 +14,11 @@ RunView/OperationView的error.code、stopReason、RunTargetView.blockReasons、S
 
 ## Instance
 
-InstanceCreate={name:string,baseUrl:string,auth:AuthInput,limits?:InstanceLimits,downloadMode?:'d'|'p'}。
+InstanceCreate={name:string,baseUrl:string,auth:AuthInput,downloadMode?:'d'|'p'}。
 AuthInput为判别联合：{mode:'token',secret:string}或{mode:'password',username:string,secret:string}。只有import可创建缺secret对象。
-InstanceLimits={maxApiConcurrency?:integer,apiRequestsPerSecond?:integer}；各字段为0–JS安全整数，0表示该Instance管理API不限，省略表示保留或使用默认值。relay/server-copy传输配额不再属于Instance。
-InstancePatch={name?:string,baseUrl?:string,auth?:AuthInput,limits?:InstanceLimits,downloadMode?:'d'|'p'}，至少一个字段；嵌套limits按字段合并。auth整体替换，不接受掩码或secret:null。
-InstanceView=Entity+{name,baseUrl,auth:{mode,username:string|null,hasSecret:boolean},limits:所有有效值,downloadMode,authState,authBlockReason:string|null,authBlockedUntil:Time|null,accountUsername:string|null,accountBasePath:string|null,accountRole:integer|null,accountPermissions:integer|null,lastTestAt:Time|null,openlistVersion:string|null,multipartEnabled:boolean|null,lastError:{code,message}|null,archivedAt:Time|null}。
+Instance不再有API并发或速率配额；创建或PATCH带limits（包括{}）返回400 VALIDATION_ERROR。请求压力由Job/Target的并发与扫描间隔控制。
+InstancePatch={name?:string,baseUrl?:string,auth?:AuthInput,downloadMode?:'d'|'p'}，至少一个字段。auth整体替换，不接受掩码或secret:null。
+InstanceView=Entity+{name,baseUrl,auth:{mode,username:string|null,hasSecret:boolean},downloadMode,authState,authBlockReason:string|null,authBlockedUntil:Time|null,accountUsername:string|null,accountBasePath:string|null,accountRole:integer|null,accountPermissions:integer|null,lastTestAt:Time|null,openlistVersion:string|null,multipartEnabled:boolean|null,lastError:{code,message}|null,archivedAt:Time|null}。
 M1 中 AuthInput 的 username 仅 password 模式允许，token 模式提供它返回400；可选字段的 null 不等于省略。
 accountUsername/accountBasePath/accountRole/accountPermissions是最近一次/api/me成功时记录的账号身份，两种auth mode都保存；身份不一致时不覆盖，authBlockReason=ACCOUNT_CHANGED。
 
@@ -31,10 +31,10 @@ BrowseResult={path:string,items:{name:string,size:Size|null,isDir:boolean,modifi
 EndpointInput={instanceId:Id,path:string,password?:string|null,refresh?:boolean}；create缺password表示无密码，patch省略保留、null清除；空字符串返回400（OpenList中空密码即无密码，须用null清除）。EndpointView={instanceId,path,hasPassword:boolean,refresh:boolean}。
 Filters={include?:string[],exclude?:string[],minSizeBytes?:Size|null,maxSizeBytes?:Size|null}。省略字段使用默认；完整View返回全部字段。
 DeleteLimits={enabled?:boolean,maxCount?:integer|null,maxPercent?:integer|null}。
-TargetInput=EndpointInput+{id?:Id,mode?:'incremental'|'mirror',createMode?:'relay'|'server_copy',concurrentFiles?:integer,chunkConcurrency?:integer,deleteLimits?:DeleteLimits}；concurrentFiles默认2、范围0–安全整数且0不限；relay含准备、上传、等待complete和收尾，server_copy计未结束任务；chunkConcurrency默认2、范围1–8。
-JobCreate={name:string,source:EndpointInput,targets:TargetInput[],enabled?:boolean,cron?:string|null,timezone?:string,filters?:Filters,allowEmptySource?:boolean,syncEmptyDirs?:boolean,sourceDownloadConcurrency?:integer,retryCount?:integer|null,relayBandwidthLimit?:integer,timeoutSeconds?:integer,notificationChannelIds?:Id[]}；sourceDownloadConcurrency默认2、范围0–安全整数且0不限；计同Job全部Target共享的未完成源读取，验证EOF后释放，spool背压与Range恢复暂停仍计入；等待complete不占源名额。
+TargetInput=EndpointInput+{id?:Id,mode?:'incremental'|'mirror',createMode?:'relay'|'server_copy',concurrentFiles?:integer,scanIntervalSeconds?:integer,chunkConcurrency?:integer,deleteLimits?:DeleteLimits}；concurrentFiles默认2、范围0–安全整数且0不限；relay含准备、上传、等待complete和收尾，server_copy计未结束任务，mkdir与文件extras也按该值并发；scanIntervalSeconds默认0、范围0–3600整数秒，为该Target目录扫描、mkdir、remove请求开始的最小间隔；单项验证/观察即使使用fs/list也不受间隔约束；chunkConcurrency默认2、范围1–8。
+JobCreate={name:string,source:EndpointInput,targets:TargetInput[],enabled?:boolean,cron?:string|null,timezone?:string,filters?:Filters,allowEmptySource?:boolean,syncEmptyDirs?:boolean,sourceDownloadConcurrency?:integer,sourceScanIntervalSeconds?:integer,retryCount?:integer|null,relayBandwidthLimit?:integer,timeoutSeconds?:integer,notificationChannelIds?:Id[]}；sourceDownloadConcurrency默认2、范围0–安全整数且0不限；计同Job全部Target共享的未完成源读取，验证EOF后释放，spool背压与Range恢复暂停仍计入；等待complete不占源名额。sourceScanIntervalSeconds默认0、范围0–3600整数秒，为源树扫描列目录请求开始的最小间隔；单项源校验与签名刷新不受间隔约束；间隔按Instance与全局路径首段跨Job共享，见[扫描间隔](../design/scheduling-recovery.md#扫描间隔)。两种间隔在创建时省略为0，PATCH省略保留，显式0清除。
 JobPatch顶层字段任选且至少一项；source为EndpointInput各字段均可省略的补丁，filters按字段合并，合并后验证完整对象。targets数组决定完整目标集合：已有target用{id,...可选字段补丁}按字段合并，deleteLimits也按字段合并；新target不带id且必须提供instanceId/path。createMode省略时，已有目标按稳定id保留值，新目标默认relay；null和非法枚举拒绝。source与targets完整合并后校验，每个server_copy Target必须与source使用同一Instance ID（相同URL不等于同一Instance），错误定位targets[index].createMode。Job顶层createMode属于未知字段。JobCreate的targets禁止指定id。外Job或归档target id拒绝。删除target归档旧行，不能重用id。
-JobView=Entity+{name,source:EndpointView,targets:(EndpointView+{id,position,mode,createMode,concurrentFiles,chunkConcurrency,deleteLimits:完整值})[],enabled,cron,timezone,filters:完整值,allowEmptySource,syncEmptyDirs,sourceDownloadConcurrency,retryCount:integer|null,relayBandwidthLimit,timeoutSeconds,notificationChannelIds:Id[],archivedAt:Time|null}。
+JobView=Entity+{name,source:EndpointView,targets:(EndpointView+{id,position,mode,createMode,concurrentFiles,scanIntervalSeconds,chunkConcurrency,deleteLimits:完整值})[],enabled,cron,timezone,filters:完整值,allowEmptySource,syncEmptyDirs,sourceDownloadConcurrency,sourceScanIntervalSeconds,retryCount:integer|null,relayBandwidthLimit,timeoutSeconds,notificationChannelIds:Id[],archivedAt:Time|null}。
 notificationChannelIds当前仅接受省略或[]，JobView固定返回[]，通知随M7接入。enabled控制动态cron，注册只在提交后更新。enabled=true要求所有实例/渠道secret齐全，endpoint身份已测试；不能通过enabled开启无法解析的路径。manual run也检查必要secret，但允许Job.enabled=false。
 
 ## Stats

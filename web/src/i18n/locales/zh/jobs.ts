@@ -60,15 +60,24 @@ export default {
     sourceDownloadConcurrency: '源下载并发',
     sourceDownloadConcurrencyHint:
       '同时处于下载阶段的文件数，本任务所有目标共享；下载完成后立即释放，上传和等待完成不占用。0 表示不限。',
+    sourceScanInterval: '源扫描间隔（秒）',
+    sourceScanIntervalHint:
+      '相邻两次列源目录的开始时间至少隔多少秒，0–3600，用于避开网盘风控。同一实例上，完整路径（含账号根路径）第一段相同的源和目标共用上次开始时间，各自按自己设的间隔等待。0 表示不间隔。',
     targets: '目标',
     targetsDesc:
       '每个目标独立选择同步模式、创建方式、并发和删除阈值，最多 32 个。并发按任务分别计算，多个任务同时访问同一存储时会相加。',
     concurrentFiles: '同时文件数',
     concurrentFilesRelayHint:
-      '同时中转到此目标的文件数，包含上传和等待完成；0 表示不限。',
-    concurrentFilesCopyHint: '此目标尚未结束的复制任务数；0 表示不限。',
+      '同时中转到此目标的文件数，包含上传和等待完成；也决定同时建目录、删除多余文件的数量。0 表示不限。',
+    concurrentFilesCopyHint:
+      '此目标尚未结束的复制任务数；也决定同时建目录、删除多余文件的数量。0 表示不限。',
+    concurrentFilesRelayUnlimited:
+      '不限时，等待上传完成的文件可能大量积压，建目录和多余文件删除也不设并发上限，可能加重 OpenList 和网盘负载；扫描间隔、依赖和阶段顺序仍生效。',
     concurrentFilesCopyUnlimited:
-      '不限会一次提交所有待复制的任务，可能让 OpenList 不堪重负。',
+      '不限时，复制任务、建目录和多余文件删除不设并发上限，可能加重 OpenList 负载；扫描间隔、依赖和阶段顺序仍生效。',
+    scanInterval: '扫描间隔（秒）',
+    scanIntervalHint:
+      '此目标上相邻两次列目录、建目录、删除的开始时间至少隔多少秒，0–3600；删除确认等单项检查不受影响。同一实例上，完整路径（含账号根路径）第一段相同的任务共用上次开始时间。0 表示不间隔。',
     chunkConcurrency: '单文件分片并发',
     chunkConcurrencyHint: '每个文件同时上传的分片数，1–8。',
     chunkConcurrencyCopyHint: '仅中转使用。',
@@ -179,8 +188,12 @@ export default {
     retryCount: '失败后的重试次数',
     retryInherited: '全局默认',
     sourceDownloadConcurrency: '源下载并发',
+    sourceScanInterval: '源扫描间隔',
     concurrentFiles: '同时文件数',
     chunkConcurrency: '单文件分片并发',
+    scanInterval: '扫描间隔',
+    scanIntervalValue: '{{value}} 秒',
+    scanIntervalNone: '不间隔',
     timeout: '超时',
     sourceRefresh: '扫描源时刷新',
     sourcePassword: '源路径密码',
@@ -239,7 +252,9 @@ export default {
     retryCount: '失败后的重试次数',
     timeout: '超时',
     sourceDownloadConcurrency: '源下载并发',
+    sourceScanInterval: '源扫描间隔',
     concurrentFiles: '同时文件数',
+    targetScanInterval: '目标扫描间隔',
     chunkConcurrency: '单文件分片并发',
   },
 } satisfies Translation<typeof en>;

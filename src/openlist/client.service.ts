@@ -1,7 +1,6 @@
 // 提供 OpenList 文件、设置和完整挂载读取，不实现变更结果推断。
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { InstanceRecord } from '../database/schema.js';
-import { AppConfig } from '../configuration/app-config.js';
 import { OpenListAuth } from './auth.service.js';
 import { OpenListTransport } from './transport.service.js';
 import { fileEntry, fileList, publicSettings } from './protocol.js';
@@ -21,14 +20,12 @@ import type { Storage } from './mounts.js';
 export class OpenListClient {
   private readonly logger = new Logger(OpenListClient.name);
   /** 保存共享传输与认证。
-   * @param config 管理请求期限。
    * @param auth 认证状态机。
    * @param transport 公开请求传输。
    * @returns 不适用。
    * @throws 不适用。
    */
   constructor(
-    @Inject(AppConfig) private readonly config: AppConfig,
     @Inject(OpenListAuth) readonly auth: OpenListAuth,
     @Inject(OpenListTransport) private readonly transport: OpenListTransport,
   ) {}
@@ -119,7 +116,6 @@ export class OpenListClient {
       ...context,
       endpoint: '/api/fs/mkdir',
       method: 'POST',
-      control: false,
       json: { path: normalizePath(path) },
     });
   }
@@ -142,7 +138,6 @@ export class OpenListClient {
       ...context,
       endpoint: '/api/fs/remove',
       method: 'POST',
-      control: false,
       json: { dir: normalizePath(directory), names: [name] },
     });
   }
@@ -162,12 +157,6 @@ export class OpenListClient {
         'MOUNT_BOUNDARY_UNKNOWN',
         'Admin account required for mount map',
       );
-    const timeout = AbortSignal.timeout(
-      (context.settings ?? this.config.execution).apiTimeoutMs,
-    );
-    const signal = context.signal
-      ? AbortSignal.any([context.signal, timeout])
-      : timeout;
     for (let pass = 0; pass < 2; pass++) {
       try {
         const rows: Storage[] = [];
@@ -179,7 +168,8 @@ export class OpenListClient {
               endpoint: `/api/admin/storage/list?page=${page}&per_page=100`,
               method: 'GET',
               read: true,
-              signal,
+              signal: context.signal,
+              cleanup: context.cleanup,
               settings: context.settings,
             }),
           );

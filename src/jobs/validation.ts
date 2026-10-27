@@ -279,6 +279,7 @@ export function mergeJob(
       'allowEmptySource',
       'syncEmptyDirs',
       'sourceDownloadConcurrency',
+      'sourceScanIntervalSeconds',
       'relayBandwidthLimit',
       'retryCount',
       'timeoutSeconds',
@@ -339,6 +340,7 @@ export function mergeJob(
           'mode',
           'createMode',
           'concurrentFiles',
+          'scanIntervalSeconds',
           'chunkConcurrency',
           'deleteLimits',
         ],
@@ -392,6 +394,14 @@ export function mergeJob(
         mode,
         createMode,
         concurrentFiles,
+        scanIntervalSeconds: number(
+          t.scanIntervalSeconds === undefined
+            ? (old?.scanIntervalSeconds ?? 0)
+            : t.scanIntervalSeconds,
+          field + '.scanIntervalSeconds',
+          0,
+          3600,
+        ),
         chunkConcurrency,
         deleteLimits: limits(t.deleteLimits, old?.deleteLimits),
       });
@@ -432,6 +442,14 @@ export function mergeJob(
         ? (previous?.syncEmptyDirs ?? false)
         : v.syncEmptyDirs,
       'syncEmptyDirs',
+    ),
+    sourceScanIntervalSeconds: number(
+      v.sourceScanIntervalSeconds === undefined
+        ? (previous?.sourceScanIntervalSeconds ?? 0)
+        : v.sourceScanIntervalSeconds,
+      'sourceScanIntervalSeconds',
+      0,
+      3600,
     ),
     sourceDownloadConcurrency: number(
       v.sourceDownloadConcurrency === undefined

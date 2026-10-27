@@ -30,7 +30,7 @@ type Phase = 'mkdir' | 'create' | 'files' | 'directories';
 const FETCH_SIZE = 32;
 
 /** 阶段内可同时派发的动作数，只取用户配置的配额；0表示不限。
- * 目录删除逐个进行；mkdir与文件删除受目标实例API并发约束；创建只受Target文件并发约束。
+ * 目录 delete 逐个进行；mkdir、创建与文件 delete 都使用 Target 文件并发。
  * @param target 当前目标。
  * @param phase 当前阶段。
  * @returns 正整数或Infinity。
@@ -38,22 +38,7 @@ const FETCH_SIZE = 32;
  */
 function phaseCapacity(target: RunTargetRecord, phase: Phase): number {
   if (phase === 'directories') return 1;
-  const { instance, target: config } = target.config;
-  const quotas =
-    phase !== 'create'
-      ? [instance.limits.maxApiConcurrency]
-      : [config.concurrentFiles];
-  return Math.min(
-    Infinity,
-    ...quotas.filter(
-      /** 0表示该配额不限，不参与取最小值。
-       * @param value 配额。
-       * @returns 是否为有限配额。
-       * @throws 不适用。
-       */
-      (value) => value > 0,
-    ),
-  );
+  return target.config.target.concurrentFiles || Infinity;
 }
 
 /** 具体执行器，内存仅保存有界批次及活动文件协调器。
@@ -299,7 +284,7 @@ export class Executor {
               op.targetPath === target.config.target.path
             ) {
               try {
-                await context.list(target, op.targetPath);
+                await context.list(target, op.targetPath, 'directory');
               } catch (error) {
                 context.signal.throwIfAborted();
                 if (!(error instanceof OpenListError)) throw error;

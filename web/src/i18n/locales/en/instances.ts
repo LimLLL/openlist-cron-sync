@@ -38,9 +38,6 @@ export default {
       transfer: 'Transfer',
       transferHint:
         'How file content is read from this server during relay copies.',
-      limits: 'API limits',
-      limitsHint:
-        'Caps on how often and how concurrently this console calls the server’s management API (listing, creating folders, deleting, submitting copies). Leave a field empty to use its default; transfer concurrency is set per source and target in each job.',
     },
     name: 'Name',
     namePlaceholder: 'My OpenList server',
@@ -62,13 +59,8 @@ export default {
     downloadProxy: 'Proxy stream',
     downloadProxyHint:
       'Streams through the OpenList proxy (p). Use it when direct links are blocked.',
-    limitHint: 'Default {{value}} · 0 = unlimited',
     save: 'Save changes',
     create: 'Create instance',
-  },
-  limits: {
-    maxApiConcurrency: 'API concurrency',
-    apiRequestsPerSecond: 'API requests/s',
   },
   validation: {
     name: 'Name must contain 1–100 characters.',
@@ -79,7 +71,6 @@ export default {
       'Changing authentication requires the complete username and secret for that mode.',
     secretFormat:
       'Enter an unmasked credential; tokens must contain visible ASCII characters only.',
-    limit: '{{field}} must be a whole number of 0 or more.',
     noChanges: 'There are no changes to save.',
     invalid: 'Invalid instance configuration.',
   },
@@ -104,10 +95,9 @@ export default {
     enabled: 'Enabled',
     disabled: 'Disabled',
     unknown: 'Unknown',
-    limits: 'Limits & transfer',
-    limitsHint:
-      'Management API caps and how file content is read. Transfer concurrency is set in each job.',
-    unlimited: 'Unlimited',
+    transfer: 'Transfer',
+    transferHint:
+      'How file content is read during relay copies and whether chunked upload is available. Request load on this server is controlled by each job’s concurrency and scan interval settings.',
     downloadMode: 'Download mode',
     timeline: 'Timeline',
     timelineHint: 'Configuration and verification history.',

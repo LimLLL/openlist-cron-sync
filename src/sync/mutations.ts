@@ -1,4 +1,5 @@
 // 统一mkdir/remove/空put错误观察；删除始终先刷新前提再确认效果。
+import { scanInterval } from '../coordination/scan-pacing.service.js';
 import { setTimeout as delay } from 'node:timers/promises';
 import type { OperationRecord } from '../database/operation-schema.js';
 import type { RunTargetRecord } from '../database/run-schema.js';
@@ -140,7 +141,10 @@ export class Mutations {
         });
         return this.store.get(op.id);
       }
-      if (op.action === 'delete' && !(await this.precondition(target, op)))
+      if (
+        op.action === 'delete' &&
+        !(await this.precondition(target, op, stop))
+      )
         return this.store.get(op.id);
       if (op.action === 'delete') await beforeDelete?.();
       let retryable = false;
@@ -148,6 +152,12 @@ export class Mutations {
         const instance = this.context.instance(op.targetInstanceId);
         const request = {
           ...this.context.inflight(hard),
+          dispatchSignal: stop,
+          pacing: scanInterval(
+            instance,
+            op.targetPath,
+            target.config.target.scanIntervalSeconds,
+          ),
           /** 在实际派发前提交submitting事务；Run已停止时拒绝派发并保持pending。
            * @param 不适用。
            * @returns 不适用。
@@ -209,19 +219,21 @@ export class Mutations {
   /** 删除前强制读取，禁止把权限错误或非空目录当作可删。
    * @param target 当前目标。
    * @param op 尚未提交delete。
+   * @param stop Run 停止及文件期限，同时约束目录间隔等待。
    * @returns 是否仍可提交。
    * @throws Error 非上游错误或取消。
    */
   private async precondition(
     target: RunTargetRecord,
     op: OperationRecord,
+    stop: AbortSignal,
   ): Promise<boolean> {
     if (target.deleteBlocked) {
       this.store.end(op.id, { status: 'skipped', code: 'DELETE_BLOCKED' });
       return false;
     }
     try {
-      const entry = await this.context.entry(target, op.targetPath);
+      const entry = await this.context.entry(target, op.targetPath, stop);
       if (entry === null) {
         this.store.absent(op.id);
         return false;
@@ -234,7 +246,12 @@ export class Mutations {
         return false;
       }
       if (op.isDir) {
-        const content = await this.context.list(target, op.targetPath);
+        const content = await this.context.list(
+          target,
+          op.targetPath,
+          'directory',
+          stop,
+        );
         if (
           content.items.length ||
           content.protectedEntries.length ||
@@ -249,7 +266,7 @@ export class Mutations {
       }
       return true;
     } catch (error) {
-      this.context.signal.throwIfAborted();
+      stop.throwIfAborted();
       if (!(error instanceof OpenListError)) throw error;
       this.store.end(op.id, {
         status: 'skipped',

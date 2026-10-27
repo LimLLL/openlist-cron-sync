@@ -67,10 +67,6 @@ export const instances = sqliteTable(
     accountBasePath: text('account_base_path'),
     accountRole: integer('account_role'),
     accountPermissions: integer('account_permissions'),
-    maxApiConcurrency: integer('max_api_concurrency').notNull().default(4),
-    apiRequestsPerSecond: integer('api_requests_per_second')
-      .notNull()
-      .default(5),
     downloadMode: text('download_mode', { enum: ['d', 'p'] })
       .notNull()
       .default('d'),
@@ -109,14 +105,6 @@ export const instances = sqliteTable(
     ),
     check('instances_download_mode', sql`${table.downloadMode} IN ('d','p')`),
     check(
-      'instances_api_concurrency',
-      sql`${table.maxApiConcurrency} BETWEEN 0 AND 9007199254740991`,
-    ),
-    check(
-      'instances_api_rate',
-      sql`${table.apiRequestsPerSecond} BETWEEN 0 AND 9007199254740991`,
-    ),
-    check(
       'instances_multipart',
       sql`${table.multipartEnabled} IS NULL OR ${table.multipartEnabled} IN (0,1)`,
     ),
@@ -127,7 +115,7 @@ export const instances = sqliteTable(
   ],
 );
 
-/** 实例存储记录；字段对应配置、凭据密文、身份事实、配额与 UTC 毫秒时间。 */
+/** 实例存储记录；字段对应配置、凭据密文、身份事实与 UTC 毫秒时间。 */
 export type InstanceRecord = typeof instances.$inferSelect;
 
 /** 实例可更新字段；字段含义继承实例表，省略表示保留。 */

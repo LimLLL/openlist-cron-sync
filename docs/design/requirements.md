@@ -18,7 +18,7 @@
 | 删除        | 一律调用 OpenList remove；替换和 extras 共同计入删除阈值                                                                 |
 | 创建方式    | 每个 Target 独立选择 relay（默认，本服务下载后经 OpenList 分片接口上传）或 server_copy（同 Instance 调用 OpenList copy） |
 | 控制        | cron、手动执行、dry-run、取消、超时、重试、保守重启恢复                                                                  |
-| 限制        | 同 Job 不重叠、全局执行位、Instance API 配额、Job 源读取配额、Target 文件/分片配额、Job 聚合 relay 上传限速              |
+| 限制        | 同 Job 不重叠、全局执行位、Job/Target 扫描间隔、Job 源读取配额、Target 文件/分片配额、Job 聚合 relay 上传限速            |
 | 管理        | 多实例、单管理员认证、凭据与 Webhook URL 静态加密、Webhook、脱敏导入导出、OpenAPI、Docker                                |
 
 source 永不修改文件内容和目录结构：不写入或覆盖、不创建文件或目录、不改名、移动或删除。读取、OpenList 缓存刷新及管理本服务产生的远程任务不算修改源文件。源 refresh 仍可能要求 OpenList 写权限。

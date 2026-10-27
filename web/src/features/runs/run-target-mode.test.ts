@@ -15,6 +15,59 @@ import { RunTargets } from './run-targets';
  * @throws 不适用。
  */
 describe('historical Target create modes', () => {
+  /** Job 与 Run Target 两份快照都读取冻结间隔，零值不能被丢弃或替换为当前配置。
+   * @param 不适用。
+   * @returns 不适用。
+   * @throws Error 解析或断言失败。
+   */
+  it('preserves scan intervals in both snapshot locations and requires their fields', () => {
+    const run = mixedRunFixture();
+    const parsed = parseRunDetail(run);
+    expect(parsed.config.job.sourceScanIntervalSeconds).toBe(1);
+    expect(
+      parsed.config.job.targets.map((target) => target.scanIntervalSeconds),
+    ).toEqual([0, 3]);
+    expect(
+      parsed.targets.map((target) => target.config.target.scanIntervalSeconds),
+    ).toEqual([0, 3]);
+    expect(() =>
+      parseRunDetail({
+        ...run,
+        config: {
+          ...run.config,
+          job: { ...run.config.job, sourceScanIntervalSeconds: undefined },
+        },
+      }),
+    ).toThrow('sourceScanIntervalSeconds');
+    expect(() =>
+      parseRunDetail({
+        ...run,
+        config: {
+          ...run.config,
+          job: {
+            ...run.config.job,
+            targets: run.config.job.targets.map((target) => ({
+              ...target,
+              scanIntervalSeconds: undefined,
+            })),
+          },
+        },
+      }),
+    ).toThrow('scanIntervalSeconds');
+    expect(() =>
+      parseRunDetail({
+        ...run,
+        targets: run.targets.map((target) => ({
+          ...target,
+          config: {
+            ...target.config,
+            target: { ...target.config.target, scanIntervalSeconds: undefined },
+          },
+        })),
+      }),
+    ).toThrow('scanIntervalSeconds');
+  });
+
   /** 缺失或非法值不能默认为 relay；Job 与 Run 两个副本都须完整。
    * @param mode 非法创建方式。
    * @returns 不适用。

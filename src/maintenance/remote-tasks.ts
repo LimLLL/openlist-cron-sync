@@ -46,7 +46,7 @@ export class RemoteTaskMaintenance {
     @Inject(TaskResources) private readonly resources: TaskResources,
     @Inject(OpenListTasks) private readonly tasks: OpenListTasks,
   ) {}
-  /** 按ID分页处理本轮责任，每个网络请求使用客户端API配额。
+  /** 按ID分页处理本轮责任，任务观察与清理不使用扫描间隔。
    * @param 不适用。
    * @returns 本轮结束或关机。
    * @throws Error 数据库/实现错误。

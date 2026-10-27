@@ -1,4 +1,5 @@
 // 按Run固定身份读取当前凭据、路径密码及可信目录视图。
+import { scanInterval } from '../coordination/scan-pacing.service.js';
 import { eq } from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { instances } from '../database/schema.js';
@@ -104,7 +105,7 @@ export class ExecutionContext {
       .get();
     const snapshot = this.run.config.instances[id];
     if (!current || !snapshot) throw new Error('Run instance missing');
-    return { ...current, ...snapshot, ...snapshot.limits };
+    return { ...current, ...snapshot };
   }
   /** 固定网络设置和本生命周期信号。
    * @param 不适用。
@@ -133,7 +134,8 @@ export class ExecutionContext {
   /** 刷新并验证目录，可疑挂载或受保护非法后代不被解释为缺失。
    * @param target 本Run目标。
    * @param path 账号内目录。
-   * @param inflight 已派发动作的确认/观察读取期限；省略表示提交前读取，使用停止派发信号。
+   * @param purpose 目录枚举使用目标间隔；单项观察显式绕过间隔，即使底层也调用 fs/list。
+   * @param inflight 显式读取期限：已派发动作的确认/观察，或叠加文件期限的删除前检查；省略表示提交前读取，使用停止派发信号。
    * @param passwordOverride 源元数据准备时使用源路径密码。
    * @returns 完整可用于前提判断的列表。
    * @throws OpenListError 不可读或挂载视图不可用；Error 本地失败。
@@ -141,6 +143,7 @@ export class ExecutionContext {
   async list(
     target: RunTargetRecord,
     path: string,
+    purpose: 'directory' | 'entry',
     inflight?: AbortSignal,
     passwordOverride?: string,
   ): Promise<FileList> {
@@ -156,7 +159,18 @@ export class ExecutionContext {
       path,
       passwordOverride ?? this.secrets.targetPasswords[target.targetId] ?? '',
       true,
-      options,
+      {
+        ...options,
+        ...(purpose === 'directory'
+          ? {
+              pacing: scanInterval(
+                instance,
+                path,
+                target.config.target.scanIntervalSeconds,
+              ),
+            }
+          : {}),
+      },
     );
     const mounts = this.mounts.get(instance.id);
     if (mounts) {
@@ -198,7 +212,7 @@ export class ExecutionContext {
   /** 通过完整父列表观察一个路径；缺失父分支可由新鲜祖先列表证明。
    * @param target 本Run目标。
    * @param path 账号内对象路径。
-   * @param inflight 已派发动作的确认/观察读取期限；省略表示提交前读取，使用停止派发信号。
+   * @param inflight 显式读取期限：已派发动作的确认/观察，或叠加文件期限的删除前检查；省略表示提交前读取，使用停止派发信号。
    * @returns 当前对象，或明确缺失的null。
    * @throws OpenListError 读取失败而无法证明缺失；Error 本地错误。
    */
@@ -208,7 +222,7 @@ export class ExecutionContext {
     inflight?: AbortSignal,
   ): Promise<FileEntry | null> {
     if (path === '/') {
-      await this.list(target, '/', inflight);
+      await this.list(target, '/', 'entry', inflight);
       return {
         name: '',
         size: 0,
@@ -220,7 +234,7 @@ export class ExecutionContext {
     }
     const { directory, name } = splitPath(path);
     try {
-      const list = await this.list(target, directory, inflight);
+      const list = await this.list(target, directory, 'entry', inflight);
       return (
         list.items.find(
           /** 在完整父列表内按原名查找目标对象。

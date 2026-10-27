@@ -139,6 +139,20 @@ export function SourceFields({
           }
           hint={t('form.sourceDownloadConcurrencyHint')}
         />
+        <InputField
+          id="source-scan-interval"
+          label={t('form.sourceScanInterval')}
+          type="number"
+          inputMode="numeric"
+          min={0}
+          max={3600}
+          required
+          value={values.sourceScanIntervalSeconds}
+          onChange={(event) =>
+            update('sourceScanIntervalSeconds', event.target.value)
+          }
+          hint={t('form.sourceScanIntervalHint')}
+        />
       </div>
     </EditorialSection>
   );

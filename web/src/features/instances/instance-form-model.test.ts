@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { PasswordField } from '../../components/ui/password-field';
 import { buildInstanceInput } from './instance-form-model';
 import type { InstanceFormValues } from './instance-form-model';
+import { parseInstance } from './instance-contract';
 import type { Instance } from './instance-contract';
 
 const existing: Instance = {
@@ -12,10 +13,6 @@ const existing: Instance = {
   name: 'Original',
   baseUrl: 'https://files.example',
   auth: { mode: 'password', username: 'admin', hasSecret: true },
-  limits: {
-    maxApiConcurrency: 4,
-    apiRequestsPerSecond: 5,
-  },
   downloadMode: 'd',
   authState: 'ready',
   authBlockReason: null,
@@ -45,12 +42,33 @@ function fixture(): InstanceFormValues {
     username: 'admin',
     secret: '',
     downloadMode: 'd',
-    limits: { ...existing.limits },
   };
 }
 
 describe('instance editing', () => {
-  it('sends only a name change without replacing auth or stale quotas', () => {
+  /** 新响应无需 limits；旧缓存中的同名字段不得进入新建或更新请求。
+   * @param 不适用。
+   * @returns 不适用。
+   * @throws Error 解析或断言失败。
+   */
+  it('parses limits-free responses and never resends limits from stale browser data', () => {
+    expect(parseInstance(existing)).toEqual(existing);
+    const legacy = {
+      ...existing,
+      limits: { maxApiConcurrency: 4, apiRequestsPerSecond: 5 },
+    };
+    expect(parseInstance(legacy)).not.toHaveProperty('limits');
+    const values = { ...fixture(), name: 'Renamed', limits: legacy.limits };
+    expect(buildInstanceInput(values, legacy)).toEqual({ name: 'Renamed' });
+    expect(buildInstanceInput({ ...values, secret: 'new-secret' })).toEqual({
+      name: 'Renamed',
+      baseUrl: existing.baseUrl,
+      downloadMode: 'd',
+      auth: { mode: 'password', username: 'admin', secret: 'new-secret' },
+    });
+  });
+
+  it('sends only a name change without replacing auth', () => {
     expect(
       buildInstanceInput({ ...fixture(), name: 'Renamed' }, existing),
     ).toEqual({ name: 'Renamed' });
@@ -69,60 +87,16 @@ describe('instance editing', () => {
       ).auth,
     ).toEqual({ mode: 'token', secret: 'new-token' });
   });
-  it('rejects credential-bearing URLs and fractional limits', () => {
+  it('rejects credential-bearing URLs', () => {
     expect(() =>
       buildInstanceInput(
         { ...fixture(), baseUrl: 'https://user:secret@files.example' },
         existing,
       ),
     ).toThrow('urlParts');
-    expect(() =>
-      buildInstanceInput(
-        { ...fixture(), limits: { maxApiConcurrency: 1.5 } },
-        existing,
-      ),
-    ).toThrow('limit');
   });
-  it('accepts zero as unlimited and resets a cleared edit field to its default', () => {
-    expect(
-      buildInstanceInput(
-        { ...fixture(), limits: { ...fixture().limits, maxApiConcurrency: 0 } },
-        existing,
-      ).limits,
-    ).toEqual({ maxApiConcurrency: 0 });
-    const edited = {
-      ...existing,
-      limits: { ...existing.limits, maxApiConcurrency: 8 },
-    };
-    expect(
-      buildInstanceInput(
-        {
-          ...fixture(),
-          limits: { ...fixture().limits, maxApiConcurrency: undefined },
-        },
-        edited,
-      ).limits,
-    ).toEqual({ maxApiConcurrency: 4 });
-  });
-  it('treats clearing an already-default field as no change and rejects negatives', () => {
-    expect(() =>
-      buildInstanceInput(
-        {
-          ...fixture(),
-          limits: { ...fixture().limits, maxApiConcurrency: undefined },
-        },
-        existing,
-      ),
-    ).toThrow('noChanges');
-    expect(() =>
-      buildInstanceInput(
-        {
-          ...fixture(),
-          limits: { ...fixture().limits, maxApiConcurrency: -1 },
-        },
-        existing,
-      ),
-    ).toThrow('limit');
+  it('reports no changes when every field matches the saved instance', () => {
+    expect(() => buildInstanceInput(fixture(), existing)).toThrow('noChanges');
   });
   it('honours optional secret fields while keeping login passwords required', () => {
     expect(

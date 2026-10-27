@@ -101,6 +101,7 @@ describe('per-Target create mode migration', () => {
             createMode,
             concurrentFiles: createMode === 'server_copy' ? 4 : 2,
             chunkConcurrency: 2,
+            scanIntervalSeconds: 0,
           }),
         );
         const run = service.db
@@ -113,20 +114,14 @@ describe('per-Target create mode migration', () => {
           job: {
             ...historicalJob,
             sourceDownloadConcurrency: 2,
+            sourceScanIntervalSeconds: 0,
             retryCount: null,
             targets: expectedTargets,
           },
           instances: Object.fromEntries(
-            Object.entries(sample.snapshot.instances).map(([id, instance]) => [
-              id,
-              {
-                ...instance,
-                limits: {
-                  maxApiConcurrency: instance.limits.maxApiConcurrency,
-                  apiRequestsPerSecond: instance.limits.apiRequestsPerSecond,
-                },
-              },
-            ]),
+            Object.entries(sample.snapshot.instances).map(
+              ([id, { limits: _limits, ...instance }]) => [id, instance],
+            ),
           ),
         });
         expect(run).toMatchObject({
@@ -142,20 +137,13 @@ describe('per-Target create mode migration', () => {
             .get();
           expect(target?.config).toEqual({
             ...original.value,
-            instance: {
-              ...original.value.instance,
-              limits: {
-                maxApiConcurrency:
-                  original.value.instance.limits.maxApiConcurrency,
-                apiRequestsPerSecond:
-                  original.value.instance.limits.apiRequestsPerSecond,
-              },
-            },
+            instance: instanceSnapshotWithoutLimits(original.value.instance),
             target: {
               ...original.value.target,
               createMode,
               concurrentFiles: createMode === 'server_copy' ? 4 : 2,
               chunkConcurrency: 2,
+              scanIntervalSeconds: 0,
             },
           });
         }
@@ -218,29 +206,11 @@ describe('per-Target create mode migration', () => {
         { name: 'jobs_source' },
         { name: 'sqlite_autoindex_jobs_1' },
       ]);
-      const instanceId = service.db
-        .select({ id: instances.id })
-        .from(instances)
-        .get()?.id;
-      if (!instanceId) throw new Error('Missing migrated instance');
-      service.db
-        .update(instances)
-        .set({
-          maxApiConcurrency: 0,
-          apiRequestsPerSecond: Number.MAX_SAFE_INTEGER,
-        })
-        .where(eq(instances.id, instanceId))
-        .run();
       expect(
-        service.db
-          .select()
-          .from(instances)
-          .where(eq(instances.id, instanceId))
-          .get(),
-      ).toMatchObject({
-        maxApiConcurrency: 0,
-        apiRequestsPerSecond: Number.MAX_SAFE_INTEGER,
-      });
+        service.db.all(
+          sql`SELECT name FROM pragma_table_info('instances') WHERE name IN ('max_api_concurrency', 'api_requests_per_second')`,
+        ),
+      ).toEqual([]);
       expect(() =>
         service.db.run(sql`UPDATE job_targets SET instance_id = 'missing'`),
       ).toThrow();
@@ -279,6 +249,7 @@ describe('per-Target create mode migration', () => {
           createMode: 'server_copy',
           concurrentFiles: 4,
           chunkConcurrency: 2,
+          scanIntervalSeconds: 0,
         }),
       ),
     );
@@ -425,10 +396,7 @@ describe('per-Target create mode migration', () => {
             target.chunkConcurrency === expected,
         ),
       ).toBe(true);
-      expect(run?.config.instances[id].limits).toEqual({
-        maxApiConcurrency: 4,
-        apiRequestsPerSecond: 5,
-      });
+      expect(run?.config.instances[id]).not.toHaveProperty('limits');
       expect(
         service.db
           .select()
@@ -443,3 +411,15 @@ describe('per-Target create mode migration', () => {
     },
   );
 });
+
+/** 去掉历史快照的旧配额，验证其余身份原样保留。
+ * @param instance 迁移前的完整实例对象。
+ * @returns 仅删除 limits 的实例。
+ * @throws 不适用。
+ */
+function instanceSnapshotWithoutLimits<T extends { limits: unknown }>(
+  instance: T,
+): Omit<T, 'limits'> {
+  const { limits: _limits, ...rest } = instance;
+  return rest;
+}

@@ -73,6 +73,8 @@ export interface TargetInput {
   createMode: 'relay' | 'server_copy';
   /** 同时处理的文件或复制任务数；0 不限。 */
   concurrentFiles: string;
+  /** 目标扫描间隔秒数，0–3600。 */
+  scanIntervalSeconds: string;
   /** 每个中转文件的分片并发，1–8。 */
   chunkConcurrency: string;
   /** 是否刷新扫描缓存。 */
@@ -99,6 +101,8 @@ export interface JobFormValues {
   sourceRefresh: boolean;
   /** 同时从源读取的中转文件数；0 不限。 */
   sourceDownloadConcurrency: string;
+  /** 源扫描间隔秒数，0–3600。 */
+  sourceScanIntervalSeconds: string;
   /** 完整目标集合。 */
   targets: TargetInput[];
   /** 五段 cron；空字符串表示手动。 */
@@ -138,6 +142,7 @@ export function emptyTarget(): TargetInput {
     mode: 'incremental',
     createMode: 'relay',
     concurrentFiles: '2',
+    scanIntervalSeconds: '0',
     chunkConcurrency: '2',
     refresh: false,
     deleteLimitsEnabled: true,
@@ -160,6 +165,7 @@ export function targetsFromJob(job: JobView): TargetInput[] {
     mode: target.mode,
     createMode: target.createMode,
     concurrentFiles: target.concurrentFiles.toString(),
+    scanIntervalSeconds: target.scanIntervalSeconds.toString(),
     chunkConcurrency: target.chunkConcurrency.toString(),
     refresh: target.refresh,
     deleteLimitsEnabled: target.deleteLimits.enabled,
@@ -347,6 +353,12 @@ export function buildJobInput(values: JobFormValues) {
       mode: target.mode,
       createMode: target.createMode,
       concurrentFiles: integer(target.concurrentFiles, 'concurrentFiles'),
+      scanIntervalSeconds: integer(
+        target.scanIntervalSeconds,
+        'targetScanInterval',
+        0,
+        3600,
+      ),
       chunkConcurrency: integer(
         target.chunkConcurrency,
         'chunkConcurrency',
@@ -378,6 +390,12 @@ export function buildJobInput(values: JobFormValues) {
     sourceDownloadConcurrency: integer(
       values.sourceDownloadConcurrency,
       'sourceDownloadConcurrency',
+    ),
+    sourceScanIntervalSeconds: integer(
+      values.sourceScanIntervalSeconds,
+      'sourceScanInterval',
+      0,
+      3600,
     ),
     retryCount:
       values.retryCount === ''
