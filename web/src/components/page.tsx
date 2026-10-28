@@ -14,7 +14,7 @@ interface PageHeaderProps {
   /** 标题下方一行说明或摘要。 */
   description?: ReactNode;
   /** 返回上一级的链接。 */
-  back?: { to: string; label: string };
+  back?: { to: string; label: ReactNode };
   /** 右侧主操作按钮。 */
   actions?: ReactNode;
 }

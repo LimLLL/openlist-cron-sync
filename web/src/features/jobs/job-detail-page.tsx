@@ -4,7 +4,15 @@ import { Link, useNavigate, useParams } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { Pencil, Play } from 'lucide-react';
 import { FactStrip, PageHeader, useDocumentTitle } from '../../components/page';
-import { ErrorState, LoadingState, StaleNotice } from '../../components/states';
+import {
+  ButtonSkeleton,
+  LineSkeleton,
+  Skeleton,
+  SkeletonRegion,
+  skeletonFacts,
+  TitleSkeleton,
+} from '../../components/skeleton';
+import { ErrorState, StaleNotice } from '../../components/states';
 import { Endpoint, RelativeTime } from '../../components/text';
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
@@ -20,7 +28,7 @@ import { ApiError } from '../../lib/api-client';
 import { useTabParam } from '../../lib/hooks';
 import { activeRunsByJob, useActiveRuns } from '../runs/run-queries';
 import { JobActionsMenu } from './job-actions';
-import { JobConfigTab } from './job-detail-config';
+import { JobConfigSkeleton, JobConfigTab } from './job-detail-config';
 import { JobRunsTab } from './job-detail-runs';
 import { ActiveRunLink, LastRealRun, useInstanceName } from './job-display';
 import { useJob, useJobCatalog, useNextFireTimes } from './job-queries';
@@ -43,6 +51,64 @@ function ScheduleBadge({ job }: { job: Pick<JobView, 'cron' | 'enabled'> }) {
     </Badge>
   ) : (
     <Badge>{t('badge.scheduleOff')}</Badge>
+  );
+}
+
+/** 首次加载时的任务详情：返回链接、信息条标签与标签页照常显示，其余按真实布局占位；运行记录只依赖任务 ID，直接加载自己的数据。
+ * @param props jobId 任务 ID；tab 当前标签；onTabChange 切换标签。
+ * @returns 详情页骨架。
+ * @throws 不适用。
+ */
+function JobDetailSkeleton({
+  jobId,
+  tab,
+  onTabChange,
+}: {
+  jobId: string;
+  tab: (typeof TABS)[number];
+  onTabChange: (tab: string) => void;
+}) {
+  const { t } = useTranslation('jobs');
+  return (
+    <section>
+      <SkeletonRegion label={t('detail.loading')}>
+        <PageHeader
+          back={{ to: '/jobs', label: t('detail.back') }}
+          title={<TitleSkeleton />}
+          badges={<Skeleton className="h-5 w-20" />}
+          description={<LineSkeleton className="w-72" />}
+          actions={
+            <>
+              <ButtonSkeleton />
+              <ButtonSkeleton />
+              <ButtonSkeleton className="w-8" />
+            </>
+          }
+        />
+        <FactStrip
+          facts={skeletonFacts([
+            t('detail.facts.current'),
+            t('detail.facts.lastRun'),
+            t('detail.facts.nextRun'),
+            t('detail.facts.schedule'),
+            t('detail.facts.targets'),
+            t('detail.facts.created'),
+          ])}
+        />
+      </SkeletonRegion>
+      <Tabs value={tab} onValueChange={onTabChange}>
+        <TabsList>
+          <TabsTrigger value="runs">{t('detail.tabs.runs')}</TabsTrigger>
+          <TabsTrigger value="config">{t('detail.tabs.config')}</TabsTrigger>
+        </TabsList>
+        <TabsContent value="runs">
+          <JobRunsTab jobId={jobId} />
+        </TabsContent>
+        <TabsContent value="config">
+          <JobConfigSkeleton />
+        </TabsContent>
+      </Tabs>
+    </section>
   );
 }
 
@@ -71,7 +137,7 @@ export function JobDetailPage() {
   useDocumentTitle(data?.name, t('list.title'));
 
   if (!data && !job.isError)
-    return <LoadingState label={t('detail.loading')} rows={6} />;
+    return <JobDetailSkeleton jobId={id} tab={tab} onTabChange={setTab} />;
   if (!data)
     return (
       <div className="space-y-3">

@@ -1,7 +1,8 @@
-// 任务详情的“配置”标签：源、目标表、定时与接下来的时间、过滤规则、高级设置，全部只读。
+// 任务详情的“配置”标签：源、目标表、定时与接下来的时间、过滤规则、高级设置，全部只读；另含首次加载时的同布局骨架。
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { KeyValue, Section } from '../../components/page';
+import { skeletonFacts, TableSkeleton } from '../../components/skeleton';
 import { ErrorState, LoadingState } from '../../components/states';
 import { Endpoint, PathText, RelativeTime } from '../../components/text';
 import { Badge } from '../../components/ui/badge';
@@ -61,6 +62,89 @@ function DeleteLimits({ target }: { target: Target }) {
   return <span>{parts.join(' · ')}</span>;
 }
 
+/** 目标表表头；加载中与加载后共用。
+ * @returns 表头。
+ * @throws 不适用。
+ */
+function TargetsTableHead() {
+  const { t } = useTranslation('jobs');
+  return (
+    <THead>
+      <tr>
+        <TH className="w-8">{t('detail.targetCol.index')}</TH>
+        <TH>{t('detail.targetCol.endpoint')}</TH>
+        <TH>{t('detail.targetCol.mode')}</TH>
+        <TH>{t('detail.targetCol.createMode')}</TH>
+        <TH>{t('detail.targetCol.concurrentFiles')}</TH>
+        <TH>{t('detail.targetCol.chunkConcurrency')}</TH>
+        <TH>{t('detail.targetCol.scanInterval')}</TH>
+        <TH>{t('detail.targetCol.deleteLimits')}</TH>
+        <TH>{t('detail.targetCol.refresh')}</TH>
+        <TH>{t('detail.targetCol.password')}</TH>
+      </tr>
+    </THead>
+  );
+}
+
+/** 任务配置首次加载时的骨架：分区标题、字段名与目标表头照常显示，只给值占位。
+ * @returns 配置骨架。
+ * @throws 不适用。
+ */
+export function JobConfigSkeleton() {
+  const { t } = useTranslation('jobs');
+  return (
+    <div className="space-y-4">
+      <Section title={t('detail.source')}>
+        <KeyValue
+          items={skeletonFacts([
+            t('detail.instance'),
+            t('detail.path'),
+            t('detail.refresh'),
+            t('detail.password'),
+            t('detail.sourceDownloadConcurrency'),
+            t('detail.sourceScanInterval'),
+          ])}
+        />
+      </Section>
+      <Section flush title={t('detail.targets')}>
+        <TableSkeleton
+          bare
+          rows={2}
+          head={<TargetsTableHead />}
+          columns={[
+            'number',
+            'path',
+            'badge',
+            'text',
+            'number',
+            'number',
+            'text',
+            'text',
+            'text',
+            'text',
+          ]}
+        />
+      </Section>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Section title={t('detail.schedule')}>
+          <KeyValue
+            items={skeletonFacts([
+              t('detail.cron'),
+              t('detail.timezone'),
+              t('detail.scheduleState'),
+            ])}
+          />
+        </Section>
+        <Section title={t('detail.filters')}>
+          <KeyValue
+            items={skeletonFacts([t('detail.include'), t('detail.exclude')])}
+          />
+        </Section>
+      </div>
+    </div>
+  );
+}
+
 /** 渲染任务配置。
  * @param props 任务、实例名查找与定时预览查询。
  * @returns 只读配置分区。
@@ -118,20 +202,7 @@ export function JobConfigTab({
 
       <Section flush title={t('detail.targets')}>
         <Table bare>
-          <THead>
-            <tr>
-              <TH className="w-8">{t('detail.targetCol.index')}</TH>
-              <TH>{t('detail.targetCol.endpoint')}</TH>
-              <TH>{t('detail.targetCol.mode')}</TH>
-              <TH>{t('detail.targetCol.createMode')}</TH>
-              <TH>{t('detail.targetCol.concurrentFiles')}</TH>
-              <TH>{t('detail.targetCol.chunkConcurrency')}</TH>
-              <TH>{t('detail.targetCol.scanInterval')}</TH>
-              <TH>{t('detail.targetCol.deleteLimits')}</TH>
-              <TH>{t('detail.targetCol.refresh')}</TH>
-              <TH>{t('detail.targetCol.password')}</TH>
-            </tr>
-          </THead>
+          <TargetsTableHead />
           <TBody>
             {job.targets.map((target, index) => (
               <TR key={target.id}>

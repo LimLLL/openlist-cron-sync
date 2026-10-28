@@ -1,11 +1,8 @@
 // 运行详情的“扫描问题”标签：独立分页的问题表，错误码本地化并保留原文，受保护子树单独标出。
 import { useTranslation } from 'react-i18next';
-import {
-  EmptyState,
-  ErrorState,
-  StaleNotice,
-  TableSkeleton,
-} from '../../components/states';
+import { TableSkeleton } from '../../components/skeleton';
+import type { SkeletonColumn } from '../../components/skeleton';
+import { EmptyState, ErrorState, StaleNotice } from '../../components/states';
 import { PathText, RelativeTime } from '../../components/text';
 import { Badge } from '../../components/ui/badge';
 import { Pagination } from '../../components/ui/pagination';
@@ -14,6 +11,49 @@ import { useErrorText } from '../../i18n/error-text';
 import { usePageParams } from '../../lib/hooks';
 import { isActiveRun, useRunIssues } from './run-queries';
 import type { RunDetail } from './run-contract';
+
+/** 扫描问题表表头；加载中与加载后共用。
+ * @returns 表头。
+ * @throws 不适用。
+ */
+function IssuesTableHead() {
+  const { t } = useTranslation('runs');
+  return (
+    <THead>
+      <tr>
+        <TH className="w-44">{t('issues.columns.code')}</TH>
+        <TH className="w-40">{t('issues.columns.endpoint')}</TH>
+        <TH>{t('issues.columns.path')}</TH>
+        <TH>{t('issues.columns.message')}</TH>
+        <TH className="w-28">{t('issues.columns.time')}</TH>
+      </tr>
+    </THead>
+  );
+}
+
+// 问题表各列的骨架形状，顺序与表头一致。
+const ISSUE_COLUMNS: SkeletonColumn[] = [
+  'badge',
+  'text',
+  'path',
+  'path',
+  'time',
+];
+
+/** 运行详情首次加载时的问题标签骨架。
+ * @returns 问题表骨架。
+ * @throws 不适用。
+ */
+export function RunIssuesSkeleton() {
+  const { t } = useTranslation('runs');
+  return (
+    <TableSkeleton
+      head={<IssuesTableHead />}
+      columns={ISSUE_COLUMNS}
+      label={t('issues.loading')}
+    />
+  );
+}
 
 /** 从运行快照中读取实例名；快照没有时回退为短 ID。
  * @param run 运行详情。
@@ -49,7 +89,7 @@ export function RunIssuesTab({ run }: { run: RunDetail }) {
     return issues.isError ? (
       <ErrorState error={issues.error} onRetry={() => void issues.refetch()} />
     ) : (
-      <TableSkeleton columns={5} label={t('issues.loading')} />
+      <RunIssuesSkeleton />
     );
 
   if (data.items.length === 0)
@@ -78,15 +118,7 @@ export function RunIssuesTab({ run }: { run: RunDetail }) {
         </p>
       )}
       <Table aria-label={t('issues.label')}>
-        <THead>
-          <tr>
-            <TH className="w-44">{t('issues.columns.code')}</TH>
-            <TH className="w-40">{t('issues.columns.endpoint')}</TH>
-            <TH>{t('issues.columns.path')}</TH>
-            <TH>{t('issues.columns.message')}</TH>
-            <TH className="w-28">{t('issues.columns.time')}</TH>
-          </tr>
-        </THead>
+        <IssuesTableHead />
         <TBody>
           {data.items.map((issue) => {
             const message = errorText(issue.code, issue.message);

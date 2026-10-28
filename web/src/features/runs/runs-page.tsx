@@ -3,7 +3,8 @@ import { useMemo } from 'react';
 import { Link } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { PageHeader, useDocumentTitle } from '../../components/page';
-import { EmptyState, ErrorState, TableSkeleton } from '../../components/states';
+import { TableSkeleton } from '../../components/skeleton';
+import { EmptyState, ErrorState } from '../../components/states';
 import { RunStatusBadge } from '../../components/status';
 import { RelativeTime, ShortId } from '../../components/text';
 import { Badge } from '../../components/ui/badge';
@@ -24,6 +25,28 @@ import { RunDuration, RunResultSummary } from './run-cells';
 
 const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/** 运行表表头；加载中与加载后共用。
+ * @returns 表头。
+ * @throws 不适用。
+ */
+function RunsTableHead() {
+  const { t } = useTranslation('runs');
+  return (
+    <THead>
+      <tr>
+        <TH className="w-28">{t('list.columns.status')}</TH>
+        <TH>{t('list.columns.job')}</TH>
+        <TH className="w-20">{t('list.columns.type')}</TH>
+        <TH className="w-20">{t('list.columns.trigger')}</TH>
+        <TH className="w-28">{t('list.columns.started')}</TH>
+        <TH className="w-24">{t('list.columns.duration')}</TH>
+        <TH>{t('list.columns.result')}</TH>
+        <TH className="w-24">{t('list.columns.id')}</TH>
+      </tr>
+    </THead>
+  );
+}
 
 /** 只保留后端接受的筛选值；URL 中的非法值按“全部”处理而不是触发 400。
  * @param jobId URL 中的任务 ID。
@@ -113,20 +136,6 @@ export function RunsPage() {
             </option>
           ))}
         </NativeSelect>
-        <NativeSelect
-          aria-label={t('list.statusFilter')}
-          value={status ?? ''}
-          onChange={(event) => setStatus(event.target.value || undefined)}
-          className="w-40"
-        >
-          <option value="">{t('list.allStatuses')}</option>
-          <option value="active">{t('list.activeStatuses')}</option>
-          {RUN_STATUSES.map((value) => (
-            <option key={value} value={value}>
-              {t(`common:runStatus.${value}`)}
-            </option>
-          ))}
-        </NativeSelect>
         <Segmented
           label={t('list.typeFilter')}
           value={dryRun ?? ''}
@@ -135,6 +144,20 @@ export function RunsPage() {
             { value: '', label: t('list.allTypes') },
             { value: 'false', label: t('list.realOnly') },
             { value: 'true', label: t('list.dryOnly') },
+          ]}
+        />
+        {/* 状态选项多，放在较短的控件之后，换行时整组落到下一行。 */}
+        <Segmented
+          label={t('list.statusFilter')}
+          value={status ?? ''}
+          onChange={(value) => setStatus(value || undefined)}
+          options={[
+            { value: '', label: t('list.allStatuses') },
+            { value: 'active', label: t('list.activeStatuses') },
+            ...RUN_STATUSES.map((value) => ({
+              value,
+              label: t(`common:runStatus.${value}`),
+            })),
           ]}
         />
         {filtered && (
@@ -154,7 +177,20 @@ export function RunsPage() {
         runs.isError ? (
           <ErrorState error={runs.error} onRetry={() => void runs.refetch()} />
         ) : (
-          <TableSkeleton columns={8} label={t('list.loading')} />
+          <TableSkeleton
+            head={<RunsTableHead />}
+            columns={[
+              'badge',
+              'title',
+              'badge',
+              'text',
+              'time',
+              'text',
+              'path',
+              'id',
+            ]}
+            label={t('list.loading')}
+          />
         )
       ) : data.items.length === 0 ? (
         <>
@@ -185,18 +221,7 @@ export function RunsPage() {
       ) : (
         <>
           <Table>
-            <THead>
-              <tr>
-                <TH className="w-28">{t('list.columns.status')}</TH>
-                <TH>{t('list.columns.job')}</TH>
-                <TH className="w-20">{t('list.columns.type')}</TH>
-                <TH className="w-20">{t('list.columns.trigger')}</TH>
-                <TH className="w-28">{t('list.columns.started')}</TH>
-                <TH className="w-24">{t('list.columns.duration')}</TH>
-                <TH>{t('list.columns.result')}</TH>
-                <TH className="w-24">{t('list.columns.id')}</TH>
-              </tr>
-            </THead>
+            <RunsTableHead />
             <TBody>
               {data.items.map((run) => (
                 <TR key={run.id}>

@@ -2,6 +2,7 @@
 import type { ReactNode } from 'react';
 import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
+import { LineSkeleton } from '../../components/skeleton';
 import { RelativeTime } from '../../components/text';
 import { formatTime, formatTimeFull } from '../../lib/format';
 import { cn } from '../../lib/utils';
@@ -252,5 +253,41 @@ export function RunLifecycle({ run }: { run: RunDetail }) {
         </ul>
       )}
     </div>
+  );
+}
+
+/** 首次加载时的生命周期骨架：五个节点名称照常显示，时间占位。
+ * @returns 与真实横条同布局的骨架。
+ * @throws 不适用。
+ */
+export function RunLifecycleSkeleton() {
+  const { t } = useTranslation(['runs', 'common']);
+  const labels = [
+    t('detail.lifecycle.accepted'),
+    t('detail.lifecycle.scanStarted'),
+    t('detail.lifecycle.scanCompleted'),
+    t('common:runStatus.executing'),
+    t('detail.lifecycle.ended'),
+  ];
+  return (
+    <ol
+      aria-label={t('detail.lifecycle.label')}
+      className="mb-4 grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-5"
+    >
+      {labels.map((label, index) => (
+        <li key={index} className="min-w-0 bg-surface px-3 py-2">
+          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <span
+              aria-hidden="true"
+              className={cn('size-1.5 shrink-0 rounded-full', DOT.pending)}
+            />
+            <span className="truncate">{label}</span>
+          </p>
+          <div className="mt-0.5">
+            <LineSkeleton className={index % 2 ? 'w-16' : 'w-20'} />
+          </div>
+        </li>
+      ))}
+    </ol>
   );
 }

@@ -2,7 +2,8 @@
 import { Link } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { Section } from '../../components/page';
-import { EmptyState, ErrorState, TableSkeleton } from '../../components/states';
+import { TableSkeleton } from '../../components/skeleton';
+import { EmptyState, ErrorState } from '../../components/states';
 import { RunStatusBadge } from '../../components/status';
 import { RelativeTime } from '../../components/text';
 import { Badge } from '../../components/ui/badge';
@@ -10,6 +11,27 @@ import { Button } from '../../components/ui/button';
 import { Table, TBody, TD, TH, THead, TR } from '../../components/ui/table';
 import { RunDuration, RunResultSummary } from '../runs/run-cells';
 import { useRuns } from '../runs/run-queries';
+
+/** 最近运行表表头；加载中与加载后共用。
+ * @returns 表头。
+ * @throws 不适用。
+ */
+function RecentRunsHead() {
+  const { t } = useTranslation('dashboard');
+  return (
+    <THead>
+      <tr>
+        <TH>{t('recent.columns.job')}</TH>
+        <TH>{t('recent.columns.status')}</TH>
+        <TH>{t('recent.columns.type')}</TH>
+        <TH>{t('recent.columns.trigger')}</TH>
+        <TH>{t('recent.columns.started')}</TH>
+        <TH className="text-right">{t('recent.columns.duration')}</TH>
+        <TH>{t('recent.columns.result')}</TH>
+      </tr>
+    </THead>
+  );
+}
 
 /** 渲染最近运行分区；第一页每 15 秒刷新，含进行中运行时 5 秒（由查询自身决定）。
  * @returns 分区卡片。
@@ -45,9 +67,21 @@ export function RecentRunsSection() {
             />
           </div>
         ) : (
-          <div className="p-3">
-            <TableSkeleton rows={5} columns={6} label={t('recent.loading')} />
-          </div>
+          <TableSkeleton
+            bare
+            rows={5}
+            head={<RecentRunsHead />}
+            columns={[
+              'title',
+              'badge',
+              'badge',
+              'text',
+              'time',
+              { kind: 'number', className: 'text-right' },
+              'path',
+            ]}
+            label={t('recent.loading')}
+          />
         )
       ) : items.length === 0 ? (
         <EmptyState
@@ -57,17 +91,7 @@ export function RecentRunsSection() {
         />
       ) : (
         <Table bare>
-          <THead>
-            <tr>
-              <TH>{t('recent.columns.job')}</TH>
-              <TH>{t('recent.columns.status')}</TH>
-              <TH>{t('recent.columns.type')}</TH>
-              <TH>{t('recent.columns.trigger')}</TH>
-              <TH>{t('recent.columns.started')}</TH>
-              <TH className="text-right">{t('recent.columns.duration')}</TH>
-              <TH>{t('recent.columns.result')}</TH>
-            </tr>
-          </THead>
+          <RecentRunsHead />
           <TBody>
             {items.map((run) => (
               <TR key={run.id}>

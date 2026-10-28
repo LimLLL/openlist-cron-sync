@@ -1,10 +1,11 @@
-// 共享加载骨架、空内容与可恢复错误状态；请求失败从不以空列表掩盖。
+// 共享小区域加载骨架、空内容与可恢复错误状态；请求失败从不以空列表掩盖。
 import { CircleAlert, Inbox, RotateCcw } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ApiError } from '../lib/api-client';
 import { useErrorText } from '../i18n/error-text';
 import { cn } from '../lib/utils';
+import { LineSkeleton, SkeletonRegion } from './skeleton';
 import { Button } from './ui/button';
 
 const WIDTHS = ['w-2/5', 'w-full', 'w-4/5', 'w-3/5'] as const;
@@ -23,9 +24,9 @@ export function StaleNotice({ show }: { show: boolean }) {
   ) : null;
 }
 
-/** 渲染原位骨架行，只在首次加载且没有数据时使用。
+/** 渲染小区域的行状骨架（如列表弹窗、定时预览），只在首次加载且没有数据时使用；页面级加载用 skeleton.tsx 中按布局拼装的骨架。
  * @param props label 读屏文字；rows 骨架行数；className 额外类名。
- * @returns 带 status 角色的骨架。
+ * @returns 加载区域。
  * @throws 不适用。
  */
 export function LoadingState({
@@ -37,67 +38,12 @@ export function LoadingState({
   rows?: number;
   className?: string;
 }) {
-  const { t } = useTranslation('common');
   return (
-    <div role="status" className={cn('space-y-3 py-1', className)}>
-      <span className="sr-only">{label ?? t('states.loading')}</span>
+    <SkeletonRegion label={label} className={cn('space-y-1.5', className)}>
       {Array.from({ length: rows }, (_, index) => (
-        <div
-          key={index}
-          aria-hidden="true"
-          className={cn(
-            'h-3.5 rounded bg-surface-2 motion-safe:animate-pulse',
-            WIDTHS[index % WIDTHS.length],
-          )}
-        />
+        <LineSkeleton key={index} className={WIDTHS[index % WIDTHS.length]} />
       ))}
-    </div>
-  );
-}
-
-/** 渲染表格形状的骨架，尺寸与真实表格一致以避免布局跳动。
- * @param props rows 行数；columns 列数；label 读屏文字。
- * @returns 骨架表格。
- * @throws 不适用。
- */
-export function TableSkeleton({
-  rows = 6,
-  columns = 5,
-  label,
-}: {
-  rows?: number;
-  columns?: number;
-  label?: string;
-}) {
-  const { t } = useTranslation('common');
-  return (
-    <div
-      role="status"
-      className="overflow-hidden rounded-lg border border-border bg-surface"
-    >
-      <span className="sr-only">{label ?? t('states.loading')}</span>
-      <div
-        aria-hidden="true"
-        className="h-9 border-b border-border bg-surface-2/60"
-      />
-      {Array.from({ length: rows }, (_, row) => (
-        <div
-          key={row}
-          aria-hidden="true"
-          className="flex h-10 items-center gap-6 border-b border-border px-3 last:border-b-0"
-        >
-          {Array.from({ length: columns }, (_, column) => (
-            <div
-              key={column}
-              className={cn(
-                'h-3 rounded bg-surface-2 motion-safe:animate-pulse',
-                column === 0 ? 'w-40' : 'w-20',
-              )}
-            />
-          ))}
-        </div>
-      ))}
-    </div>
+    </SkeletonRegion>
   );
 }
 

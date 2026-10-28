@@ -1,9 +1,15 @@
-// 单条文件操作的详情内容（操作详情页与运行详情侧边面板共用）：错误、源 → 方式 → 目标、记录字段与时间线。
+// 单条文件操作的详情内容（操作详情页与运行详情侧边面板共用）：错误、源 → 方式 → 目标、记录字段与时间线；另含同布局的加载骨架。
 import { ArrowRight } from 'lucide-react';
 import { Link } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { KeyValue } from '../../components/page';
 import type { Fact } from '../../components/page';
+import {
+  LineSkeleton,
+  Skeleton,
+  SkeletonRegion,
+  skeletonFacts,
+} from '../../components/skeleton';
 import { Endpoint, RelativeTime, ShortId } from '../../components/text';
 import { useErrorText } from '../../i18n/error-text';
 import { formatBytes, formatTimeFull } from '../../lib/format';
@@ -263,5 +269,54 @@ export function OperationDetails({ operation }: { operation: OperationView }) {
         <KeyValue items={lifecycle} />
       </div>
     </div>
+  );
+}
+
+/** 首次加载时的操作详情骨架：源/目标与分组标题、字段名照常显示，值占位；详情页与侧边面板共用。
+ * @param props label 读屏文字。
+ * @returns 与真实详情同布局的骨架。
+ * @throws 不适用。
+ */
+export function OperationDetailsSkeleton({ label }: { label?: string }) {
+  const { t } = useTranslation('operations');
+  return (
+    <SkeletonRegion label={label} className="space-y-5">
+      <div className="grid gap-2 rounded-lg border border-border p-3 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:items-center">
+        <div className="min-w-0">
+          <p className="mb-1 text-xs text-muted-foreground">
+            {t('detail.source')}
+          </p>
+          <LineSkeleton className="w-56" />
+        </div>
+        <Skeleton className="h-3 w-16" />
+        <div className="min-w-0">
+          <p className="mb-1 text-xs text-muted-foreground">
+            {t('detail.target')}
+          </p>
+          <LineSkeleton className="w-48" />
+        </div>
+      </div>
+      <div>
+        <GroupTitle>{t('detail.record')}</GroupTitle>
+        <KeyValue
+          items={skeletonFacts([
+            t('detail.run'),
+            t('detail.sequence'),
+            t('detail.reason'),
+            t('detail.attempt'),
+          ])}
+        />
+      </div>
+      <div>
+        <GroupTitle>{t('detail.lifecycle')}</GroupTitle>
+        <KeyValue
+          items={skeletonFacts([
+            t('detail.created'),
+            t('detail.submitted'),
+            t('detail.ended'),
+          ])}
+        />
+      </div>
+    </SkeletonRegion>
   );
 }

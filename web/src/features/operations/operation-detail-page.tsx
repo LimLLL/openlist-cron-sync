@@ -2,11 +2,16 @@
 import { useParams } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { PageHeader, useDocumentTitle } from '../../components/page';
-import { ErrorState, LoadingState } from '../../components/states';
+import { Skeleton, TitleSkeleton } from '../../components/skeleton';
+import { ErrorState } from '../../components/states';
 import { OperationStatusBadge } from '../../components/status';
 import { Badge } from '../../components/ui/badge';
 import { useOperation } from './operation-queries';
-import { OperationDetails, pathName } from './operation-details';
+import {
+  OperationDetails,
+  OperationDetailsSkeleton,
+  pathName,
+} from './operation-details';
 
 /** 渲染操作详情页面。
  * @returns 页头与操作详情。
@@ -23,17 +28,26 @@ export function OperationDetailPage() {
   );
 
   if (!data)
-    return (
+    return operation.isError ? (
       <section>
         <PageHeader title={t('detail.title')} />
-        {operation.isError ? (
-          <ErrorState
-            error={operation.error}
-            onRetry={() => void operation.refetch()}
-          />
-        ) : (
-          <LoadingState rows={6} label={t('detail.loading')} />
-        )}
+        <ErrorState
+          error={operation.error}
+          onRetry={() => void operation.refetch()}
+        />
+      </section>
+    ) : (
+      <section className="max-w-4xl">
+        <PageHeader
+          title={<TitleSkeleton />}
+          badges={
+            <>
+              <Skeleton className="h-5 w-14" />
+              <Skeleton className="h-5 w-12" />
+            </>
+          }
+        />
+        <OperationDetailsSkeleton label={t('detail.loading')} />
       </section>
     );
 

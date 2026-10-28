@@ -2,7 +2,12 @@
 import { useNavigate, useParams } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { PageHeader, useDocumentTitle } from '../../components/page';
-import { ErrorState, LoadingState, StaleNotice } from '../../components/states';
+import {
+  FormSkeleton,
+  Skeleton,
+  TitleSkeleton,
+} from '../../components/skeleton';
+import { ErrorState, StaleNotice } from '../../components/states';
 import { toast } from '../../components/ui/toast';
 import { InstanceForm } from './instance-form';
 import {
@@ -65,7 +70,29 @@ export function InstanceEditPage() {
     return query.isError ? (
       <ErrorState error={query.error} onRetry={() => void query.refetch()} />
     ) : (
-      <LoadingState label={t('form.loading')} rows={6} />
+      <>
+        <PageHeader
+          back={{
+            to: back.to,
+            label: <Skeleton className="h-3 w-16" />,
+          }}
+          title={<TitleSkeleton />}
+          description={t('form.editDescription')}
+        />
+        <FormSkeleton
+          label={t('form.loading')}
+          className="max-w-2xl"
+          sections={[
+            { title: t('form.sections.identity'), fields: 2 },
+            {
+              title: t('form.sections.auth'),
+              description: t('form.sections.authHint'),
+              fields: 3,
+            },
+            { title: t('form.sections.transfer'), fields: 1, wide: true },
+          ]}
+        />
+      </>
     );
 
   return (

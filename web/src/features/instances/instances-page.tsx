@@ -4,12 +4,8 @@ import { Link } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { MoreHorizontal, Plus, Search } from 'lucide-react';
 import { PageHeader, useDocumentTitle } from '../../components/page';
-import {
-  EmptyState,
-  ErrorState,
-  StaleNotice,
-  TableSkeleton,
-} from '../../components/states';
+import { TableSkeleton } from '../../components/skeleton';
+import { EmptyState, ErrorState, StaleNotice } from '../../components/states';
 import { PathText, RelativeTime } from '../../components/text';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -110,6 +106,36 @@ export function InstancesPage() {
     [items],
   );
   const visible = filtered.slice((page - 1) * pageSize, page * pageSize);
+  // 搜索与筛选是静态控件，首次加载时就显示；计数要等目录加载完成。
+  const toolbar = (
+    <div className="flex flex-wrap items-center gap-2">
+      <div className="relative w-full sm:w-72">
+        <Search
+          size={14}
+          aria-hidden="true"
+          className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-muted-foreground"
+        />
+        <Input
+          type="search"
+          aria-label={t('list.search')}
+          placeholder={t('list.search')}
+          value={query}
+          onChange={(event) => setQuery(event.target.value || undefined)}
+          className="pl-8"
+        />
+      </div>
+      <Segmented
+        label={t('list.filterLabel')}
+        value={filter}
+        onChange={(value) => setFilter(value === 'all' ? undefined : value)}
+        options={FILTERS.map((value) => ({
+          value,
+          label: t(`list.filters.${value}`),
+          count: catalog.data ? filterCounts[value] : undefined,
+        }))}
+      />
+    </div>
+  );
   const create = (
     <Button asChild variant="primary">
       <Link to="/instances/new">
@@ -131,7 +157,25 @@ export function InstancesPage() {
 
       <StaleNotice show={catalog.isRefetchError} />
       {catalog.isPending ? (
-        <TableSkeleton rows={5} columns={7} label={t('list.loading')} />
+        <div className="space-y-3">
+          {toolbar}
+          <TableSkeleton
+            rows={5}
+            head={<InstancesTableHead />}
+            columns={[
+              'badge',
+              'title',
+              'path',
+              { kind: 'text', className: 'hidden lg:table-cell' },
+              { kind: 'text', className: 'hidden xl:table-cell' },
+              'text',
+              { kind: 'number', className: 'text-right' },
+              'time',
+              { kind: 'actions', className: 'text-right' },
+            ]}
+            label={t('list.loading')}
+          />
+        </div>
       ) : catalog.isError && !catalog.data ? (
         <ErrorState
           error={catalog.error}
@@ -145,35 +189,7 @@ export function InstancesPage() {
         />
       ) : (
         <div className="space-y-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="relative w-full sm:w-72">
-              <Search
-                size={14}
-                aria-hidden="true"
-                className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-muted-foreground"
-              />
-              <Input
-                type="search"
-                aria-label={t('list.search')}
-                placeholder={t('list.search')}
-                value={query}
-                onChange={(event) => setQuery(event.target.value || undefined)}
-                className="pl-8"
-              />
-            </div>
-            <Segmented
-              label={t('list.filterLabel')}
-              value={filter}
-              onChange={(value) =>
-                setFilter(value === 'all' ? undefined : value)
-              }
-              options={FILTERS.map((value) => ({
-                value,
-                label: t(`list.filters.${value}`),
-                count: filterCounts[value],
-              }))}
-            />
-          </div>
+          {toolbar}
           {filtered.length === 0 ? (
             <EmptyState
               title={t('common:states.noMatches')}
@@ -186,27 +202,7 @@ export function InstancesPage() {
           ) : (
             <>
               <Table>
-                <THead>
-                  <tr>
-                    <TH className="w-32">{t('list.columns.status')}</TH>
-                    <TH>{t('list.columns.name')}</TH>
-                    <TH>{t('list.columns.address')}</TH>
-                    <TH className="hidden lg:table-cell">
-                      {t('list.columns.auth')}
-                    </TH>
-                    <TH className="hidden xl:table-cell">
-                      {t('list.columns.download')}
-                    </TH>
-                    <TH>{t('list.columns.version')}</TH>
-                    <TH className="text-right">{t('list.columns.jobs')}</TH>
-                    <TH>{t('list.columns.tested')}</TH>
-                    <TH className="text-right">
-                      <span className="sr-only">
-                        {t('list.columns.actions')}
-                      </span>
-                    </TH>
-                  </tr>
-                </THead>
+                <InstancesTableHead />
                 <TBody>
                   {visible.map((instance) => (
                     <InstanceRow
@@ -252,6 +248,31 @@ export function InstancesPage() {
         onClose={() => setArchiving(null)}
       />
     </>
+  );
+}
+
+/** 实例表表头；加载中与加载后共用。
+ * @returns 表头。
+ * @throws 不适用。
+ */
+function InstancesTableHead() {
+  const { t } = useTranslation('instances');
+  return (
+    <THead>
+      <tr>
+        <TH className="w-32">{t('list.columns.status')}</TH>
+        <TH>{t('list.columns.name')}</TH>
+        <TH>{t('list.columns.address')}</TH>
+        <TH className="hidden lg:table-cell">{t('list.columns.auth')}</TH>
+        <TH className="hidden xl:table-cell">{t('list.columns.download')}</TH>
+        <TH>{t('list.columns.version')}</TH>
+        <TH className="text-right">{t('list.columns.jobs')}</TH>
+        <TH>{t('list.columns.tested')}</TH>
+        <TH className="text-right">
+          <span className="sr-only">{t('list.columns.actions')}</span>
+        </TH>
+      </tr>
+    </THead>
   );
 }
 

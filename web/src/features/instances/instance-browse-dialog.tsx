@@ -2,7 +2,8 @@
 import { useEffect, useState } from 'react';
 import { ArrowUp, ChevronRight, File, Folder, RefreshCw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { ErrorState, LoadingState } from '../../components/states';
+import { TableSkeleton } from '../../components/skeleton';
+import { ErrorState } from '../../components/states';
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
 import { Dialog, DialogClose, DialogContent } from '../../components/ui/dialog';
@@ -33,6 +34,25 @@ interface BrowseDialogProps {
   initialPassword?: string;
   /** 选择模式：选中当前目录时回调服务端规范化后的路径与路径密码。 */
   onSelect?: (path: string, password: string) => void;
+}
+
+/** 目录列表表头；加载中与加载后共用。
+ * @returns 表头。
+ * @throws 不适用。
+ */
+function BrowseTableHead() {
+  const { t } = useTranslation('instances');
+  return (
+    <THead>
+      <tr>
+        <TH>{t('browse.columns.name')}</TH>
+        <TH className="w-24 text-right">{t('browse.columns.size')}</TH>
+        <TH className="hidden w-36 sm:table-cell">
+          {t('browse.columns.modified')}
+        </TH>
+      </tr>
+    </THead>
+  );
 }
 
 /** 渲染目录浏览对话框。
@@ -261,7 +281,15 @@ export function InstanceBrowseDialog({
             />
           )}
           {browse.isPending && !shown && (
-            <LoadingState label={t('browse.loading')} rows={6} />
+            <TableSkeleton
+              head={<BrowseTableHead />}
+              columns={[
+                'title',
+                { kind: 'number', className: 'text-right' },
+                { kind: 'time', className: 'hidden sm:table-cell' },
+              ]}
+              label={t('browse.loading')}
+            />
           )}
           {shown && shown.items.length === 0 && (
             <p className="rounded-lg border border-dashed border-input py-10 text-center text-[13px] text-muted-foreground">
@@ -277,17 +305,7 @@ export function InstanceBrowseDialog({
               )}
             >
               <Table aria-label={t('browse.tableLabel')}>
-                <THead>
-                  <tr>
-                    <TH>{t('browse.columns.name')}</TH>
-                    <TH className="w-24 text-right">
-                      {t('browse.columns.size')}
-                    </TH>
-                    <TH className="hidden w-36 sm:table-cell">
-                      {t('browse.columns.modified')}
-                    </TH>
-                  </tr>
-                </THead>
+                <BrowseTableHead />
                 <TBody>
                   {shown.items.map((item) => (
                     <TR key={item.name}>

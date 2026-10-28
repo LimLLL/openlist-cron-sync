@@ -79,6 +79,10 @@
   --animate-pop-in: pop-in 140ms ease-out;
   --animate-slide-in-right: slide-in-right 180ms ease-out;
   --animate-slide-in-left: slide-in-left 180ms ease-out;
+  /* 骨架先隐藏 200ms 再淡入并呼吸：快速请求直接出内容，不闪一下占位；减少动态效果时只保留延迟出现。 */
+  --animate-skeleton:
+    skeleton-in 150ms ease-out 200ms both,
+    skeleton-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) 350ms infinite;
 
   @keyframes fade-in {
     from {
@@ -100,6 +104,16 @@
   @keyframes slide-in-left {
     from {
       transform: translateX(-100%);
+    }
+  }
+  @keyframes skeleton-in {
+    from {
+      opacity: 0;
+    }
+  }
+  @keyframes skeleton-pulse {
+    50% {
+      opacity: 0.5;
     }
   }
 }

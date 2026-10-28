@@ -2,12 +2,14 @@
 import { Link } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { PageHeader, useDocumentTitle } from '../../components/page';
-import { EmptyState, ErrorState, TableSkeleton } from '../../components/states';
+import { TableSkeleton } from '../../components/skeleton';
+import { EmptyState, ErrorState } from '../../components/states';
 import { OperationStatusBadge } from '../../components/status';
 import { Endpoint, RelativeTime, ShortId } from '../../components/text';
 import { Button } from '../../components/ui/button';
 import { NativeSelect } from '../../components/ui/input';
 import { Pagination } from '../../components/ui/pagination';
+import { Segmented } from '../../components/ui/segmented';
 import { Table, TBody, TD, TH, THead, TR } from '../../components/ui/table';
 import {
   useClearFilters,
@@ -21,6 +23,30 @@ import { OperationSize } from './operation-details';
 
 const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/** 操作表表头；加载中与加载后共用。
+ * @returns 表头。
+ * @throws 不适用。
+ */
+function OperationsTableHead() {
+  const { t } = useTranslation('operations');
+  return (
+    <THead>
+      <tr>
+        <TH className="w-28">{t('list.columns.status')}</TH>
+        <TH className="w-24">{t('list.columns.action')}</TH>
+        <TH>{t('list.columns.target')}</TH>
+        <TH>{t('list.columns.source')}</TH>
+        <TH className="w-24 text-right">{t('list.columns.size')}</TH>
+        <TH className="w-24">{t('list.columns.run')}</TH>
+        <TH className="w-28">{t('list.columns.created')}</TH>
+        <TH className="w-16">
+          <span className="sr-only">{t('list.open')}</span>
+        </TH>
+      </tr>
+    </THead>
+  );
+}
 
 /** 渲染跨运行操作列表页面。
  * @returns 带筛选与分页的操作表格。
@@ -80,19 +106,18 @@ export function OperationsPage() {
             </option>
           ))}
         </NativeSelect>
-        <NativeSelect
-          aria-label={t('list.statusFilter')}
+        <Segmented
+          label={t('list.statusFilter')}
           value={status ?? ''}
-          onChange={(event) => setStatus(event.target.value || undefined)}
-          className="w-40"
-        >
-          <option value="">{t('list.allStatuses')}</option>
-          {OPERATION_STATUSES.map((value) => (
-            <option key={value} value={value}>
-              {t(`common:operationStatus.${value}`)}
-            </option>
-          ))}
-        </NativeSelect>
+          onChange={(value) => setStatus(value || undefined)}
+          options={[
+            { value: '', label: t('list.allStatuses') },
+            ...OPERATION_STATUSES.map((value) => ({
+              value,
+              label: t(`common:operationStatus.${value}`),
+            })),
+          ]}
+        />
         {data && (
           <span className="ml-auto text-xs text-muted-foreground tabular-nums">
             {t('list.total', { count: data.total })}
@@ -113,7 +138,20 @@ export function OperationsPage() {
             onRetry={() => void operations.refetch()}
           />
         ) : (
-          <TableSkeleton columns={7} label={t('list.loading')} />
+          <TableSkeleton
+            head={<OperationsTableHead />}
+            columns={[
+              'badge',
+              'text',
+              'path',
+              'path',
+              { kind: 'number', className: 'text-right' },
+              'id',
+              'time',
+              'button',
+            ]}
+            label={t('list.loading')}
+          />
         )
       ) : data.items.length === 0 ? (
         <>
@@ -143,20 +181,7 @@ export function OperationsPage() {
       ) : (
         <>
           <Table>
-            <THead>
-              <tr>
-                <TH className="w-28">{t('list.columns.status')}</TH>
-                <TH className="w-24">{t('list.columns.action')}</TH>
-                <TH>{t('list.columns.target')}</TH>
-                <TH>{t('list.columns.source')}</TH>
-                <TH className="w-24 text-right">{t('list.columns.size')}</TH>
-                <TH className="w-24">{t('list.columns.run')}</TH>
-                <TH className="w-28">{t('list.columns.created')}</TH>
-                <TH className="w-16">
-                  <span className="sr-only">{t('list.open')}</span>
-                </TH>
-              </tr>
-            </THead>
+            <OperationsTableHead />
             <TBody>
               {data.items.map((operation) => (
                 <TR key={operation.id}>

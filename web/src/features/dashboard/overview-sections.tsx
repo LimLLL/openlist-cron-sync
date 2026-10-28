@@ -4,7 +4,12 @@ import { Check, Play } from 'lucide-react';
 import { Link } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { Section } from '../../components/page';
-import { EmptyState, ErrorState, LoadingState } from '../../components/states';
+import {
+  LineSkeleton,
+  Skeleton,
+  SkeletonRegion,
+} from '../../components/skeleton';
+import { EmptyState, ErrorState } from '../../components/states';
 import { RunStatusBadge } from '../../components/status';
 import { RelativeTime, useClock } from '../../components/text';
 import { Badge } from '../../components/ui/badge';
@@ -65,6 +70,52 @@ function Row({ children }: { children: ReactNode }) {
     <li className="flex min-h-12 items-center gap-3 border-b border-border px-4 py-2 last:border-b-0">
       {children}
     </li>
+  );
+}
+
+/** 列表行骨架属性。 */
+interface RowsSkeletonProps {
+  /** 行数。 */
+  rows: number;
+  /** 左侧是否有时间列（“即将运行”）。 */
+  leading?: boolean;
+  /** 右侧占位：状态徽标或运行按钮。 */
+  trailing?: 'badge' | 'button';
+  /** 读屏文字。 */
+  label?: string;
+}
+
+/** 渲染与 Row 同高同结构的列表骨架：两行文字，可选左侧时间与右侧徽标/按钮。
+ * @param props 行数、左右占位与读屏文字。
+ * @returns 加载中的列表。
+ * @throws 不适用。
+ */
+function RowsSkeleton({ rows, leading, trailing, label }: RowsSkeletonProps) {
+  return (
+    <SkeletonRegion label={label}>
+      <ul aria-hidden="true">
+        {Array.from({ length: rows }, (_, index) => (
+          <Row key={index}>
+            {leading && (
+              <div className="w-28 shrink-0">
+                <LineSkeleton className="w-20" />
+                <Skeleton className="my-0.5 h-3 w-14" />
+              </div>
+            )}
+            <div className="min-w-0 flex-1">
+              <LineSkeleton className={index % 2 ? 'w-32' : 'w-44'} />
+              <Skeleton
+                className={cn('my-0.5 h-3', index % 2 ? 'w-52' : 'w-36')}
+              />
+            </div>
+            {trailing === 'badge' && <Skeleton className="h-5 w-16" />}
+            {trailing === 'button' && (
+              <Skeleton className="h-7 w-16 rounded-md" />
+            )}
+          </Row>
+        ))}
+      </ul>
+    </SkeletonRegion>
   );
 }
 
@@ -139,9 +190,11 @@ export function AttentionSection({
         />
       )}
       {!hasRows && pending && (
-        <div className="px-4 py-3">
-          <LoadingState label={t('attention.loading')} rows={3} />
-        </div>
+        <RowsSkeleton
+          rows={3}
+          trailing="button"
+          label={t('attention.loading')}
+        />
       )}
       {hasRows && (
         <ul>
@@ -319,9 +372,7 @@ export function RunningSection({ active }: RunningSectionProps) {
             />
           </div>
         ) : (
-          <div className="px-4 py-3">
-            <LoadingState rows={2} />
-          </div>
+          <RowsSkeleton rows={2} trailing="badge" />
         )
       ) : runs.length === 0 ? (
         <EmptyState compact title={t('running.empty')} />
@@ -375,9 +426,7 @@ export function UpcomingSection({
             />
           </div>
         ) : (
-          <div className="px-4 py-3">
-            <LoadingState rows={2} />
-          </div>
+          <RowsSkeleton rows={3} leading />
         )
       ) : items.length === 0 ? (
         <EmptyState compact title={t('upcoming.empty')} />

@@ -3,12 +3,8 @@ import { Link } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { ExternalLink } from 'lucide-react';
 import { Section } from '../../components/page';
-import {
-  EmptyState,
-  ErrorState,
-  StaleNotice,
-  TableSkeleton,
-} from '../../components/states';
+import { TableSkeleton } from '../../components/skeleton';
+import { EmptyState, ErrorState, StaleNotice } from '../../components/states';
 import { RunStatusBadge } from '../../components/status';
 import { RelativeTime, ShortId } from '../../components/text';
 import { Badge } from '../../components/ui/badge';
@@ -19,6 +15,27 @@ import { RunDuration, RunResultSummary } from '../runs/run-cells';
 import { useRuns } from '../runs/run-queries';
 
 const PAGE_DEFAULTS = { page: 1, pageSize: 25 };
+
+/** 运行记录表表头；加载中与加载后共用。
+ * @returns 表头。
+ * @throws 不适用。
+ */
+function JobRunsTableHead() {
+  const { t } = useTranslation('jobs');
+  return (
+    <THead>
+      <tr>
+        <TH>{t('detail.runs.col.status')}</TH>
+        <TH>{t('detail.runs.col.type')}</TH>
+        <TH>{t('detail.runs.col.trigger')}</TH>
+        <TH>{t('detail.runs.col.started')}</TH>
+        <TH>{t('detail.runs.col.duration')}</TH>
+        <TH>{t('detail.runs.col.result')}</TH>
+        <TH className="text-right">{t('detail.runs.col.id')}</TH>
+      </tr>
+    </THead>
+  );
+}
 
 /** 渲染任务的运行记录表。
  * @param props jobId 任务 ID。
@@ -47,9 +64,20 @@ export function JobRunsTab({ jobId }: { jobId: string }) {
     >
       <StaleNotice show={runs.isRefetchError} />
       {!data && !runs.isError ? (
-        <div className="p-3">
-          <TableSkeleton rows={5} columns={6} />
-        </div>
+        <TableSkeleton
+          bare
+          rows={5}
+          head={<JobRunsTableHead />}
+          columns={[
+            'badge',
+            'badge',
+            'text',
+            'time',
+            'text',
+            'path',
+            { kind: 'id', className: 'text-right' },
+          ]}
+        />
       ) : !data ? (
         <div className="p-3">
           <ErrorState
@@ -78,17 +106,7 @@ export function JobRunsTab({ jobId }: { jobId: string }) {
       ) : (
         <>
           <Table bare>
-            <THead>
-              <tr>
-                <TH>{t('detail.runs.col.status')}</TH>
-                <TH>{t('detail.runs.col.type')}</TH>
-                <TH>{t('detail.runs.col.trigger')}</TH>
-                <TH>{t('detail.runs.col.started')}</TH>
-                <TH>{t('detail.runs.col.duration')}</TH>
-                <TH>{t('detail.runs.col.result')}</TH>
-                <TH className="text-right">{t('detail.runs.col.id')}</TH>
-              </tr>
-            </THead>
+            <JobRunsTableHead />
             <TBody>
               {data.items.map((run) => (
                 <TR key={run.id}>

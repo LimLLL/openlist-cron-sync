@@ -2,7 +2,15 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { useTranslation } from 'react-i18next';
-import { PageHeader, useDocumentTitle } from '../../components/page';
+import { FactStrip, PageHeader, useDocumentTitle } from '../../components/page';
+import {
+  ButtonSkeleton,
+  LineSkeleton,
+  Skeleton,
+  SkeletonRegion,
+  skeletonFacts,
+  TitleSkeleton,
+} from '../../components/skeleton';
 import { ErrorState, LoadingState } from '../../components/states';
 import { RunStatusBadge } from '../../components/status';
 import { RelativeTime, ShortId } from '../../components/text';
@@ -18,10 +26,14 @@ import {
 import { useTabParam } from '../../lib/hooks';
 import { isActiveRun, useCancelRun, useRun } from './run-queries';
 import { hasPlannedWork, snapshotJobName } from './run-format';
-import { RunLifecycle } from './run-lifecycle';
+import { RunLifecycle, RunLifecycleSkeleton } from './run-lifecycle';
 import { RunErrorBanner, RunFacts } from './run-summary';
-import { OperationSheet, RunOperationsTab } from './run-operations-tab';
-import { RunIssuesTab } from './run-issues-tab';
+import {
+  OperationSheet,
+  RunOperationsSkeleton,
+  RunOperationsTab,
+} from './run-operations-tab';
+import { RunIssuesSkeleton, RunIssuesTab } from './run-issues-tab';
 import { RunTargets } from './run-targets';
 import { RunConfigTab, RunStatsTab } from './run-stats-tab';
 import type { RunDetail } from './run-contract';
@@ -161,6 +173,57 @@ function RunDetailView({ run, stale }: { run: RunDetail; stale: boolean }) {
   );
 }
 
+/** 首次加载时的运行详情：返回链接、生命周期节点名与标签页照常显示，其余按真实布局占位。
+ * @returns 详情页骨架。
+ * @throws 不适用。
+ */
+function RunDetailSkeleton() {
+  const { t } = useTranslation(['runs', 'common']);
+  const [tab, setTab] = useTabParam('tab', TABS, 'operations');
+  return (
+    <section>
+      <SkeletonRegion label={t('detail.loading')}>
+        <PageHeader
+          back={{ to: '/runs', label: t('common:nav.runs') }}
+          title={<TitleSkeleton />}
+          badges={<Skeleton className="h-5 w-16" />}
+          description={<LineSkeleton className="w-80" />}
+          actions={<ButtonSkeleton className="w-24" />}
+        />
+        <RunLifecycleSkeleton />
+        {/* 正式运行与试运行的计数项不同，标签也用占位。 */}
+        <FactStrip
+          facts={skeletonFacts(
+            Array.from({ length: 8 }, (_, index) => (
+              <Skeleton key={index} className="my-0.5 h-3 w-14" />
+            )),
+          )}
+        />
+      </SkeletonRegion>
+      <Tabs value={tab} onValueChange={setTab}>
+        <TabsList aria-label={t('detail.tabs.label')}>
+          {TABS.map((value) => (
+            <TabsTrigger key={value} value={value}>
+              {t(`detail.tabs.${value}`)}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+        <TabsContent value="operations">
+          <RunOperationsSkeleton />
+        </TabsContent>
+        <TabsContent value="issues">
+          <RunIssuesSkeleton />
+        </TabsContent>
+        {(['targets', 'stats', 'snapshot'] as const).map((value) => (
+          <TabsContent key={value} value={value}>
+            <LoadingState rows={4} />
+          </TabsContent>
+        ))}
+      </Tabs>
+    </section>
+  );
+}
+
 /** 渲染运行详情页面；进行中自动刷新（由 useRun 负责）。
  * @returns 运行详情页面。
  * @throws 不适用；请求错误在页面内显示。
@@ -176,18 +239,16 @@ export function RunDetailPage() {
   );
 
   if (!data)
-    return (
+    return run.isError ? (
       <section>
         <PageHeader
           title={t('detail.title')}
           back={{ to: '/runs', label: t('common:nav.runs') }}
         />
-        {run.isError ? (
-          <ErrorState error={run.error} onRetry={() => void run.refetch()} />
-        ) : (
-          <LoadingState rows={8} label={t('detail.loading')} />
-        )}
+        <ErrorState error={run.error} onRetry={() => void run.refetch()} />
       </section>
+    ) : (
+      <RunDetailSkeleton />
     );
 
   return <RunDetailView key={data.id} run={data} stale={run.isRefetchError} />;

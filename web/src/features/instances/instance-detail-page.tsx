@@ -12,11 +12,15 @@ import {
 } from '../../components/page';
 import { RunStatusBadge } from '../../components/status';
 import {
-  EmptyState,
-  ErrorState,
-  LoadingState,
-  StaleNotice,
-} from '../../components/states';
+  ButtonSkeleton,
+  LineSkeleton,
+  Skeleton,
+  SkeletonRegion,
+  skeletonFacts,
+  TableSkeleton,
+  TitleSkeleton,
+} from '../../components/skeleton';
+import { EmptyState, ErrorState, StaleNotice } from '../../components/states';
 import { PathText, RelativeTime } from '../../components/text';
 import { Button } from '../../components/ui/button';
 import {
@@ -41,6 +45,77 @@ import { useInstance, useInstanceTest } from './instance-queries';
 import { InstanceTestResult } from './instance-test-result';
 import type { Instance } from './instance-contract';
 
+/** 首次加载时的实例详情：返回链接、信息条标签与各分区标题照常显示，其余按真实布局占位；引用任务分区只依赖实例 ID，直接加载自己的数据。
+ * @param props instanceId 实例 ID。
+ * @returns 详情页骨架。
+ * @throws 不适用。
+ */
+function InstanceDetailSkeleton({ instanceId }: { instanceId: string }) {
+  const { t } = useTranslation('instances');
+  return (
+    <>
+      <SkeletonRegion label={t('detail.loading')}>
+        <PageHeader
+          back={{ to: '/instances', label: t('list.title') }}
+          title={<TitleSkeleton />}
+          badges={<Skeleton className="h-5 w-14" />}
+          description={<LineSkeleton className="w-64" />}
+          actions={
+            <>
+              <ButtonSkeleton />
+              <ButtonSkeleton className="w-16" />
+              <ButtonSkeleton className="w-16" />
+              <ButtonSkeleton className="w-8" />
+            </>
+          }
+        />
+        <FactStrip
+          facts={skeletonFacts([
+            t('detail.facts.status'),
+            t('detail.facts.auth'),
+            t('detail.facts.account'),
+            t('detail.facts.version'),
+            t('detail.facts.multipart'),
+            t('detail.facts.tested'),
+          ])}
+        />
+      </SkeletonRegion>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Section title={t('detail.sections.account')}>
+          <KeyValue
+            items={skeletonFacts([
+              t('detail.username'),
+              t('detail.basePath'),
+              t('detail.role'),
+              t('detail.permissions'),
+            ])}
+          />
+        </Section>
+        <Section title={t('detail.sections.transfer')}>
+          <KeyValue
+            items={skeletonFacts([
+              t('detail.downloadMode'),
+              t('detail.facts.multipart'),
+            ])}
+          />
+        </Section>
+        <JobsSection instanceId={instanceId} />
+        <Section title={t('detail.sections.record')} className="lg:col-span-2">
+          <KeyValue
+            className="sm:grid-cols-[minmax(7rem,max-content)_minmax(0,1fr)_minmax(7rem,max-content)_minmax(0,1fr)]"
+            items={skeletonFacts([
+              t('detail.created'),
+              t('detail.updated'),
+              t('detail.lastTested'),
+              t('detail.blockedUntilLabel'),
+            ])}
+          />
+        </Section>
+      </div>
+    </>
+  );
+}
+
 /** 渲染实例详情页。
  * @returns 详情页面。
  * @throws 不适用；请求错误就地显示并可重试。
@@ -64,7 +139,7 @@ export function InstanceDetailPage() {
     return query.isError ? (
       <ErrorState error={query.error} onRetry={() => void query.refetch()} />
     ) : (
-      <LoadingState label={t('detail.loading')} rows={6} />
+      <InstanceDetailSkeleton instanceId={id} />
     );
 
   const blocked = instance.authState === 'auth_blocked';
@@ -385,6 +460,23 @@ function TransferSection({ instance }: { instance: Instance }) {
   );
 }
 
+/** 引用任务表表头；加载中与加载后共用。
+ * @returns 表头。
+ * @throws 不适用。
+ */
+function JobsTableHead() {
+  const { t } = useTranslation('instances');
+  return (
+    <THead>
+      <tr>
+        <TH>{t('detail.jobColumns.name')}</TH>
+        <TH>{t('detail.jobColumns.role')}</TH>
+        <TH>{t('detail.jobColumns.lastRun')}</TH>
+      </tr>
+    </THead>
+  );
+}
+
 /** 使用此实例的任务列表，附上次正式运行结果。
  * @param props instanceId 实例 ID。
  * @returns 分区卡片。
@@ -406,9 +498,12 @@ function JobsSection({ instanceId }: { instanceId: string }) {
     >
       <StaleNotice show={jobs.isRefetchError} />
       {jobs.isPending ? (
-        <div className="p-4">
-          <LoadingState rows={2} />
-        </div>
+        <TableSkeleton
+          bare
+          rows={2}
+          head={<JobsTableHead />}
+          columns={['title', 'text', 'status']}
+        />
       ) : jobs.isError && !jobs.data ? (
         <div className="p-4">
           <ErrorState
@@ -421,13 +516,7 @@ function JobsSection({ instanceId }: { instanceId: string }) {
         <EmptyState compact title={t('detail.jobsEmpty')} />
       ) : (
         <Table bare>
-          <THead>
-            <tr>
-              <TH>{t('detail.jobColumns.name')}</TH>
-              <TH>{t('detail.jobColumns.role')}</TH>
-              <TH>{t('detail.jobColumns.lastRun')}</TH>
-            </tr>
-          </THead>
+          <JobsTableHead />
           <TBody>
             {usage.map(({ job, role }) => {
               const run = job.latestTerminalRealRun;

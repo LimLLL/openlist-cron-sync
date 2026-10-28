@@ -1,19 +1,14 @@
 // 运行详情的“操作”标签：按动作与状态筛选（写进 URL、独立分页），点击“详情”在右侧面板查看单条操作（?op= 可直接分享）。
 import { Link, useSearchParams } from 'react-router';
 import { useTranslation } from 'react-i18next';
-import {
-  EmptyState,
-  ErrorState,
-  LoadingState,
-  StaleNotice,
-  TableSkeleton,
-} from '../../components/states';
+import { Skeleton, TableSkeleton } from '../../components/skeleton';
+import type { SkeletonColumn } from '../../components/skeleton';
+import { EmptyState, ErrorState, StaleNotice } from '../../components/states';
 import { OperationStatusBadge } from '../../components/status';
 import { Endpoint, RelativeTime } from '../../components/text';
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
 import { Dialog, SheetContent } from '../../components/ui/dialog';
-import { NativeSelect } from '../../components/ui/input';
 import { Pagination } from '../../components/ui/pagination';
 import { Segmented } from '../../components/ui/segmented';
 import { Table, TBody, TD, TH, THead, TR } from '../../components/ui/table';
@@ -26,6 +21,7 @@ import { OPERATION_STATUSES } from '../operations/operation-contract';
 import { useOperation } from '../operations/operation-queries';
 import {
   OperationDetails,
+  OperationDetailsSkeleton,
   OperationSize,
   pathName,
 } from '../operations/operation-details';
@@ -34,6 +30,63 @@ import type { RunDetail } from './run-contract';
 
 const ACTIONS = ['mkdir', 'create', 'delete'] as const;
 const OP_PARAM = 'op';
+
+/** 操作表表头；加载中与加载后共用。
+ * @returns 表头。
+ * @throws 不适用。
+ */
+function OperationsTableHead() {
+  const { t } = useTranslation('runs');
+  return (
+    <THead>
+      <tr>
+        <TH className="w-14 text-right">{t('operations.columns.seq')}</TH>
+        <TH className="w-32">{t('operations.columns.action')}</TH>
+        <TH className="w-28">{t('operations.columns.status')}</TH>
+        <TH>{t('operations.columns.target')}</TH>
+        <TH className="w-24 text-right">{t('operations.columns.size')}</TH>
+        <TH className="w-20">{t('operations.columns.attempt')}</TH>
+        <TH className="w-28">{t('operations.columns.ended')}</TH>
+        <TH className="w-16">
+          <span className="sr-only">{t('operations.details')}</span>
+        </TH>
+      </tr>
+    </THead>
+  );
+}
+
+// 操作表各列的骨架形状，顺序与表头一致。
+const OPERATION_COLUMNS: SkeletonColumn[] = [
+  { kind: 'number', className: 'text-right' },
+  'text',
+  'badge',
+  'path',
+  { kind: 'number', className: 'text-right' },
+  'text',
+  'time',
+  'button',
+];
+
+/** 运行详情首次加载时的操作标签骨架：筛选栏占位，表头照常显示。
+ * @returns 操作标签骨架。
+ * @throws 不适用。
+ */
+export function RunOperationsSkeleton() {
+  const { t } = useTranslation('runs');
+  return (
+    <div>
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <Skeleton className="h-8 w-72 max-w-full rounded-md" />
+        <Skeleton className="h-8 w-[34rem] max-w-full rounded-md" />
+      </div>
+      <TableSkeleton
+        head={<OperationsTableHead />}
+        columns={OPERATION_COLUMNS}
+        label={t('operations.loading')}
+      />
+    </div>
+  );
+}
 
 /** 右侧面板：读取并显示单条操作；关闭时不再请求。
  * @returns 由op查询参数控制的面板，可在任意详情标签页直接打开。
@@ -89,7 +142,7 @@ export function OperationSheet() {
               onRetry={() => void operation.refetch()}
             />
           ) : (
-            <LoadingState rows={6} label={t('operations:detail.loading')} />
+            <OperationDetailsSkeleton label={t('operations:detail.loading')} />
           )}
         </SheetContent>
       )}
@@ -162,19 +215,18 @@ export function RunOperationsTab({ run }: { run: RunDetail }) {
             })),
           ]}
         />
-        <NativeSelect
-          aria-label={t('operations.statusFilter')}
+        <Segmented
+          label={t('operations.statusFilter')}
           value={status ?? ''}
-          onChange={(event) => setStatus(event.target.value || undefined)}
-          className="w-40"
-        >
-          <option value="">{t('operations.allStatuses')}</option>
-          {OPERATION_STATUSES.map((value) => (
-            <option key={value} value={value}>
-              {t(`common:operationStatus.${value}`)}
-            </option>
-          ))}
-        </NativeSelect>
+          onChange={(value) => setStatus(value || undefined)}
+          options={[
+            { value: '', label: t('operations.allStatuses') },
+            ...OPERATION_STATUSES.map((value) => ({
+              value,
+              label: t(`common:operationStatus.${value}`),
+            })),
+          ]}
+        />
         {data && (
           <span className="ml-auto text-xs text-muted-foreground tabular-nums">
             {t('operations.total', { count: data.total })}
@@ -195,7 +247,11 @@ export function RunOperationsTab({ run }: { run: RunDetail }) {
             onRetry={() => void operations.refetch()}
           />
         ) : (
-          <TableSkeleton columns={7} label={t('operations.loading')} />
+          <TableSkeleton
+            head={<OperationsTableHead />}
+            columns={OPERATION_COLUMNS}
+            label={t('operations.loading')}
+          />
         )
       ) : data.items.length === 0 ? (
         <>
@@ -229,24 +285,7 @@ export function RunOperationsTab({ run }: { run: RunDetail }) {
       ) : (
         <>
           <Table>
-            <THead>
-              <tr>
-                <TH className="w-14 text-right">
-                  {t('operations.columns.seq')}
-                </TH>
-                <TH className="w-32">{t('operations.columns.action')}</TH>
-                <TH className="w-28">{t('operations.columns.status')}</TH>
-                <TH>{t('operations.columns.target')}</TH>
-                <TH className="w-24 text-right">
-                  {t('operations.columns.size')}
-                </TH>
-                <TH className="w-20">{t('operations.columns.attempt')}</TH>
-                <TH className="w-28">{t('operations.columns.ended')}</TH>
-                <TH className="w-16">
-                  <span className="sr-only">{t('operations.details')}</span>
-                </TH>
-              </tr>
-            </THead>
+            <OperationsTableHead />
             <TBody>
               {data.items.map((operation) => (
                 <TR key={operation.id}>

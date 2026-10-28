@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { CircleAlert } from 'lucide-react';
 import { Link } from 'react-router';
 import { useTranslation } from 'react-i18next';
+import { Skeleton } from '../../components/skeleton';
 import { RelativeTime } from '../../components/text';
 import { cn } from '../../lib/utils';
 import { instanceNeedsAttention } from '../instances/instance-health';
@@ -65,10 +66,15 @@ function Tile({ to, label, value, sub, failed, tone }: TileProps) {
           </p>
         </>
       ) : value === undefined ? (
-        <div aria-hidden="true" className="mt-1.5 space-y-1.5">
-          <div className="h-6 w-12 rounded bg-surface-2 motion-safe:animate-pulse" />
-          <div className="h-3 w-24 rounded bg-surface-2 motion-safe:animate-pulse" />
-        </div>
+        // 与数值（28px 行高）和补充行（16px 行高）等高，加载完成时卡片不变高。
+        <>
+          <div className="mt-1 flex h-7 items-center">
+            <Skeleton className="h-6 w-12" />
+          </div>
+          <div className="mt-0.5 flex h-4 items-center">
+            <Skeleton className="h-3 w-24" />
+          </div>
+        </>
       ) : (
         <>
           <p

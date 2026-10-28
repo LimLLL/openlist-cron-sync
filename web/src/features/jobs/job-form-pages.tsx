@@ -2,7 +2,8 @@
 import { Link, useParams } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { PageHeader, useDocumentTitle } from '../../components/page';
-import { ErrorState, LoadingState, StaleNotice } from '../../components/states';
+import { FormSkeleton, TitleSkeleton } from '../../components/skeleton';
+import { ErrorState, StaleNotice } from '../../components/states';
 import { Button } from '../../components/ui/button';
 import { JobForm } from './job-form';
 import { useJob } from './job-queries';
@@ -35,9 +36,26 @@ export function JobEditPage() {
       <section className="mx-auto max-w-4xl">
         <PageHeader
           back={{ to: `/jobs/${id}`, label: t('form.backToJob') }}
-          title={t('form.loadingJob')}
+          title={<TitleSkeleton />}
+          description={t('form.editNotice')}
         />
-        <LoadingState label={t('form.loadingJob')} rows={6} />
+        <FormSkeleton
+          label={t('form.loadingJob')}
+          sections={[
+            { title: t('form.basics'), fields: 1, wide: true },
+            {
+              title: t('form.source'),
+              description: t('form.sourceDesc'),
+              fields: 6,
+            },
+            {
+              title: t('form.targets'),
+              description: t('form.targetsDesc'),
+              fields: 6,
+            },
+            { title: t('form.schedule'), fields: 2 },
+          ]}
+        />
       </section>
     );
   if (job.isError && !job.data)

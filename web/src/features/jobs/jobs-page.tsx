@@ -4,12 +4,8 @@ import { Link, useSearchParams } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { Play, Plus, Search } from 'lucide-react';
 import { PageHeader, useDocumentTitle } from '../../components/page';
-import {
-  EmptyState,
-  ErrorState,
-  StaleNotice,
-  TableSkeleton,
-} from '../../components/states';
+import { TableSkeleton } from '../../components/skeleton';
+import { EmptyState, ErrorState, StaleNotice } from '../../components/states';
 import { Endpoint, RelativeTime } from '../../components/text';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -232,6 +228,34 @@ export function JobsPage() {
   const pageItems = visible.slice((page - 1) * pageSize, page * pageSize);
   const filtered = filter !== 'all' || query.trim() !== '';
   const direction = (key: SortKey) => (sort === key ? dir : null);
+  // 表头在加载中与加载后共用，骨架只替换表体。
+  const head = (
+    <THead>
+      <tr>
+        <SortHeader direction={direction('name')} onSort={() => toggle('name')}>
+          {t('list.col.name')}
+        </SortHeader>
+        <TH>{t('list.col.source')}</TH>
+        <TH>{t('list.col.target')}</TH>
+        <TH>{t('list.col.schedule')}</TH>
+        <SortHeader
+          direction={direction('lastRun')}
+          onSort={() => toggle('lastRun')}
+        >
+          {t('list.col.lastRun')}
+        </SortHeader>
+        <SortHeader
+          direction={direction('nextFire')}
+          onSort={() => toggle('nextFire')}
+        >
+          {t('list.col.nextRun')}
+        </SortHeader>
+        <TH className="text-right">
+          <span className="sr-only">{t('list.col.actions')}</span>
+        </TH>
+      </tr>
+    </THead>
+  );
 
   return (
     <section>
@@ -283,7 +307,19 @@ export function JobsPage() {
       )}
       {catalog.isPending ||
       (filter === 'running' && !activeRuns.data && !activeRuns.error) ? (
-        <TableSkeleton columns={7} label={t('list.loading')} />
+        <TableSkeleton
+          head={head}
+          columns={[
+            'title',
+            'path',
+            'path',
+            'text',
+            'status',
+            'time',
+            { kind: 'actions', className: 'text-right' },
+          ]}
+          label={t('list.loading')}
+        />
       ) : catalog.isError && !catalog.data ? (
         <ErrorState
           error={catalog.error}
@@ -312,34 +348,7 @@ export function JobsPage() {
       ) : (
         <>
           <Table>
-            <THead>
-              <tr>
-                <SortHeader
-                  direction={direction('name')}
-                  onSort={() => toggle('name')}
-                >
-                  {t('list.col.name')}
-                </SortHeader>
-                <TH>{t('list.col.source')}</TH>
-                <TH>{t('list.col.target')}</TH>
-                <TH>{t('list.col.schedule')}</TH>
-                <SortHeader
-                  direction={direction('lastRun')}
-                  onSort={() => toggle('lastRun')}
-                >
-                  {t('list.col.lastRun')}
-                </SortHeader>
-                <SortHeader
-                  direction={direction('nextFire')}
-                  onSort={() => toggle('nextFire')}
-                >
-                  {t('list.col.nextRun')}
-                </SortHeader>
-                <TH className="text-right">
-                  <span className="sr-only">{t('list.col.actions')}</span>
-                </TH>
-              </tr>
-            </THead>
+            {head}
             <TBody>
               {pageItems.map((job) => (
                 <JobRow
