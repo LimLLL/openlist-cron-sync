@@ -30,6 +30,7 @@ import {
   jobCreateSchema,
   jobPatchSchema,
   jobViewSchema,
+  jobListItemSchema,
 } from './api-schemas.js';
 import { pageSchema } from '../common/api-schema.js';
 
@@ -62,11 +63,11 @@ export class JobsController {
   }
   /** 分页查询 Job。
    * @param query 分页及归档过滤。
-   * @returns 公共列表。
-   * @throws ApiError 查询错误。
+   * @returns Page JobListItem，包括终态真实运行摘要和调度预览。
+   * @throws ApiError 查询错误；Error 数据库或非预期调度计算失败。
    */
   @Get()
-  @ApiOkResponse({ schema: pageSchema(jobViewSchema) })
+  @ApiOkResponse({ schema: pageSchema(jobListItemSchema) })
   list(@Query() query: InstanceQueryDto) {
     return this.jobs.list(query.page, query.pageSize, query.includeArchived);
   }

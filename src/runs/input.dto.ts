@@ -62,11 +62,15 @@ export class RunQueryDto extends PageQueryDto {
   @Optional()
   @IsUUID('4')
   jobId?: string;
-  /** 规范 Run 状态。 */
-  @ApiPropertyOptional({ enum: RUN_STATUSES })
+  /** 规范Run状态，或仅用于列表查询的全部非终态简写。 */
+  @ApiPropertyOptional({
+    enum: [...RUN_STATUSES, 'active'],
+    description:
+      'active匹配queued/scanning/planned/executing/cancelling/recovering；响应仍返回实际状态',
+  })
   @Optional()
-  @IsIn(RUN_STATUSES)
-  status?: (typeof RUN_STATUSES)[number];
+  @IsIn([...RUN_STATUSES, 'active'])
+  status?: (typeof RUN_STATUSES)[number] | 'active';
   /** 可选预览过滤。 */
   @ApiPropertyOptional({ type: Boolean })
   @Optional()

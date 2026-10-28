@@ -1,202 +1,263 @@
-// 运行列表：编辑式页头、类型与状态筛选、编号行列表；按任务筛选时显示可清除的任务标签。
-import { CalendarClock, Hand, X } from 'lucide-react';
+// 运行列表：按任务、状态与正式/试运行筛选（全部写进 URL），紧凑表格展示状态、耗时与结果摘要；列表自行按活动状态轮询。
+import { useMemo } from 'react';
+import { Link } from 'react-router';
 import { useTranslation } from 'react-i18next';
-import { PageHeader } from '../../components/page-header';
+import { PageHeader, useDocumentTitle } from '../../components/page';
+import { EmptyState, ErrorState, TableSkeleton } from '../../components/states';
+import { RunStatusBadge } from '../../components/status';
+import { RelativeTime, ShortId } from '../../components/text';
 import { Badge } from '../../components/ui/badge';
-import { IndexHead, IndexList, IndexRow } from '../../components/ui/index-list';
+import { Button } from '../../components/ui/button';
+import { NativeSelect } from '../../components/ui/input';
 import { Pagination } from '../../components/ui/pagination';
 import { Segmented } from '../../components/ui/segmented';
-import { EmptyState, ErrorState, LoadingState } from '../../components/states';
-import { usePageParams, useFilterParam } from '../../lib/hooks';
-import { formatDuration, formatTime } from '../../lib/format';
-import { useJobNames, useRuns } from './run-queries';
+import { Table, TBody, TD, TH, THead, TR } from '../../components/ui/table';
+import {
+  useClearFilters,
+  useFilterParam,
+  usePageParams,
+} from '../../lib/hooks';
+import { useJobCatalog } from '../jobs/job-queries';
 import { RUN_STATUSES } from './run-contract';
-import type { RunView } from './run-contract';
-import { statusBadgeProps } from './run-status';
-import { runDurationSeconds } from './run-format';
-import { FilterSelect } from './filter-select';
+import { useRuns } from './run-queries';
+import { RunDuration, RunResultSummary } from './run-cells';
 
-/** 运行类型筛选值。 */
-type RunType = 'all' | 'real' | 'dry';
+const UUID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-/** 渲染运行列表页。
- * @returns 运行列表。
+/** 只保留后端接受的筛选值；URL 中的非法值按“全部”处理而不是触发 400。
+ * @param jobId URL 中的任务 ID。
+ * @param status URL 中的状态。
+ * @param dryRun URL 中的类型。
+ * @returns 合法筛选值。
  * @throws 不适用。
+ */
+function validFilters(
+  jobId: string | undefined,
+  status: string | undefined,
+  dryRun: string | undefined,
+) {
+  return {
+    jobId: jobId && UUID.test(jobId) ? jobId : undefined,
+    status:
+      status === 'active' ||
+      RUN_STATUSES.some((candidate) => candidate === status)
+        ? status
+        : undefined,
+    dryRun: dryRun === 'true' || dryRun === 'false' ? dryRun : undefined,
+  };
+}
+
+/** 渲染运行列表页面。
+ * @returns 带筛选与分页的运行表格。
+ * @throws 不适用；请求错误在页面内显示。
  */
 export function RunsPage() {
   const { t } = useTranslation(['runs', 'common']);
+  useDocumentTitle(t('common:nav.runs'));
   const { page, pageSize, setPage } = usePageParams();
-  const [status, setStatus] = useFilterParam('status');
-  const [dryRun, setDryRun] = useFilterParam('dryRun');
-  const [jobId, setJobId] = useFilterParam('jobId');
-  const runs = useRuns({ page, pageSize, status, dryRun, jobId });
-  // 任务名只用于展示；查询失败时行内回退显示任务 ID，不阻塞列表。
-  const names = useJobNames().data;
-  const filtered = Boolean(status || dryRun || jobId);
-  const type: RunType =
-    dryRun === 'true' ? 'dry' : dryRun === 'false' ? 'real' : 'all';
+  const [rawJobId, setJobId] = useFilterParam('jobId');
+  const [rawStatus, setStatus] = useFilterParam('status');
+  const [rawDryRun, setDryRun] = useFilterParam('dryRun');
+  const clearFilters = useClearFilters(['jobId', 'status', 'dryRun']);
+  const { jobId, status, dryRun } = validFilters(
+    rawJobId,
+    rawStatus,
+    rawDryRun,
+  );
+  const runs = useRuns({ page, pageSize, jobId, status, dryRun });
+  const jobs = useJobCatalog({ includeArchived: true });
+  const filtered = Boolean(jobId || status || dryRun);
+  const data = runs.data;
+
+  // 任务下拉框按名称排序；当前筛选的任务不在目录里时仍保留一个选项，避免选中值消失。
+  const jobOptions = useMemo(() => {
+    const options = (jobs.data ?? [])
+      .map((job) => ({
+        id: job.id,
+        label: job.archivedAt
+          ? t('list.archivedJob', { name: job.name })
+          : job.name,
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+    if (jobId && !options.some((option) => option.id === jobId))
+      options.unshift({
+        id: jobId,
+        label: runs.data?.items[0]?.jobName ?? jobId.slice(0, 8),
+      });
+    return options;
+  }, [jobs.data, jobId, runs.data, t]);
 
   return (
     <section>
       <PageHeader
-        index="04"
-        kicker={t('common:nav.runs')}
-        description={t('list.description')}
-        meta={
-          runs.data ? t('list.total', { count: runs.data.total }) : undefined
-        }
+        title={t('common:nav.runs')}
+        description={data ? t('list.total', { count: data.total }) : undefined}
       />
 
       <div
         role="group"
         aria-label={t('list.filters')}
-        className="mb-8 flex flex-wrap items-center gap-3"
+        className="mb-3 flex flex-wrap items-center gap-2"
       >
-        <Segmented<RunType>
-          label={t('list.typeFilter')}
-          value={type}
-          onChange={(next) =>
-            setDryRun(
-              next === 'all' ? undefined : next === 'dry' ? 'true' : 'false',
-            )
-          }
-          options={[
-            { value: 'all', label: t('list.allTypes') },
-            { value: 'real', label: t('common:realRun') },
-            { value: 'dry', label: t('common:dryRun') },
-          ]}
-        />
-        <FilterSelect
-          label={t('list.statusFilter')}
+        <NativeSelect
+          aria-label={t('list.jobFilter')}
+          value={jobId ?? ''}
+          onChange={(event) => setJobId(event.target.value || undefined)}
+          className="w-56"
+        >
+          <option value="">{t('list.allJobs')}</option>
+          {jobOptions.map((option) => (
+            <option key={option.id} value={option.id}>
+              {option.label}
+            </option>
+          ))}
+        </NativeSelect>
+        <NativeSelect
+          aria-label={t('list.statusFilter')}
           value={status ?? ''}
-          onChange={(next) => setStatus(next || undefined)}
+          onChange={(event) => setStatus(event.target.value || undefined)}
+          className="w-40"
         >
           <option value="">{t('list.allStatuses')}</option>
+          <option value="active">{t('list.activeStatuses')}</option>
           {RUN_STATUSES.map((value) => (
             <option key={value} value={value}>
               {t(`common:runStatus.${value}`)}
             </option>
           ))}
-        </FilterSelect>
-        {jobId && (
-          <button
-            type="button"
-            onClick={() => setJobId(undefined)}
-            title={t('list.clearJob')}
-            className="inline-flex h-[2.375rem] items-center gap-2 rounded-full border border-accent/25 bg-accent/[0.06] pr-3 pl-4 text-xs font-medium text-accent transition-colors hover:bg-accent/[0.12]"
-          >
-            {t('list.jobFilter', {
-              name: names?.get(jobId) ?? jobId.slice(0, 8),
-            })}
-            <X size={13} aria-hidden="true" />
-            <span className="sr-only">{t('list.clearJob')}</span>
-          </button>
+        </NativeSelect>
+        <Segmented
+          label={t('list.typeFilter')}
+          value={dryRun ?? ''}
+          onChange={(value) => setDryRun(value || undefined)}
+          options={[
+            { value: '', label: t('list.allTypes') },
+            { value: 'false', label: t('list.realOnly') },
+            { value: 'true', label: t('list.dryOnly') },
+          ]}
+        />
+        {filtered && (
+          <Button variant="ghost" size="sm" onClick={clearFilters}>
+            {t('common:actions.clearFilters')}
+          </Button>
         )}
       </div>
 
-      {runs.isPending ? (
-        <LoadingState rows={6} label={t('list.loading')} />
-      ) : runs.isError ? (
-        <ErrorState error={runs.error} onRetry={() => void runs.refetch()} />
-      ) : runs.data.items.length === 0 ? (
+      {runs.isRefetchError && (
+        <p role="status" className="mb-2 text-xs text-warning">
+          {t('common:states.stale')}
+        </p>
+      )}
+
+      {!data ? (
+        runs.isError ? (
+          <ErrorState error={runs.error} onRetry={() => void runs.refetch()} />
+        ) : (
+          <TableSkeleton columns={8} label={t('list.loading')} />
+        )
+      ) : data.items.length === 0 ? (
         <>
-          <EmptyState
-            title={
-              filtered ? t('list.emptyFilteredTitle') : t('list.emptyTitle')
-            }
-            description={
-              filtered
-                ? t('list.emptyFilteredDescription')
-                : t('list.emptyDescription')
-            }
-          />
-          {/* 超出范围的页码仍需返回入口。 */}
+          {filtered ? (
+            <EmptyState
+              title={t('common:states.noMatches')}
+              action={
+                <Button onClick={clearFilters}>
+                  {t('common:actions.clearFilters')}
+                </Button>
+              }
+            />
+          ) : (
+            <EmptyState
+              title={t('list.emptyTitle')}
+              description={t('list.emptyDescription')}
+            />
+          )}
+          {/* 越界页码下列表为空，仍提供翻页回到有效页。 */}
           <Pagination
-            className="mt-6"
             page={page}
             pageSize={pageSize}
-            total={runs.data.total}
+            total={data.total}
             onPageChange={(next) => setPage({ page: next })}
+            className="mt-3"
           />
         </>
       ) : (
         <>
-          <IndexHead
-            title={t('list.columns.job')}
-            cells={[
-              t('list.columns.trigger'),
-              t('list.columns.started'),
-              t('list.columns.duration'),
-            ]}
-            status={t('list.columns.status')}
-          />
-          <IndexList>
-            {runs.data.items.map((run, position) => (
-              <RunRow
-                key={run.id}
-                run={run}
-                index={(runs.data.page - 1) * runs.data.pageSize + position + 1}
-                name={names?.get(run.jobId)}
-              />
-            ))}
-          </IndexList>
+          <Table>
+            <THead>
+              <tr>
+                <TH className="w-28">{t('list.columns.status')}</TH>
+                <TH>{t('list.columns.job')}</TH>
+                <TH className="w-20">{t('list.columns.type')}</TH>
+                <TH className="w-20">{t('list.columns.trigger')}</TH>
+                <TH className="w-28">{t('list.columns.started')}</TH>
+                <TH className="w-24">{t('list.columns.duration')}</TH>
+                <TH>{t('list.columns.result')}</TH>
+                <TH className="w-24">{t('list.columns.id')}</TH>
+              </tr>
+            </THead>
+            <TBody>
+              {data.items.map((run) => (
+                <TR key={run.id}>
+                  <TD>
+                    <RunStatusBadge
+                      status={run.status}
+                      stopReason={run.stopReason}
+                    />
+                  </TD>
+                  <TD className="max-w-72">
+                    <Link
+                      to={`/runs/${run.id}`}
+                      className="block truncate font-medium hover:underline"
+                      title={run.jobName}
+                    >
+                      {run.jobName}
+                    </Link>
+                  </TD>
+                  <TD>
+                    {run.dryRun ? (
+                      <Badge>{t('common:dryRun')}</Badge>
+                    ) : (
+                      <span className="text-muted-foreground">
+                        {t('list.real')}
+                      </span>
+                    )}
+                  </TD>
+                  <TD className="text-muted-foreground">
+                    {t(`common:trigger.${run.trigger}`)}
+                  </TD>
+                  <TD>
+                    {run.startedAt ? (
+                      <RelativeTime iso={run.startedAt} />
+                    ) : (
+                      <span className="text-muted-foreground">
+                        {t('list.notStarted')}
+                      </span>
+                    )}
+                  </TD>
+                  <TD>
+                    <RunDuration run={run} />
+                  </TD>
+                  <TD className="text-[13px]">
+                    <RunResultSummary run={run} />
+                  </TD>
+                  <TD>
+                    <ShortId id={run.id} />
+                  </TD>
+                </TR>
+              ))}
+            </TBody>
+          </Table>
           <Pagination
-            className="mt-8"
-            page={runs.data.page}
-            pageSize={runs.data.pageSize}
-            total={runs.data.total}
+            page={page}
+            pageSize={pageSize}
+            total={data.total}
             onPageChange={(next) => setPage({ page: next })}
+            className="mt-3"
           />
         </>
       )}
     </section>
-  );
-}
-
-/** 渲染单行运行条目。
- * @param props run 运行；index 全局序号；name 任务名（可能尚未加载）。
- * @returns 编号行。
- * @throws 不适用。
- */
-function RunRow({
-  run,
-  index,
-  name,
-}: {
-  run: RunView;
-  index: number;
-  name?: string;
-}) {
-  const { t } = useTranslation(['runs', 'common']);
-  const badge = statusBadgeProps(run.status);
-  const duration = runDurationSeconds(run);
-  const TriggerIcon = run.trigger === 'cron' ? CalendarClock : Hand;
-  return (
-    <IndexRow
-      to={`/runs/${run.id}`}
-      index={index}
-      title={name ?? t('list.unknownJob', { id: run.jobId.slice(0, 8) })}
-      subtitle={
-        <>
-          {run.id.slice(0, 8)}
-          {run.dryRun && (
-            <span className="ml-2 text-accent/80">· {t('common:dryRun')}</span>
-          )}
-        </>
-      }
-      cells={[
-        <span key="trigger" className="inline-flex items-center gap-1.5">
-          <TriggerIcon size={12} aria-hidden="true" />
-          {t(`common:trigger.${run.trigger}`)}
-        </span>,
-        run.startedAt ? formatTime(run.startedAt) : t('list.notStarted'),
-        duration === null ? '—' : formatDuration(duration),
-      ]}
-      status={
-        <Badge variant={badge.variant} pulse={badge.pulse}>
-          {t(`common:runStatus.${run.status}`)}
-        </Badge>
-      }
-    />
   );
 }

@@ -1,205 +1,251 @@
-// 任务详情：编辑式页头与顶栏操作，路径图作为视觉焦点，其后是定时、目标、过滤、高级设置、最近运行与时间线分节。
-import { useState } from 'react';
+// 任务详情：头部（名称、定时状态、运行/编辑/更多操作）、一行关键信息，以及“运行记录 / 配置”两个 URL 标签页。
+import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
-import { Trans, useTranslation } from 'react-i18next';
-import {
-  ArrowLeft,
-  Archive,
-  Pencil,
-  Play,
-  Power,
-  PowerOff,
-} from 'lucide-react';
-import { useArchiveJob, useJob, useToggleJob } from './job-queries';
-import { PageHeader } from '../../components/page-header';
-import { Magnetic } from '../../components/motion/magnetic';
+import { useTranslation } from 'react-i18next';
+import { Pencil, Play } from 'lucide-react';
+import { FactStrip, PageHeader, useDocumentTitle } from '../../components/page';
+import { ErrorState, LoadingState, StaleNotice } from '../../components/states';
+import { Endpoint, RelativeTime } from '../../components/text';
+import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
-import { ConfirmDialog } from '../../components/ui/confirm-dialog';
-import { ErrorState, LoadingState } from '../../components/states';
-import { JobTriggerDialog } from './job-trigger-dialog';
-import { JobRoute } from './job-route';
 import {
-  AdvancedSection,
-  FiltersSection,
-  ScheduleSection,
-  TargetsSection,
-  TimelineSection,
-} from './job-detail-sections';
-import { RecentRunsSection } from './job-recent-runs';
-import { ScheduleBadge } from './job-ui';
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from '../../components/ui/tabs';
+import { Tip } from '../../components/ui/tooltip';
+import { useErrorText } from '../../i18n/error-text';
+import { ApiError } from '../../lib/api-client';
+import { useTabParam } from '../../lib/hooks';
+import { activeRunsByJob, useActiveRuns } from '../runs/run-queries';
+import { JobActionsMenu } from './job-actions';
+import { JobConfigTab } from './job-detail-config';
+import { JobRunsTab } from './job-detail-runs';
+import { ActiveRunLink, LastRealRun, useInstanceName } from './job-display';
+import { useJob, useJobCatalog, useNextFireTimes } from './job-queries';
+import { JobTriggerDialog } from './job-trigger-dialog';
 import type { JobView } from './job-contract';
 
-/** 渲染详情页顶栏操作：编辑、归档、定时开关与立即运行。
- * @param props job 任务及各操作回调。
- * @returns 操作按钮组。
+const TABS = ['runs', 'config'] as const;
+
+/** 渲染定时状态徽标。
+ * @param props job 任务。
+ * @returns 徽标。
  * @throws 不适用。
  */
-function JobActions({
-  job,
-  toggling,
-  onToggle,
-  onArchive,
-  onRun,
-}: {
-  job: JobView;
-  toggling: boolean;
-  onToggle: () => void;
-  onArchive: () => void;
-  onRun: () => void;
-}) {
-  const { t } = useTranslation(['jobs', 'common']);
-  const archived = !!job.archivedAt;
-  return (
-    <>
-      <Button asChild variant="ghost" size="sm">
-        <Link to={`/jobs/${job.id}/edit`}>
-          <Pencil size={14} aria-hidden="true" />
-          {t('common:actions.edit')}
-        </Link>
-      </Button>
-      {!archived && (
-        <Button variant="danger" size="sm" onClick={onArchive}>
-          <Archive size={14} aria-hidden="true" />
-          {t('detail.archiveAction')}
-        </Button>
-      )}
-      <Button
-        variant="secondary"
-        size="sm"
-        onClick={onToggle}
-        disabled={toggling || archived}
-      >
-        {job.enabled ? (
-          <PowerOff size={14} aria-hidden="true" />
-        ) : (
-          <Power size={14} aria-hidden="true" />
-        )}
-        {job.enabled ? t('detail.disable') : t('detail.enable')}
-      </Button>
-      <Magnetic>
-        <Button size="sm" onClick={onRun} disabled={archived}>
-          <Play size={14} aria-hidden="true" />
-          {t('detail.run')}
-        </Button>
-      </Magnetic>
-    </>
+function ScheduleBadge({ job }: { job: Pick<JobView, 'cron' | 'enabled'> }) {
+  const { t } = useTranslation('jobs');
+  if (!job.cron) return <Badge>{t('badge.manual')}</Badge>;
+  return job.enabled ? (
+    <Badge tone="success" dot>
+      {t('badge.scheduleOn')}
+    </Badge>
+  ) : (
+    <Badge>{t('badge.scheduleOff')}</Badge>
   );
 }
 
-/** 渲染任务详情页面。
+/** 渲染任务详情页。
  * @returns 详情页。
- * @throws 不适用。
+ * @throws 不适用；请求错误在页面内显示。
  */
 export function JobDetailPage() {
   const { t } = useTranslation(['jobs', 'common']);
-  const { id } = useParams<{ id: string }>();
-  const job = useJob(id!);
-  const [triggerOpen, setTriggerOpen] = useState(false);
-  const [archiveOpen, setArchiveOpen] = useState(false);
+  const { id = '' } = useParams();
   const navigate = useNavigate();
-  const toggle = useToggleJob(id!);
-  const archive = useArchiveJob(id!);
-
-  if (job.isPending)
-    return <LoadingState label={t('detail.loading')} rows={6} />;
-  if (job.isError)
-    return (
-      <ErrorState
-        error={job.error}
-        onRetry={() => {
-          void job.refetch();
-        }}
-      />
-    );
+  const errorText = useErrorText();
+  const job = useJob(id);
+  const catalog = useJobCatalog({ poll: true });
+  const activeRuns = useActiveRuns();
+  const instanceName = useInstanceName();
+  const [tab, setTab] = useTabParam('tab', TABS, 'runs');
+  const [trigger, setTrigger] = useState<{ dryRun: boolean } | null>(null);
   const data = job.data;
+  const nextFire = useNextFireTimes(id, Boolean(data?.cron && data.enabled));
+  const active = useMemo(
+    () => activeRunsByJob(activeRuns.data).get(id),
+    [activeRuns.data, id],
+  );
+  const item = catalog.data?.find((entry) => entry.id === id);
+  useDocumentTitle(data?.name, t('list.title'));
+
+  if (!data && !job.isError)
+    return <LoadingState label={t('detail.loading')} rows={6} />;
+  if (!data)
+    return (
+      <div className="space-y-3">
+        <ErrorState
+          error={job.error!}
+          onRetry={
+            job.error instanceof ApiError && job.error.status === 404
+              ? undefined
+              : () => {
+                  void job.refetch();
+                }
+          }
+        />
+        <Button asChild>
+          <Link to="/jobs">{t('detail.notFound')}</Link>
+        </Button>
+      </div>
+    );
+
+  const current = data;
+  const busy = active !== undefined || activeRuns.data === undefined;
+  const busyReason = active
+    ? t('list.runBusy')
+    : t('common:states.activityUnknown');
+  const nextTime = nextFire.data?.times[0] ?? item?.nextFireAt ?? null;
 
   return (
     <section>
       <PageHeader
-        index="03"
-        kicker={t('detail.kicker')}
-        title={data.name}
-        meta={
-          <Link
-            to="/jobs"
-            className="inline-flex items-center gap-1.5 transition-colors hover:text-foreground"
-          >
-            <ArrowLeft size={12} aria-hidden="true" />
-            {t('detail.allJobs')}
-          </Link>
-        }
+        back={{ to: '/jobs', label: t('detail.back') }}
+        title={current.name}
+        badges={<ScheduleBadge job={current} />}
         description={
-          <div className="space-y-4">
-            <div className="flex flex-wrap gap-2">
-              <ScheduleBadge job={data} />
-            </div>
-            <p>
-              {t('detail.summary', {
-                path: data.source.path,
-                count: data.targets.length,
-              })}
-            </p>
-          </div>
+          <span className="flex min-w-0 flex-wrap items-baseline gap-x-1.5">
+            <Endpoint
+              instance={instanceName(current.source.instanceId)}
+              path={current.source.path}
+            />
+            <span>
+              {t('detail.summary', { count: current.targets.length })}
+            </span>
+          </span>
         }
         actions={
-          <JobActions
-            job={data}
-            toggling={toggle.isPending}
-            onToggle={() => toggle.mutate(!data.enabled)}
-            onArchive={() => setArchiveOpen(true)}
-            onRun={() => setTriggerOpen(true)}
-          />
+          <>
+            <Tip content={busy ? busyReason : null}>
+              <span tabIndex={busy ? 0 : undefined}>
+                <Button
+                  variant="primary"
+                  disabled={busy}
+                  onClick={() => setTrigger({ dryRun: false })}
+                >
+                  <Play size={14} aria-hidden="true" />
+                  {t('actions.run')}
+                </Button>
+              </span>
+            </Tip>
+            {busy ? (
+              <Tip content={busyReason}>
+                <span tabIndex={0}>
+                  <Button disabled>
+                    <Pencil size={14} aria-hidden="true" />
+                    {t('actions.edit')}
+                  </Button>
+                </span>
+              </Tip>
+            ) : (
+              <Button asChild>
+                <Link to={`/jobs/${current.id}/edit`}>
+                  <Pencil size={14} aria-hidden="true" />
+                  {t('actions.edit')}
+                </Link>
+              </Button>
+            )}
+            <JobActionsMenu
+              job={current}
+              busy={busy}
+              showNavigation={false}
+              onDryRun={() => setTrigger({ dryRun: true })}
+              onArchived={() => navigate('/jobs')}
+            />
+          </>
         }
       />
 
-      {toggle.isError && (
-        <div className="mb-6">
-          <ErrorState error={toggle.error} />
-        </div>
-      )}
-
-      <JobRoute job={data} />
-
-      <div className="mt-14">
-        <ScheduleSection job={data} index="01" />
-        <TargetsSection job={data} index="02" />
-        <FiltersSection job={data} index="03" />
-        <AdvancedSection job={data} index="04" />
-        <RecentRunsSection jobId={data.id} index="05" />
-        <TimelineSection job={data} index="06" />
-      </div>
-
-      {triggerOpen && (
-        <JobTriggerDialog
-          jobId={data.id}
-          jobName={data.name}
-          open={triggerOpen}
-          onOpenChange={setTriggerOpen}
+      <StaleNotice show={job.isRefetchError || catalog.isRefetchError} />
+      {activeRuns.error && (
+        <ErrorState
+          error={activeRuns.error}
+          onRetry={() => void activeRuns.refetch()}
+          compact
         />
       )}
-      <ConfirmDialog
-        open={archiveOpen}
-        onOpenChange={setArchiveOpen}
-        title={t('detail.archiveTitle')}
-        description={
-          <Trans
-            t={t}
-            i18nKey="detail.archiveDescription"
-            values={{ name: data.name }}
-            components={{ strong: <strong className="text-foreground" /> }}
+      <FactStrip
+        facts={[
+          {
+            label: t('detail.facts.current'),
+            value: active ? (
+              <ActiveRunLink run={active} />
+            ) : (
+              <span className="text-muted-foreground">
+                {activeRuns.data
+                  ? t('detail.idle')
+                  : t('common:states.activityUnknown')}
+              </span>
+            ),
+          },
+          {
+            label: t('detail.facts.lastRun'),
+            value: item ? (
+              <LastRealRun run={item.latestTerminalRealRun} />
+            ) : (
+              '—'
+            ),
+          },
+          {
+            label: t('detail.facts.nextRun'),
+            value: item?.scheduleError ? (
+              <span className="text-danger">
+                {errorText(item.scheduleError.code, item.scheduleError.message)}
+              </span>
+            ) : current.cron && current.enabled ? (
+              <RelativeTime iso={nextTime} />
+            ) : (
+              '—'
+            ),
+          },
+          {
+            label: t('detail.facts.schedule'),
+            value: current.cron ? (
+              <span>
+                <span translate="no" className="font-mono text-[12.5px]">
+                  {current.cron}
+                </span>
+                <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                  {current.timezone}
+                </span>
+              </span>
+            ) : (
+              t('list.manualOnly')
+            ),
+          },
+          {
+            label: t('detail.facts.targets'),
+            value: current.targets.length,
+          },
+          {
+            label: t('detail.facts.created'),
+            value: <RelativeTime iso={current.createdAt} />,
+          },
+        ]}
+      />
+
+      <Tabs value={tab} onValueChange={setTab}>
+        <TabsList>
+          <TabsTrigger value="runs">{t('detail.tabs.runs')}</TabsTrigger>
+          <TabsTrigger value="config">{t('detail.tabs.config')}</TabsTrigger>
+        </TabsList>
+        <TabsContent value="runs">
+          <JobRunsTab jobId={current.id} />
+        </TabsContent>
+        <TabsContent value="config">
+          <JobConfigTab
+            job={current}
+            instanceName={instanceName}
+            nextFire={nextFire}
           />
-        }
-        confirmLabel={t('common:actions.archive')}
-        pending={archive.isPending}
-        error={archive.error}
-        onConfirm={() => {
-          archive.mutate(undefined, {
-            onSuccess: () => {
-              setArchiveOpen(false);
-              void navigate('/jobs');
-            },
-          });
-        }}
+        </TabsContent>
+      </Tabs>
+
+      <JobTriggerDialog
+        job={trigger ? current : null}
+        initialDryRun={trigger?.dryRun ?? false}
+        onClose={() => setTrigger(null)}
       />
     </section>
   );

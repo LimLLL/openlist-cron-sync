@@ -31,13 +31,13 @@ Error={error:{code:string,message:string,details:FieldError[]},requestId:string}
 | 502  | OPENLIST_ERROR / UPSTREAM_PROTOCOL_ERROR              | 同步浏览等上游失败                                        |
 | 503  | QUEUE_FULL / NOT_READY                                | 暂不能接受工作                                            |
 | 500  | INTERNAL_ERROR                                        | 本地不可恢复异常，脱敏                                    |
-| 500  | RESOURCE_LIMIT                                        | Run详情实时统计超过安全整数；读取不改变Run状态            |
+| 500  | RESOURCE_LIMIT                                        | Run列表或详情实时统计超过安全整数；读取不改变Run状态      |
 
 <a id="reason-codes"></a>
 
 ## 固定原因码
 
-下列code不是HTTP状态。它们出现在Operation.error.code、Run.error.code或stopReason、RunTargetView.blockReasons、ScanIssueView.code、InstanceView.authBlockReason、DeliveryView.errorCode，或启动失败日志中。
+下列code不是HTTP状态。它们出现在Operation.error.code、Run.error.code或stopReason、RunTargetView.blockReasons、ScanIssueView.code、InstanceView.authBlockReason、JobListItem.scheduleError、DeliveryView.errorCode，或启动失败日志中。
 本表是全部固定原因码的唯一登记处：新增code必须先登记在这里并写入OpenAPI描述；实现只按code分支，不按message分支。某个code是生成skipped Operation还是scan_issue、是否构成异常、是否阻断extras、是否使Run partial，见[状态机](../design/state-machines.md)中的分类表。
 
 ### 扫描与计划
@@ -89,7 +89,10 @@ Error={error:{code:string,message:string,details:FieldError[]},requestId:string}
 | code                         | 出现位置                               | 含义                                                                                          |
 | ---------------------------- | -------------------------------------- | --------------------------------------------------------------------------------------------- |
 | QUEUE_TIMEOUT                | Run.error（stopReason=NULL）           | 到queueDeadlineAt仍未开始                                                                     |
-| RESOURCE_LIMIT               | Run.error或Run详情HTTP错误             | 扫描/规划资源超限或执行统计溢出；实时读取溢出返回500，不修改Run状态                           |
+| RESOURCE_LIMIT               | Run.error或Run列表/详情HTTP错误        | 扫描/规划资源超限或执行统计溢出；实时读取溢出返回500，不修改Run状态                           |
+| INVALID_TIMEZONE             | JobListItem.scheduleError              | 已启用未归档cron的时区无效；配置写入仍使用VALIDATION_ERROR及timezone字段诊断                  |
+| INVALID_CRON                 | JobListItem.scheduleError或HTTP错误   | 表达式语法无效或不符合五段规则；写入时也用于无下一时刻的表达式                               |
+| NO_NEXT_OCCURRENCE           | JobListItem.scheduleError              | 在固定cron库搜索范围内未找到下一时刻，不表示永久不会触发                                     |
 | PLAN_INTERRUPTED             | Operation.error                        | 进程重启或扫描失败使旧计划中的pending不再执行                                                 |
 | INTERNAL_ERROR               | Run.error                              | 本地不可恢复实现错误                                                                          |
 | RUN_TIMEOUT                  | Run.stopReason                         | 超过Job timeoutSeconds，Run cancelled                                                         |
@@ -147,7 +150,7 @@ token模式替换token时无法当场判断新token属于哪个账号，因此�
 | 方法/路径                     | 请求                           | 成功响应/规则                                                 |
 | ----------------------------- | ------------------------------ | ------------------------------------------------------------- |
 | POST /jobs                    | JobCreate                      | 201 JobView                                                   |
-| GET /jobs                     | page,pageSize,includeArchived? | 200 Page<JobView>                                             |
+| GET /jobs                     | page,pageSize,includeArchived? | 200 Page<JobListItem>                                         |
 | GET /jobs/:id                 | 无                             | 200 JobView                                                   |
 | PATCH /jobs/:id               | JobPatch                       | 200 JobView；活动Run时409                                     |
 | DELETE /jobs/:id              | 无                             | 204；逻辑归档；活动Run时409                                   |
@@ -158,6 +161,10 @@ token模式替换token时无法当场判断新token属于哪个账号，因此�
 enable/disable只修改enabled，运行snapshot不变，属于PATCH活动限制的明确例外。
 next-fire-times仅返回固定cron库八年搜索范围内的时间前缀，可能少于count；没有任何下一时刻的表达式保存/启用返回400 INVALID_CRON。归档Job在enable/disable/next-fire-times均返回404。
 next-fire-times的times是UTC时间，timezone是Job的IANA时区；客户端据此换算当地时间和UTC偏移（含DST），API不另行返回偏移。
+
+JobListItem为JobView的平铺扩展，增加latestTerminalRealRun、nextFireAt、scheduleError，均必填且可为null；配置详情、写入响应和Run中的Job快照仍使用JobView。先分页Job再补充摘要，total只统计匹配的Job，不受目标或运行数量影响。
+latestTerminalRealRun只选择dryRun=false且终态的运行，按createdAt DESC、id DESC取一条；预览和活动运行不覆盖它。没有符合条件的运行为null，归档Job显式列出时仍保留摘要。主动取消同样属于终态，因此会替换更早的失败结果；摘要包含stopReason以区分USER_CANCEL与RUN_TIMEOUT，不提供统计或持久化关注状态。
+nextFireAt以整个响应共用的参考时刻计算，仅表示下一理论cron发生时刻，不保证届时接受执行。归档、disabled和manual-only的nextFireAt及scheduleError均为null。已启用cron的已知时区/表达式错误或搜索范围耗尽以scheduleError返回，不影响其他Job；数据库和非预期计算错误仍使请求失败。
 
 ## Notifications与系统
 

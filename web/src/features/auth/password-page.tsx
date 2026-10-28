@@ -1,20 +1,18 @@
-// 支持首次强制改密与主动改密，成功后要求使用新密码重新登录。
+// 修改密码：支持首次强制改密与主动改密，成功后所有会话结束，需要用新密码重新登录。
 import { useState } from 'react';
-import type { FormEvent } from 'react';
-import { ArrowLeft, ArrowUpRight, LoaderCircle } from 'lucide-react';
-import { Link } from 'react-router';
+import type { SubmitEvent } from 'react';
 import { useTranslation } from 'react-i18next';
+import { PageHeader, useDocumentTitle } from '../../components/page';
+import { ErrorState } from '../../components/states';
+import { Button } from '../../components/ui/button';
+import { PasswordField } from '../../components/ui/password-field';
 import { useAuth } from './auth-context';
 import { passwordError } from './auth-contract';
 import { useAuthForm } from './use-auth-form';
-import { Button } from '../../components/ui/button';
-import { PasswordField } from '../../components/ui/password-field';
-import { ErrorState } from '../../components/states';
-import { PageHeader } from '../../components/page-header';
 
-/** 渲染改密表单，强制改密时不提供绕过入口。
- * @returns 密码修改页面。
- * @throws 不适用；网络和校验错误显示在表单中。
+/** 渲染修改密码页面。
+ * @returns 改密页面。
+ * @throws 不适用；错误显示在表单内。
  */
 export function PasswordPage() {
   const { t } = useTranslation(['auth', 'common']);
@@ -23,14 +21,15 @@ export function PasswordPage() {
   const [password, setPassword] = useState('');
   const [confirmation, setConfirmation] = useState('');
   const { pending, error, submit } = useAuthForm();
-  const forced = session?.mustChangePassword;
+  const forced = Boolean(session?.mustChangePassword);
+  useDocumentTitle(t('password.title'));
 
-  /** 验证新旧密码和重复输入后提交请求。
-   * @param event 表单事件。
+  /** 校验长度与两次输入一致后提交；成功时认证上下文会退出并提示重新登录。
+   * @param event 表单提交事件。
    * @returns 不适用。
-   * @throws 不适用；submit 统一捕获认证错误。
+   * @throws 不适用。
    */
-  function handleSubmit(event: FormEvent<HTMLFormElement>): void {
+  const handleSubmit = (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
     const invalid = passwordError(current) ?? passwordError(password);
     const validation = invalid
@@ -42,27 +41,26 @@ export function PasswordPage() {
       (signal) => changePassword(current, password, signal),
       validation,
     );
-  }
+  };
 
   return (
-    <section>
+    <>
       <PageHeader
-        index="00"
-        kicker={t('password.eyebrow')}
+        back={forced ? undefined : { to: '/', label: t('common:nav.overview') }}
+        title={t('password.title')}
         description={
-          <>
-            {forced
-              ? t('password.forcedDescription')
-              : t('password.description')}{' '}
-            {t('password.sessionsEnd')}
-          </>
+          forced ? t('password.forcedDescription') : t('password.description')
         }
       />
       <form
-        className="panel max-w-xl space-y-6 p-6 sm:p-9"
         onSubmit={handleSubmit}
         aria-label={t('password.formLabel')}
+        className="max-w-md space-y-4 rounded-lg border border-border bg-surface p-5"
       >
+        <p className="text-[13px] text-muted-foreground">
+          {t('password.sessionsEnd')}
+        </p>
+        {/* 供密码管理器关联账号，不可见也不可编辑。 */}
         <input
           type="text"
           name="username"
@@ -97,29 +95,12 @@ export function PasswordPage() {
           autoComplete="new-password"
         />
         {error && <ErrorState error={error} />}
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-hairline pt-6">
-          {!forced && (
-            <Button asChild variant="ghost">
-              <Link to="/">
-                <ArrowLeft size={16} aria-hidden="true" />
-                {t('common:actions.back')}
-              </Link>
-            </Button>
-          )}
-          <Button type="submit" className="ml-auto" disabled={pending}>
+        <div className="flex justify-end">
+          <Button type="submit" variant="primary" disabled={pending}>
             {pending ? t('password.submitting') : t('password.submit')}
-            {pending ? (
-              <LoaderCircle
-                size={17}
-                className="motion-safe:animate-spin"
-                aria-hidden="true"
-              />
-            ) : (
-              <ArrowUpRight size={17} aria-hidden="true" />
-            )}
           </Button>
         </div>
       </form>
-    </section>
+    </>
   );
 }

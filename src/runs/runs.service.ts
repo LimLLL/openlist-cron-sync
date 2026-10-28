@@ -1,7 +1,7 @@
 // 原子接受运行并提供分页历史视图，不依赖 Jobs 或 Instances 模块。
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import { and, asc, count, desc, eq, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, inArray, sql } from 'drizzle-orm';
 import { DatabaseService } from '../database/database.service.js';
 import { runs, runTargets, scanIssues } from '../database/run-schema.js';
 import type { RunRecord } from '../database/run-schema.js';
@@ -28,6 +28,7 @@ import {
   targetView,
 } from './views.js';
 import type { RunConfig } from './run-types.js';
+import { ACTIVE_RUN_STATUSES } from './run-types.js';
 import type {
   TriggerRunDto,
   RunQueryDto,
@@ -35,7 +36,7 @@ import type {
   PageQueryDto,
 } from './input.dto.js';
 
-/** 详情读取实时SQL聚合的状态；扫描中与终态读取已落库统计。 */
+/** 列表和详情读取实时SQL聚合的状态；扫描中与终态读取已落库统计。 */
 const LIVE_STATUSES = new Set<RunRecord['status']>([
   'planned',
   'executing',
@@ -293,16 +294,20 @@ export class RunsService {
       throw error;
     }
   }
-  /** 分页运行列表。
+  /** 先过滤分页，再以详情口径补充当前页实时统计及快照Job名称。
    * @param query 过滤和分页。
-   * @returns Page RunView。
-   * @throws ApiError 分页越界；Error 数据库失败。
+   * @returns Page RunListItem；total使用同一过滤条件。
+   * @throws ApiError 分页越界或实时聚合RESOURCE_LIMIT；Error 数据库失败。
    */
   list(query: RunQueryDto) {
     const db = this.database.db;
     const where = and(
       query.jobId === undefined ? undefined : eq(runs.jobId, query.jobId),
-      query.status === undefined ? undefined : eq(runs.status, query.status),
+      query.status === undefined
+        ? undefined
+        : query.status === 'active'
+          ? inArray(runs.status, [...ACTIVE_RUN_STATUSES])
+          : eq(runs.status, query.status),
       query.dryRun === undefined ? undefined : eq(runs.dryRun, query.dryRun),
     );
     return {
@@ -314,7 +319,21 @@ export class RunsService {
         .limit(query.pageSize)
         .offset(offset(query))
         .all()
-        .map(runView),
+        .map(
+          /** 沿用详情的统计解析及错误语义，历史名称仅来自冻结快照。
+           * @param row 当前页Run记录。
+           * @returns 带jobName的公共Run列表项。
+           * @throws ApiError 实时统计溢出；Error 数据库失败。
+           */
+          (row) => ({
+            ...runView(
+              LIVE_STATUSES.has(row.status)
+                ? { ...row, stats: this.liveResult(row).stats }
+                : row,
+            ),
+            jobName: row.config.job.name,
+          }),
+        ),
       page: query.page,
       pageSize: query.pageSize,
       total: db.select({ n: count() }).from(runs).where(where).get()?.n ?? 0,

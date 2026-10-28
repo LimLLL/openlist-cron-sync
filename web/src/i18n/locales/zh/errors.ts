@@ -19,6 +19,8 @@ export default {
   INVALID_STATE: '当前状态下无法执行此操作。',
   INVALID_PATH: '路径不合法。',
   INVALID_CRON: '请使用五段式 Cron 表达式，例如 0 3 * * *。',
+  INVALID_TIMEZONE: '定时使用的时区无效，请编辑任务修正。',
+  NO_NEXT_OCCURRENCE: '在可计算的时间范围内，这个定时没有下一次执行时间。',
   JOB_BUSY: '该任务有正在进行的运行，请等待完成或先取消。',
   PATH_OVERLAP: '另一个进行中的运行正在使用重叠的路径。',
   QUEUE_FULL: '运行队列已满，请等当前运行结束后重试。',

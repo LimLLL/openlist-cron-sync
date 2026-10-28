@@ -1,7 +1,19 @@
 // 全局顶部细进度条：路由分片加载、首次查询与变更期间显示，已有数据的后台轮询不触发。
 import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { useIsFetching, useIsMutating } from '@tanstack/react-query';
-import { useReducedMotion } from 'framer-motion';
+
+const REDUCED_MOTION = '(prefers-reduced-motion: reduce)';
+
+/** 订阅“减少动态效果”系统设置。
+ * @param listener 设置变化回调。
+ * @returns 取消订阅函数。
+ * @throws 不适用。
+ */
+function subscribeMotion(listener: () => void): () => void {
+  const media = window.matchMedia(REDUCED_MOTION);
+  media.addEventListener('change', listener);
+  return () => media.removeEventListener('change', listener);
+}
 
 /** 当前挂载中的 Suspense 回退数量，供全局进度条订阅。 */
 let suspended = 0;
@@ -71,7 +83,11 @@ export function TopProgress() {
   });
   const mutating = useIsMutating();
   const busy = routePending + fetching + mutating > 0;
-  const reducedMotion = useReducedMotion() ?? false;
+  const reducedMotion = useSyncExternalStore(
+    subscribeMotion,
+    () => window.matchMedia(REDUCED_MOTION).matches,
+    () => false,
+  );
   const bar = useRef<HTMLDivElement>(null);
   const shown = useRef(false);
 
@@ -120,8 +136,14 @@ export function TopProgress() {
   }, [busy, reducedMotion]);
 
   return (
-    <div className="top-progress" aria-hidden="true">
-      <div ref={bar} className="top-progress-bar" />
+    <div
+      className="pointer-events-none fixed inset-x-0 top-0 z-[100] h-0.5"
+      aria-hidden="true"
+    >
+      <div
+        ref={bar}
+        className="h-full -translate-x-full bg-info opacity-0 shadow-[0_0_8px_var(--info)]"
+      />
     </div>
   );
 }

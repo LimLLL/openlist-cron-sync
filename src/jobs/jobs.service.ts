@@ -10,8 +10,10 @@ import { decryptJobSecrets } from './job-secrets.js';
 import { mergeJob } from './validation.js';
 import { validateEndpoints } from './endpoint-validation.js';
 import type { Job, PathSecrets } from './job-types.js';
+import { latestTerminalRealRuns } from './list-view.js';
+import type { JobListItem } from './list-view.js';
 import { SchedulingService } from '../scheduling/scheduling.service.js';
-import { validateSchedule } from '../scheduling/cron-time.js';
+import { schedulePreview, validateSchedule } from '../scheduling/cron-time.js';
 import { ApiError } from '../common/errors.js';
 
 /** Job 配置服务；事务提交后通知 Scheduling 更新 cron，不调用远程文件 API。
@@ -43,19 +45,20 @@ export class JobsService {
     const { row, targets } = jobRecords(this.database.db, id);
     return jobView(row, targets);
   }
-  /** 分页查询配置，包括显式请求的归档项。
+  /** 分页查询配置后附加终态真实运行摘要和调度预览，包括显式请求的归档项。
    * @param page 页号。
    * @param pageSize 页大小。
    * @param includeArchived 是否显示归档。
-   * @returns 分页响应。
-   * @throws ApiError offset 溢出；Error 数据库失败。
+   * @returns Page JobListItem；不改变Job配置或快照。
+   * @throws ApiError offset 溢出；Error 数据库或非预期调度计算失败。
    */
   list(
     page: number,
     pageSize: number,
     includeArchived: boolean,
-  ): { items: Job[]; page: number; pageSize: number; total: number } {
+  ): { items: JobListItem[]; page: number; pageSize: number; total: number } {
     const db = this.database.db;
+    const from = new Date();
     const offset = (page - 1) * pageSize;
     if (!Number.isSafeInteger(offset))
       throw new ApiError(
@@ -72,14 +75,25 @@ export class JobsService {
       .limit(pageSize)
       .offset(offset)
       .all();
+    const latestRuns = latestTerminalRealRuns(
+      db,
+      rows.map(
+        /** 提取已分页Job ID，限制运行摘要读取范围。
+         * @param row 当前页Job。
+         * @returns Job ID。
+         * @throws 不适用。
+         */
+        (row) => row.id,
+      ),
+    );
     const items = rows.map(
       /** 读取 Job 的成员目标并投影公共配置；归档 Job 的成员即归档时的最终目标集合。
        * @param row 当前页 Job 记录。
-       * @returns 公共 Job。
-       * @throws RangeError 时间不合法；Error 数据库失败。
+       * @returns 公共Job及只读列表字段。
+       * @throws RangeError 时间不合法；Error 数据库或非预期调度计算失败。
        */
-      (row) =>
-        jobView(
+      (row): JobListItem => ({
+        ...jobView(
           row,
           db
             .select()
@@ -90,6 +104,11 @@ export class JobsService {
             .orderBy(asc(jobTargets.position))
             .all(),
         ),
+        latestTerminalRealRun: latestRuns.get(row.id) ?? null,
+        ...(row.archivedAt === null && row.enabled && row.cron !== null
+          ? schedulePreview(row.cron, row.timezone, from)
+          : { nextFireAt: null, scheduleError: null }),
+      }),
     );
     return {
       items,

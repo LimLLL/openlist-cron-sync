@@ -5,6 +5,7 @@ import { DatabaseService } from '../src/database/database.service.js';
 import { jobs } from '../src/database/job-schema.js';
 import {
   nextFireTimes,
+  schedulePreview,
   validateSchedule,
 } from '../src/scheduling/cron-time.js';
 import { copyFixture } from './copy-fixture.js';
@@ -40,6 +41,16 @@ describe('M4 scheduling', () => {
         '2026-03-30T00:30:00.000Z',
       ]);
       expect(
+        schedulePreview(
+          '30 2 * * *',
+          'Europe/Berlin',
+          new Date('2026-03-29T00:00:00Z'),
+        ),
+      ).toEqual({
+        nextFireAt: '2026-03-29T01:00:00.000Z',
+        scheduleError: null,
+      });
+      expect(
         nextFireTimes(
           '30 2 * * *',
           'Europe/Berlin',
@@ -51,6 +62,16 @@ describe('M4 scheduling', () => {
         '2026-10-25T00:30:00.000Z',
         '2026-10-26T01:30:00.000Z',
       ]);
+      expect(
+        schedulePreview(
+          '30 2 * * *',
+          'Europe/Berlin',
+          new Date('2026-10-25T00:00:00Z'),
+        ),
+      ).toEqual({
+        nextFireAt: '2026-10-25T00:30:00.000Z',
+        scheduleError: null,
+      });
       expect(nextFireTimes('0 0 29 2 *', 'UTC', 5)).toHaveLength(2);
       expect(
         /** 验证解析成功但没有下一日期的表达式也被拒绝。

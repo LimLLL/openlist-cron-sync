@@ -1,31 +1,29 @@
-// 胶囊按钮：主按钮薄荷色带柔光，次按钮发丝线描边，支持危险操作与紧凑尺寸，可组合原生按钮或链接。
+// 紧凑按钮：主、次、幽灵与危险四种变体，可通过 asChild 把样式交给链接等子元素。
 import { Slot } from '@radix-ui/react-slot';
 import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
 import type { ComponentProps } from 'react';
 import { cn } from '../../lib/utils';
 
-const buttonVariants = cva(
-  'inline-flex items-center justify-center gap-2 rounded-full font-medium whitespace-nowrap transition-[background-color,color,border-color,box-shadow,transform] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] active:scale-[0.97] disabled:pointer-events-none disabled:opacity-40',
+export const buttonVariants = cva(
+  'inline-flex shrink-0 items-center justify-center gap-1.5 rounded-md text-[13px] font-medium whitespace-nowrap transition-colors disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 [&_svg]:shrink-0',
   {
     variants: {
       variant: {
-        primary:
-          'bg-accent text-accent-foreground shadow-[0_0_0_1px_rgb(185_237_188/0.4),0_8px_30px_-10px_rgb(185_237_188/0.55)] hover:bg-[#cdf5cf] hover:shadow-[0_0_0_1px_rgb(185_237_188/0.6),0_10px_40px_-8px_rgb(185_237_188/0.7)]',
+        primary: 'bg-primary text-primary-foreground hover:bg-primary/85',
         secondary:
-          'border border-hairline bg-white/[0.03] text-foreground hover:border-white/20 hover:bg-white/[0.06]',
-        ghost:
-          'text-muted-foreground hover:bg-white/[0.05] hover:text-foreground',
-        danger:
-          'border border-danger/30 bg-danger/[0.06] text-danger hover:border-danger/50 hover:bg-danger/[0.12]',
+          'border border-input bg-surface text-foreground shadow-xs hover:bg-surface-2',
+        ghost: 'text-foreground hover:bg-surface-2',
+        danger: 'bg-danger text-danger-foreground hover:bg-danger/85',
       },
       size: {
-        default: 'min-h-11 px-5 text-sm',
-        sm: 'min-h-9 px-4 text-[13px]',
-        icon: 'size-10 text-sm',
+        sm: 'h-7 px-2.5',
+        md: 'h-8 px-3',
+        icon: 'size-8',
+        'icon-sm': 'size-7',
       },
     },
-    defaultVariants: { variant: 'primary', size: 'default' },
+    defaultVariants: { variant: 'secondary', size: 'md' },
   },
 );
 
@@ -36,7 +34,7 @@ type ButtonProps = ComponentProps<'button'> &
     asChild?: boolean;
   };
 
-/** 渲染可访问按钮，默认避免在表单中意外提交。
+/** 渲染按钮，默认 type="button"，避免在表单中意外提交。
  * @param props 原生属性、变体、尺寸与子元素。
  * @returns 按钮或带样式的子元素。
  * @throws 不适用。

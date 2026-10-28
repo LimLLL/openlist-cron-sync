@@ -1,82 +1,121 @@
-// 分段选择器：少量互斥选项的胶囊单选组，选中背景以弹簧在选项之间滑动；适合筛选条件。
-import { useId } from 'react';
-import type { ReactNode } from 'react';
-import { motion } from 'framer-motion';
+// 分段选择：一组互斥选项（筛选标签、模式切换），以 radiogroup 语义支持方向键切换。
+import { useRef } from 'react';
+import type { KeyboardEvent, ReactNode } from 'react';
 import { cn } from '../../lib/utils';
 
-/** 单个选项。
+/** 单个分段选项。
  * @template T 选项值类型。
  */
 export interface SegmentedOption<T extends string> {
   /** 选项值。 */
   value: T;
-  /** 显示内容。 */
+  /** 显示文字。 */
   label: ReactNode;
-  /** 是否禁止选择此选项。 */
+  /** 文字后的计数，例如筛选结果数量。 */
+  count?: number;
+  /** 是否不可选。 */
   disabled?: boolean;
 }
 
-/** 渲染分段选择器。
+/** 分段选择属性。
  * @template T 选项值类型。
- * @param props label 无障碍名称；options 选项；value 当前值；onChange 选择回调；describedBy 说明元素；invalid 是否无效。
+ */
+interface SegmentedProps<T extends string> {
+  /** 读屏标签。 */
+  label: string;
+  /** 当前值。 */
+  value: T;
+  /** 选项列表。 */
+  options: readonly SegmentedOption<T>[];
+  /** 选择回调。 */
+  onChange: (value: T) => void;
+  /** 整体禁用。 */
+  disabled?: boolean;
+  /** 额外类名。 */
+  className?: string;
+}
+
+/** 渲染分段选择。
+ * @template T 选项值类型。
+ * @param props 当前值、选项与回调。
  * @returns radiogroup 元素。
  * @throws 不适用。
  */
 export function Segmented<T extends string>({
   label,
-  options,
   value,
+  options,
   onChange,
+  disabled = false,
   className,
-  describedBy,
-  invalid,
-}: {
-  label: string;
-  options: ReadonlyArray<SegmentedOption<T>>;
-  value: T;
-  onChange: (value: T) => void;
-  className?: string;
-  describedBy?: string;
-  invalid?: boolean;
-}) {
-  // 每个实例独立的 layoutId，页面上多个选择器互不干扰。
-  const group = useId();
+}: SegmentedProps<T>) {
+  const group = useRef<HTMLDivElement>(null);
+  // 已选项可能因源实例变化而被禁用；仍需让键盘用户进入组内修正选择。
+  const tabStop =
+    options.find((option) => option.value === value && !option.disabled) ??
+    options.find((option) => !option.disabled);
+
+  /** 方向键在可用选项间移动并选中。
+   * @param event 键盘事件。
+   * @returns 不适用。
+   * @throws 不适用。
+   */
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (disabled) return;
+    if (
+      !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)
+    )
+      return;
+    event.preventDefault();
+    const enabled = options.filter((option) => !option.disabled);
+    const focused =
+      event.target instanceof HTMLButtonElement
+        ? event.target.dataset.value
+        : value;
+    const index = enabled.findIndex((option) => option.value === focused);
+    const step = event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 1;
+    const next = enabled[(index + step + enabled.length) % enabled.length];
+    if (!next) return;
+    onChange(next.value);
+    group.current
+      ?.querySelector<HTMLButtonElement>(`[data-value="${next.value}"]`)
+      ?.focus();
+  };
+
   return (
     <div
+      ref={group}
       role="radiogroup"
       aria-label={label}
-      aria-describedby={describedBy}
-      aria-invalid={invalid || undefined}
+      onKeyDown={onKeyDown}
       className={cn(
-        'inline-flex items-center gap-0.5 rounded-full border border-hairline bg-white/[0.02] p-1',
+        'inline-flex h-8 max-w-full items-center gap-0.5 overflow-x-auto rounded-md border border-border bg-surface-2 p-0.5',
         className,
       )}
     >
       {options.map((option) => {
-        const selected = option.value === value;
+        const checked = option.value === value;
         return (
           <button
             key={option.value}
             type="button"
             role="radio"
-            aria-checked={selected}
-            disabled={option.disabled}
+            data-value={option.value}
+            aria-checked={checked}
+            tabIndex={!disabled && option === tabStop ? 0 : -1}
+            disabled={disabled || option.disabled}
             onClick={() => onChange(option.value)}
             className={cn(
-              'relative isolate rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50',
-              selected
-                ? 'text-accent-foreground'
-                : 'text-muted-foreground hover:text-foreground',
+              'inline-flex h-full shrink-0 items-center gap-1.5 rounded px-2.5 text-[13px] whitespace-nowrap text-muted-foreground transition-colors hover:text-foreground disabled:pointer-events-none disabled:opacity-50',
+              checked && 'bg-surface font-medium text-foreground shadow-xs',
             )}
           >
-            {selected && (
-              <motion.span
-                layoutId={`segmented-${group}`}
-                className="absolute inset-0 -z-10 rounded-full bg-accent"
-                transition={{ type: 'spring', stiffness: 460, damping: 36 }}
-              />
-            )}
             {option.label}
+            {option.count !== undefined && (
+              <span className="text-xs text-muted-foreground tabular-nums">
+                {option.count}
+              </span>
+            )}
           </button>
         );
       })}

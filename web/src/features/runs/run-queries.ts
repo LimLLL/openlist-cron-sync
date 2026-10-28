@@ -1,164 +1,269 @@
-// 运行数据查询与变更 hooks，活动 Run 自动轮询。
+// 运行的取数与变更：共享的活动运行查询（由外壳唯一持有轮询）、运行列表、运行详情及其操作/问题子表、取消运行。
+import { useEffect, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../auth/auth-context';
-import type { RunStatus } from './run-contract';
+import { fetchAllPages, MAX_PAGE_SIZE } from '../../lib/query';
+import { parseOperationPage } from '../operations/operation-contract';
+import { jobKeys } from '../jobs/job-queries';
 import {
   ACTIVE_RUN_STATUSES,
-  parseRunDetail,
-  parseRunPage,
-  parseRunView,
   parseIssuePage,
-  parseJobNamePage,
+  parseRunDetail,
+  parseRunListPage,
+  parseRunView,
 } from './run-contract';
-import { parseOperationPage } from '../operations/operation-contract';
-import type { Page } from '../../lib/parsers';
-import type { JobName } from './run-contract';
+import type { RunListItem } from './run-contract';
 
-/** 查询 Run 分页列表。
- * @param params 分页和过滤参数。
- * @returns TanStack Query 结果。
- * @throws 不适用；错误通过 Query 状态暴露。
- */
-export function useRuns(params: {
+/** 运行列表筛选与分页。 */
+export interface RunListParams {
+  /** 页码。 */
   page: number;
+  /** 页大小。 */
   pageSize: number;
+  /** 只看某个任务。 */
   jobId?: string;
+  /** 状态；active 表示全部进行中状态。 */
   status?: string;
+  /** 'true' 只看试运行，'false' 只看正式运行。 */
   dryRun?: string;
-}) {
-  const { request } = useAuth();
-  const search = new URLSearchParams();
-  search.set('page', String(params.page));
-  search.set('pageSize', String(params.pageSize));
-  if (params.jobId) search.set('jobId', params.jobId);
-  if (params.status) search.set('status', params.status);
-  if (params.dryRun) search.set('dryRun', params.dryRun);
-  const query = search.toString();
-  return useQuery({
-    queryKey: ['runs', query],
-    queryFn: ({ signal }) =>
-      request(`/runs?${query}`, { signal, parse: parseRunPage }),
-    refetchInterval: (query) =>
-      query.state.data?.items.some((run) => ACTIVE_RUN_STATUSES.has(run.status))
-        ? 2500
-        : false,
-  });
 }
 
-/** 读取任务名称映射（含已归档任务，历史运行仍能显示名称）。
- * @returns TanStack Query 结果，data 为 id 到名称的 Map。
- * @throws 不适用；错误通过 Query 状态暴露，列表回退显示任务 ID。
- */
-export function useJobNames() {
-  const { request } = useAuth();
-  return useQuery({
-    queryKey: ['jobs', 'names'],
-    queryFn: async ({ signal }): Promise<Page<JobName>> => {
-      const items: JobName[] = [];
-      let total = 0;
-      let pageSize = 200;
-      for (let page = 1; ; page += 1) {
-        const result = await request(
-          `/jobs?page=${page}&pageSize=200&includeArchived=true`,
-          { signal, parse: parseJobNamePage },
-        );
-        items.push(...result.items);
-        total = result.total;
-        pageSize = result.pageSize;
-        if (page * result.pageSize >= result.total || result.items.length === 0)
-          break;
-      }
-      return { items, page: 1, pageSize, total };
-    },
-    select: (page) => new Map(page.items.map((job) => [job.id, job.name])),
-    staleTime: 60_000,
-  });
+/** 运行操作子表的筛选与分页。 */
+export interface RunOperationParams {
+  /** 页码。 */
+  page: number;
+  /** 页大小。 */
+  pageSize: number;
+  /** 操作状态。 */
+  status?: string;
+  /** 动作：mkdir / create / delete。 */
+  action?: string;
 }
 
-/** 查询 Run 详情，活动状态自动轮询。
- * @param id Run UUID。
- * @returns TanStack Query 结果。
+/** 运行相关查询键；子表键不含父运行状态，终态时通过失效刷新。 */
+export const runKeys = {
+  all: ['runs'] as const,
+  active: ['runs', 'active'] as const,
+  lists: ['runs', 'list'] as const,
+  list: (params: RunListParams) => ['runs', 'list', params] as const,
+  detail: (id: string) => ['runs', 'detail', id] as const,
+  operations: (id: string, params: RunOperationParams) =>
+    ['runs', 'detail', id, 'operations', params] as const,
+  issues: (id: string, params: { page: number; pageSize: number }) =>
+    ['runs', 'detail', id, 'issues', params] as const,
+};
+
+/** 判断运行是否处于进行中。
+ * @param status 运行状态。
+ * @returns 是否进行中（含排队、取消中、恢复中）。
  * @throws 不适用。
  */
-export function useRunDetail(id: string) {
-  const { request } = useAuth();
+export function isActiveRun(status: string | undefined): boolean {
+  return status !== undefined && ACTIVE_RUN_STATUSES.has(status);
+}
+
+/** 把筛选参数序列化为查询串，省略空值。
+ * @param params 参数对象。
+ * @returns 查询串（不含问号）。
+ * @throws 不适用。
+ */
+function toQuery(params: object): string {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params))
+    if (value !== undefined && value !== '') search.set(key, String(value));
+  return search.toString();
+}
+
+/** 读取全部进行中的运行（含试运行）。页面只读缓存；轮询由 useActiveRunsOwner 在外壳唯一持有。
+ * @param options poll 是否由本调用持有轮询：有活动运行时 5 秒，没有时 15 秒（用于发现定时触发的新运行）。
+ * @returns 活动运行数组查询。
+ * @throws 不适用。
+ */
+export function useActiveRuns({ poll = false }: { poll?: boolean } = {}) {
+  const { request, session } = useAuth();
   return useQuery({
-    queryKey: ['runs', id],
+    queryKey: runKeys.active,
     queryFn: ({ signal }) =>
-      request(`/runs/${id}`, { signal, parse: parseRunDetail }),
-    refetchInterval: (query) => {
-      const status = query.state.data?.status;
-      return status && ACTIVE_RUN_STATUSES.has(status) ? 2500 : false;
+      fetchAllPages((page) =>
+        request(`/runs?status=active&page=${page}&pageSize=${MAX_PAGE_SIZE}`, {
+          signal,
+          parse: parseRunListPage,
+        }),
+      ),
+    // 强制改密期间除改密外的接口都会返回 403，外壳此时不请求。
+    enabled: Boolean(poll && session && !session.mustChangePassword),
+    refetchInterval: poll
+      ? (query) => (query.state.data?.length ? 5_000 : 15_000)
+      : false,
+    staleTime: 4_000,
+  });
+}
+
+/** 外壳调用一次：持有活动运行轮询，并在运行开始或结束时刷新任务摘要与运行列表。
+ * @returns 活动运行查询。
+ * @throws 不适用。
+ */
+export function useActiveRunsOwner() {
+  const queryClient = useQueryClient();
+  const query = useActiveRuns({ poll: true });
+  const previous = useRef<Set<string> | null>(null);
+  const { data, dataUpdatedAt } = query;
+
+  useEffect(() => {
+    // 只比较成功的结果；请求失败不代表运行已结束。
+    if (!data) return;
+    const ids = new Set(data.map((run) => run.id));
+    const before = previous.current;
+    previous.current = ids;
+    if (!before) return;
+    const ended = [...before].filter((id) => !ids.has(id));
+    const started = [...ids].some((id) => !before.has(id));
+    if (ended.length === 0 && !started) return;
+    void queryClient.invalidateQueries({ queryKey: runKeys.lists });
+    void queryClient.invalidateQueries({ queryKey: jobKeys.catalogs });
+    // 结束的运行：详情及其子表重新读取终态数据；未挂载的只标记过期。
+    for (const id of ended) {
+      void queryClient.invalidateQueries({
+        queryKey: runKeys.detail(id),
+        exact: true,
+      });
+      // 可见子表等待父详情拿到终态后统一刷新，避免两个观察者重复发起最终请求。
+      void queryClient.invalidateQueries({
+        queryKey: runKeys.detail(id),
+        predicate: (child) => child.queryKey.length > 3,
+        refetchType: 'none',
+      });
+    }
+  }, [data, dataUpdatedAt, queryClient]);
+
+  return query;
+}
+
+/** 按任务分组活动运行，供任务列表、概览等叠加“运行中”状态。
+ * @param runs 活动运行。
+ * @returns 任务 ID 到其活动运行的映射（每个任务至多一个）。
+ * @throws 不适用。
+ */
+export function activeRunsByJob(
+  runs: readonly RunListItem[] | undefined,
+): Map<string, RunListItem> {
+  return new Map((runs ?? []).map((run) => [run.jobId, run]));
+}
+
+/** 读取一页运行列表。第一页每 15 秒刷新、含进行中运行时 5 秒；后续页只在含进行中运行时刷新。
+ * @param params 筛选与分页。
+ * @returns 运行列表查询。
+ * @throws 不适用。
+ */
+export function useRuns(params: RunListParams) {
+  const { request } = useAuth();
+  const query = toQuery(params);
+  return useQuery({
+    queryKey: runKeys.list(params),
+    queryFn: ({ signal }) =>
+      request(`/runs?${query}`, { signal, parse: parseRunListPage }),
+    refetchInterval: (current) => {
+      const active = current.state.data?.items.some((run) =>
+        isActiveRun(run.status),
+      );
+      if (active) return 5_000;
+      return params.page === 1 ? 15_000 : false;
     },
   });
 }
 
-/** 查询 Run 下的操作列表。
- * @param runId Run UUID。
- * @param params 分页和过滤。
- * @param status 父运行状态；终态切换刷新最终页并停止轮询。
- * @returns TanStack Query 结果。
+/** 读取运行详情；进行中每 5 秒刷新，进入终态后停止，并让操作/问题子表各刷新一次终态数据。
+ * @param id 运行 ID。
+ * @returns 运行详情查询。
+ * @throws 不适用。
+ */
+export function useRun(id: string) {
+  const { request } = useAuth();
+  const queryClient = useQueryClient();
+  const query = useQuery({
+    queryKey: runKeys.detail(id),
+    queryFn: ({ signal }) =>
+      request(`/runs/${encodeURIComponent(id)}`, {
+        signal,
+        parse: parseRunDetail,
+      }),
+    refetchInterval: (current) =>
+      isActiveRun(current.state.data?.status) ? 5_000 : false,
+  });
+  const status = query.data?.status;
+  const previous = useRef<{ id: string; status: string } | null>(null);
+
+  useEffect(() => {
+    const before = previous.current;
+    if (status === undefined) return;
+    previous.current = { id, status };
+    if (
+      isActiveRun(status) ||
+      (before?.id === id && !isActiveRun(before.status))
+    )
+      return;
+    // 首次看到终态也刷新：子表可能仍缓存着上次离开页面时的活动数据。
+    void queryClient.invalidateQueries({
+      queryKey: runKeys.detail(id),
+      predicate: (child) => child.queryKey.length > 3,
+    });
+    void queryClient.invalidateQueries({ queryKey: jobKeys.catalogs });
+    void queryClient.invalidateQueries({ queryKey: runKeys.lists });
+  }, [id, queryClient, status]);
+
+  return query;
+}
+
+/** 读取运行的一页操作；仅当所在标签页挂载时请求，运行进行中每 5 秒刷新。
+ * @param runId 运行 ID。
+ * @param params 筛选与分页。
+ * @param runActive 父运行是否进行中。
+ * @returns 操作分页查询。
  * @throws 不适用。
  */
 export function useRunOperations(
   runId: string,
-  params: {
-    page: number;
-    pageSize: number;
-    status?: string;
-    action?: string;
-  },
-  status: RunStatus,
+  params: RunOperationParams,
+  runActive: boolean,
 ) {
   const { request } = useAuth();
-  const search = new URLSearchParams();
-  search.set('page', String(params.page));
-  search.set('pageSize', String(params.pageSize));
-  if (params.status) search.set('status', params.status);
-  if (params.action) search.set('action', params.action);
-  const query = search.toString();
   return useQuery({
-    queryKey: ['runs', runId, 'operations', query, status],
+    queryKey: runKeys.operations(runId, params),
     queryFn: ({ signal }) =>
-      request(`/runs/${runId}/operations?${query}`, {
-        signal,
-        parse: parseOperationPage,
-      }),
-    refetchInterval: ACTIVE_RUN_STATUSES.has(status) ? 2500 : false,
+      request(
+        `/runs/${encodeURIComponent(runId)}/operations?${toQuery(params)}`,
+        { signal, parse: parseOperationPage },
+      ),
+    refetchInterval: runActive ? 5_000 : false,
   });
 }
 
-/** 查询 Run 下的扫描问题列表。
- * @param runId Run UUID。
- * @param params 分页参数。
- * @param status 父运行状态；终态切换刷新最终页并停止轮询。
- * @returns TanStack Query 结果。
+/** 读取运行的一页扫描问题；仅当所在标签页挂载时请求，运行进行中每 5 秒刷新。
+ * @param runId 运行 ID。
+ * @param params 分页。
+ * @param runActive 父运行是否进行中。
+ * @returns 问题分页查询。
  * @throws 不适用。
  */
 export function useRunIssues(
   runId: string,
   params: { page: number; pageSize: number },
-  status: RunStatus,
+  runActive: boolean,
 ) {
   const { request } = useAuth();
-  const search = new URLSearchParams({
-    page: String(params.page),
-    pageSize: String(params.pageSize),
-  });
-  const query = search.toString();
   return useQuery({
-    queryKey: ['runs', runId, 'issues', query, status],
+    queryKey: runKeys.issues(runId, params),
     queryFn: ({ signal }) =>
-      request(`/runs/${runId}/issues?${query}`, {
+      request(`/runs/${encodeURIComponent(runId)}/issues?${toQuery(params)}`, {
         signal,
         parse: parseIssuePage,
       }),
-    refetchInterval: ACTIVE_RUN_STATUSES.has(status) ? 2500 : false,
+    refetchInterval: runActive ? 5_000 : false,
   });
 }
 
-/** 取消 Run 变更。
- * @returns Mutation hook。
+/** 请求取消运行；取消请求不等于已取消，运行会经过“取消中”再进入终态。
+ * @returns 变更对象，变量为运行 ID。
  * @throws 不适用。
  */
 export function useCancelRun() {
@@ -166,16 +271,20 @@ export function useCancelRun() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) =>
-      request(`/runs/${id}/cancel`, {
+      request(`/runs/${encodeURIComponent(id)}/cancel`, {
         method: 'POST',
         body: {},
         parse: parseRunView,
       }),
-    onSuccess: (_data, id) => {
-      void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-      void queryClient.invalidateQueries({ queryKey: ['operations'] });
-      void queryClient.invalidateQueries({ queryKey: ['runs', id] });
-      void queryClient.invalidateQueries({ queryKey: ['runs'], exact: false });
+    onSettled: (_data, _error, id) => {
+      // 子表继续按父状态轮询，并由详情观察者统一刷新最终结果。
+      void queryClient.invalidateQueries({
+        queryKey: runKeys.detail(id),
+        exact: true,
+      });
+      void queryClient.invalidateQueries({ queryKey: runKeys.active });
+      void queryClient.invalidateQueries({ queryKey: runKeys.lists });
+      void queryClient.invalidateQueries({ queryKey: jobKeys.catalogs });
     },
   });
 }

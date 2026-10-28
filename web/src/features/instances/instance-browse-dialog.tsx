@@ -1,70 +1,44 @@
-// 目录浏览对话框：精致的文件浏览器——面包屑路径、跳转栏、整行可点的文件夹与跟随指针的柔光；可选“选择目录”模式供任务表单复用。
+// 目录浏览对话框：面包屑、上一级/刷新、路径跳转（可带路径密码）与分页列表；选择模式供任务表单挑选目录。
 import { useEffect, useState } from 'react';
-import type { PointerEvent } from 'react';
-import * as Dialog from '@radix-ui/react-dialog';
-import {
-  ArrowUp,
-  ChevronRight,
-  File,
-  Folder,
-  HardDrive,
-  RefreshCw,
-  X,
-} from 'lucide-react';
+import { ArrowUp, ChevronRight, File, Folder, RefreshCw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { Button } from '../../components/ui/button';
-import { Badge } from '../../components/ui/badge';
 import { ErrorState, LoadingState } from '../../components/states';
+import { Badge } from '../../components/ui/badge';
+import { Button } from '../../components/ui/button';
+import { Dialog, DialogClose, DialogContent } from '../../components/ui/dialog';
+import { Input } from '../../components/ui/input';
 import { Pagination } from '../../components/ui/pagination';
-import { formatBytes, formatTime } from '../../lib/format';
+import { TBody, TD, TH, THead, TR, Table } from '../../components/ui/table';
 import { useErrorText } from '../../i18n/error-text';
+import { formatBytes, formatTime } from '../../lib/format';
 import { cn } from '../../lib/utils';
 import { useInstanceBrowse } from './instance-queries';
-import type { BrowseItem } from './instance-contract';
+import type { BrowseResult } from './instance-contract';
 
 const PAGE_SIZE = 50;
-const ROW_CLASS =
-  'grid w-full grid-cols-[1.25rem_minmax(0,1fr)_5.5rem_1rem] items-center gap-4 rounded-xl px-4 py-2.5 text-left text-sm transition-colors sm:grid-cols-[1.25rem_minmax(0,1fr)_5.5rem_8.5rem_1rem] hover:[background:radial-gradient(280px_circle_at_var(--mx)_var(--my),rgb(185_237_188/0.08),transparent_65%)]';
 
-/** 目录浏览对话框属性。 */
+/** 浏览对话框属性（任务表单依赖此接口，保持不变）。 */
 interface BrowseDialogProps {
-  /** 实例 UUID。 */
+  /** 要浏览的实例 ID。 */
   instanceId: string;
-  /** 实例名称（显示用）。 */
+  /** 标题中显示的实例名。 */
   instanceName: string;
   /** 是否打开。 */
   open: boolean;
-  /** 关闭回调。 */
+  /** 打开状态变化回调。 */
   onOpenChange: (open: boolean) => void;
   /** 打开时的起始目录，默认根目录。 */
   initialPath?: string;
-  /** 打开时预填的路径密码，只保存在对话框内存中。 */
+  /** 起始目录的路径密码。 */
   initialPassword?: string;
-  /** 提供时进入选择模式：返回当前已成功列出的服务端规范化目录与路径密码。 */
+  /** 选择模式：选中当前目录时回调服务端规范化后的路径与路径密码。 */
   onSelect?: (path: string, password: string) => void;
 }
 
-/** 把指针位置写入 CSS 变量，驱动行内柔光。
- * @param event 指针事件。
- * @returns 不适用。
- * @throws 不适用。
- */
-function trackPointer(event: PointerEvent<HTMLElement>): void {
-  const rect = event.currentTarget.getBoundingClientRect();
-  event.currentTarget.style.setProperty(
-    '--mx',
-    `${event.clientX - rect.left}px`,
-  );
-  event.currentTarget.style.setProperty(
-    '--my',
-    `${event.clientY - rect.top}px`,
-  );
-}
-
-/** 渲染目录浏览对话框，支持路径导航、路径密码、分页与可选的目录选择。
- * @param props 实例信息、对话框状态、起始路径与密码、可选的选择回调。
- * @returns 目录浏览对话框。
- * @throws 不适用。
+/** 渲染目录浏览对话框。
+ * @param props 实例、打开状态、起始目录与可选的选择回调。
+ * @returns 对话框。
+ * @throws 不适用；请求错误在框内显示并可重试。
  */
 export function InstanceBrowseDialog({
   instanceId,
@@ -77,341 +51,324 @@ export function InstanceBrowseDialog({
 }: BrowseDialogProps) {
   const { t } = useTranslation(['instances', 'common']);
   const errorText = useErrorText();
-  const [currentPath, setCurrentPath] = useState(initialPath);
-  const [page, setPage] = useState(1);
-  const [password, setPassword] = useState(initialPassword);
-  const [pathInput, setPathInput] = useState(initialPath);
   const browse = useInstanceBrowse(instanceId);
-  const { mutate } = browse;
-  const result = browse.data;
+  const { mutate, reset } = browse;
+  const [currentPath, setCurrentPath] = useState(initialPath);
+  const [pathInput, setPathInput] = useState(initialPath);
+  const [password, setPassword] = useState(initialPassword);
+  // 最近一次成功的列表；加载下一页或下一级时继续显示（变暗），失败时隐藏。
+  const [listing, setListing] = useState<BrowseResult | null>(null);
   // 只有当前目录已成功列出且没有进行中的请求时才能选择，避免选中失败或过期的路径。
-  const selectable = !!result && !browse.isPending && !browse.isError;
+  const selectable =
+    !!listing &&
+    !browse.isPending &&
+    !browse.isError &&
+    pathInput === listing.path &&
+    password === (browse.variables?.password ?? '');
 
-  // 父组件通过受控 open 打开对话框时不会触发 Radix onOpenChange，在这里加载起始目录（带上预填密码）。
+  /** 记录成功结果，并让面包屑与输入框显示服务端规范化后的路径。
+   * @param result 浏览结果。
+   * @returns 不适用。
+   * @throws 不适用。
+   */
+  const accept = (result: BrowseResult) => {
+    setListing(result);
+    setCurrentPath(result.path);
+    setPathInput(result.path);
+  };
+
+  // 受控打开不会触发 Radix onOpenChange：每次打开都从起始目录重新开始，丢弃上一次的浏览状态。
   useEffect(() => {
-    if (open)
-      mutate({
+    if (!open) return;
+    reset();
+    setListing(null);
+    setCurrentPath(initialPath);
+    setPathInput(initialPath);
+    setPassword(initialPassword);
+    mutate(
+      {
         path: initialPath,
         password: initialPassword || undefined,
         page: 1,
         pageSize: PAGE_SIZE,
-      });
-  }, [open, instanceId, initialPath, initialPassword, mutate]);
+      },
+      {
+        onSuccess: (result) => {
+          setListing(result);
+          setCurrentPath(result.path);
+          setPathInput(result.path);
+        },
+      },
+    );
+  }, [open, instanceId, initialPath, initialPassword, mutate, reset]);
 
-  /** 加载指定路径；请求进行中时忽略，避免乱序覆盖。
-   * @param path 目标路径。
-   * @param browsePage 页号。
-   * @param refresh 是否让上游刷新缓存。
+  /** 加载目录的某一页；已有请求进行中时忽略，保证响应按顺序到达。
+   * @param path 目录路径。
+   * @param page 页码。
+   * @param refresh 是否要求 OpenList 刷新缓存。
    * @returns 不适用。
    * @throws 不适用。
    */
-  function loadPath(path: string, browsePage = 1, refresh = false) {
+  const load = (path: string, page = 1, refresh = false) => {
     if (browse.isPending) return;
     setCurrentPath(path);
     setPathInput(path);
-    setPage(browsePage);
-    browse.mutate({
-      path,
-      password: password || undefined,
-      refresh,
-      page: browsePage,
-      pageSize: PAGE_SIZE,
-    });
-  }
+    mutate(
+      {
+        path,
+        password: password || undefined,
+        refresh,
+        page,
+        pageSize: PAGE_SIZE,
+      },
+      { onSuccess: accept },
+    );
+  };
 
-  /** 进入子目录，基于服务端返回的规范化路径拼接。
-   * @param name 目录名。
+  /** 进入当前目录下的子目录。
+   * @param name 子目录名。
    * @returns 不适用。
    * @throws 不适用。
    */
-  function navigateInto(name: string) {
-    const base = result?.path ?? currentPath;
-    loadPath(base === '/' ? `/${name}` : `${base}/${name}`);
-  }
+  const enter = (name: string) => {
+    const base = listing?.path ?? currentPath;
+    load(base === '/' ? `/${name}` : `${base}/${name}`);
+  };
 
   /** 返回上一级目录。
    * @returns 不适用。
    * @throws 不适用。
    */
-  function navigateUp() {
+  const up = () => {
     const parts = currentPath.split('/').filter(Boolean);
     parts.pop();
-    loadPath(parts.length > 0 ? `/${parts.join('/')}` : '/');
-  }
+    load(parts.length > 0 ? `/${parts.join('/')}` : '/');
+  };
+
+  const shown = browse.isError ? null : listing;
 
   return (
-    <Dialog.Root open={open} onOpenChange={onOpenChange}>
-      <Dialog.Portal>
-        <Dialog.Overlay className="dialog-overlay" />
-        <Dialog.Content className="dialog-content flex h-[min(46rem,calc(100svh-4rem))] max-w-2xl flex-col overflow-hidden p-0">
-          <header className="flex items-start justify-between gap-4 px-7 pt-7 pb-5">
-            <div className="min-w-0">
-              <p className="eyebrow flex items-center gap-2">
-                <HardDrive
-                  size={12}
-                  className="text-accent"
-                  aria-hidden="true"
-                />
-                {t('browse.eyebrow')}
-              </p>
-              <Dialog.Title className="mt-2 truncate font-display text-2xl font-medium tracking-tight">
-                {instanceName}
-              </Dialog.Title>
-              <Dialog.Description className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                <span className="font-mono">{currentPath}</span>
-                {result && (
-                  <>
-                    <span aria-hidden="true">·</span>
-                    <span>{t('browse.items', { count: result.total })}</span>
-                    <Badge
-                      variant={result.write ? 'success' : 'default'}
-                      className="ml-1"
-                    >
-                      {result.write
-                        ? t('browse.writable')
-                        : t('browse.readOnly')}
-                    </Badge>
-                  </>
-                )}
-              </Dialog.Description>
-            </div>
-            <Dialog.Close asChild>
-              <button
-                type="button"
-                className="grid size-9 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground"
-                aria-label={t('common:actions.close')}
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        size="lg"
+        className="h-[min(44rem,80vh)]"
+        title={t('browse.title', { name: instanceName })}
+        description={
+          <span className="flex flex-wrap items-center gap-2">
+            <span translate="no" className="font-mono">
+              {currentPath}
+            </span>
+            {shown && (
+              <>
+                <span aria-hidden="true">·</span>
+                <span>{t('browse.items', { count: shown.total })}</span>
+                <Badge tone={shown.write ? 'success' : 'neutral'}>
+                  {shown.write ? t('browse.writable') : t('browse.readOnly')}
+                </Badge>
+              </>
+            )}
+          </span>
+        }
+        footer={
+          <>
+            <DialogClose asChild>
+              <Button>
+                {onSelect
+                  ? t('common:actions.cancel')
+                  : t('common:actions.close')}
+              </Button>
+            </DialogClose>
+            {onSelect && (
+              <Button
+                variant="primary"
+                disabled={!selectable}
+                onClick={() =>
+                  selectable && listing && onSelect(listing.path, password)
+                }
               >
-                <X size={16} aria-hidden="true" />
-              </button>
-            </Dialog.Close>
-          </header>
-
-          <div className="flex items-center gap-1 border-y border-hairline px-4 py-2">
-            <button
-              type="button"
-              onClick={navigateUp}
+                {t('browse.selectFolder')}
+              </Button>
+            )}
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={up}
               disabled={currentPath === '/' || browse.isPending}
               aria-label={t('browse.up')}
               title={t('browse.up')}
-              className="grid size-8 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground disabled:opacity-30"
             >
               <ArrowUp size={15} aria-hidden="true" />
-            </button>
-            <PathBreadcrumbs
+            </Button>
+            <Breadcrumbs
               path={currentPath}
-              onNavigate={loadPath}
+              onNavigate={load}
               disabled={browse.isPending}
             />
-            <button
-              type="button"
-              onClick={() => loadPath(currentPath, page, true)}
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={() =>
+                load(currentPath, browse.variables?.page ?? 1, true)
+              }
               disabled={browse.isPending}
               aria-label={t('common:actions.refresh')}
               title={t('common:actions.refresh')}
-              className="grid size-8 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground disabled:opacity-30"
             >
               <RefreshCw
                 size={14}
-                className={browse.isPending ? 'motion-safe:animate-spin' : ''}
                 aria-hidden="true"
+                className={browse.isPending ? 'motion-safe:animate-spin' : ''}
               />
-            </button>
+            </Button>
           </div>
 
           <form
-            className="grid gap-2 border-b border-hairline px-6 py-3 sm:grid-cols-[minmax(0,1fr)_11rem_auto]"
+            className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_10rem_auto]"
             onSubmit={(event) => {
               event.preventDefault();
-              loadPath(pathInput);
+              load(pathInput);
             }}
           >
-            <input
+            <Input
               aria-label={t('browse.path')}
-              className="field-input min-h-10 font-mono text-[13px]"
+              className="font-mono"
               value={pathInput}
               onChange={(event) => setPathInput(event.target.value)}
               required
             />
-            <input
+            <Input
               type="password"
               aria-label={t('browse.pathPassword')}
               placeholder={t('browse.pathPassword')}
               autoComplete="off"
-              className="field-input min-h-10 text-[13px]"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
             />
-            <Button
-              type="submit"
-              size="sm"
-              variant="secondary"
-              className="min-h-10"
-              disabled={browse.isPending}
-            >
+            <Button type="submit" disabled={browse.isPending}>
               {t('browse.open')}
             </Button>
           </form>
 
-          <div
-            role="table"
-            aria-label={t('browse.tableLabel')}
-            aria-busy={browse.isPending}
-            className={cn(
-              'flex-1 overflow-y-auto px-3 py-3 transition-opacity',
-              browse.isPending && result && 'opacity-50',
-            )}
-          >
-            {browse.isPending && !result && (
-              <div className="px-4 py-2">
-                <LoadingState label={t('browse.loading')} rows={6} />
-              </div>
-            )}
-            {browse.isError && (
-              <div className="px-3 py-2">
-                <ErrorState
-                  error={browse.error}
-                  onRetry={() => loadPath(currentPath, page)}
-                />
-              </div>
-            )}
-            {result && result.items.length === 0 && (
-              <p className="px-4 py-16 text-center serif-accent text-2xl text-muted-foreground">
-                {t('browse.empty')}
-              </p>
-            )}
-            {result && result.items.length > 0 && (
-              <div role="rowgroup">
-                {result.items.map((item) => (
-                  <BrowseRow
-                    key={item.name}
-                    item={item}
-                    disabled={browse.isPending}
-                    onOpen={() => navigateInto(item.name)}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-
-          {(onSelect ||
-            (result &&
-              (result.total > result.pageSize ||
-                result.warnings.length > 0))) && (
-            <footer className="space-y-3 border-t border-hairline px-6 py-3">
-              {result && result.total > result.pageSize && (
-                <Pagination
-                  page={result.page}
-                  pageSize={result.pageSize}
-                  total={result.total}
-                  onPageChange={(next) => loadPath(currentPath, next)}
-                />
-              )}
-              {result && result.warnings.length > 0 && (
-                <ul className="space-y-1 text-xs text-signal">
-                  {result.warnings.map((warning, position) => (
-                    <li
-                      key={position}
-                      title={`${warning.code} · ${warning.message}`}
-                    >
-                      {errorText(warning.code, warning.message)}
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {onSelect && (
-                <Button
-                  className="w-full"
-                  onClick={() => result && onSelect(result.path, password)}
-                  disabled={!selectable}
-                >
-                  {t('browse.selectFolder')}
-                </Button>
-              )}
-            </footer>
+          {browse.isError && (
+            <ErrorState
+              error={browse.error}
+              onRetry={() => load(currentPath, browse.variables?.page ?? 1)}
+            />
           )}
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+          {browse.isPending && !shown && (
+            <LoadingState label={t('browse.loading')} rows={6} />
+          )}
+          {shown && shown.items.length === 0 && (
+            <p className="rounded-lg border border-dashed border-input py-10 text-center text-[13px] text-muted-foreground">
+              {t('browse.empty')}
+            </p>
+          )}
+          {shown && shown.items.length > 0 && (
+            <div
+              aria-busy={browse.isPending}
+              className={cn(
+                'transition-opacity',
+                browse.isPending && 'opacity-50',
+              )}
+            >
+              <Table aria-label={t('browse.tableLabel')}>
+                <THead>
+                  <tr>
+                    <TH>{t('browse.columns.name')}</TH>
+                    <TH className="w-24 text-right">
+                      {t('browse.columns.size')}
+                    </TH>
+                    <TH className="hidden w-36 sm:table-cell">
+                      {t('browse.columns.modified')}
+                    </TH>
+                  </tr>
+                </THead>
+                <TBody>
+                  {shown.items.map((item) => (
+                    <TR key={item.name}>
+                      <TD className="max-w-0">
+                        {item.isDir ? (
+                          <button
+                            type="button"
+                            onClick={() => enter(item.name)}
+                            disabled={browse.isPending}
+                            aria-label={t('browse.openItem', {
+                              name: item.name,
+                            })}
+                            className="flex w-full min-w-0 items-center gap-2 text-left hover:underline disabled:pointer-events-none"
+                          >
+                            <Folder
+                              size={15}
+                              aria-hidden="true"
+                              className="shrink-0 text-info"
+                            />
+                            <span className="truncate">{item.name}</span>
+                            <ChevronRight
+                              size={13}
+                              aria-hidden="true"
+                              className="ml-auto shrink-0 text-muted-foreground"
+                            />
+                          </button>
+                        ) : (
+                          <span className="flex min-w-0 items-center gap-2">
+                            <File
+                              size={15}
+                              aria-hidden="true"
+                              className="shrink-0 text-muted-foreground"
+                            />
+                            <span className="truncate">{item.name}</span>
+                          </span>
+                        )}
+                      </TD>
+                      <TD className="text-right text-xs text-muted-foreground">
+                        {item.isDir ? '' : formatBytes(item.size)}
+                      </TD>
+                      <TD className="hidden text-xs text-muted-foreground sm:table-cell">
+                        {formatTime(item.modified)}
+                      </TD>
+                    </TR>
+                  ))}
+                </TBody>
+              </Table>
+            </div>
+          )}
+          {shown && shown.total > shown.pageSize && (
+            <Pagination
+              page={shown.page}
+              pageSize={shown.pageSize}
+              total={shown.total}
+              onPageChange={(next) => load(currentPath, next)}
+            />
+          )}
+          {shown && shown.warnings.length > 0 && (
+            <ul className="space-y-1 text-xs text-warning">
+              {shown.warnings.map((warning, position) => (
+                <li
+                  key={position}
+                  title={`${warning.code} · ${warning.message}`}
+                >
+                  {errorText(warning.code, warning.message)}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
-/** 渲染一行目录条目；文件夹整行可点击进入，文件仅展示。
- * @param props item 条目；disabled 是否禁用导航；onOpen 进入目录回调。
- * @returns 表格行。
+/** 渲染可点击的路径面包屑；最后一段为当前目录，不可点击。
+ * @param props path 当前路径；onNavigate 跳转回调；disabled 加载中禁用。
+ * @returns 面包屑导航。
  * @throws 不适用。
  */
-function BrowseRow({
-  item,
-  disabled,
-  onOpen,
-}: {
-  item: BrowseItem;
-  disabled: boolean;
-  onOpen: () => void;
-}) {
-  const { t } = useTranslation('instances');
-  const cells = (
-    <>
-      <span
-        role="cell"
-        className={item.isDir ? 'text-accent' : 'text-muted-foreground'}
-      >
-        {item.isDir ? (
-          <Folder size={16} aria-hidden="true" />
-        ) : (
-          <File size={16} aria-hidden="true" />
-        )}
-      </span>
-      <span role="cell" className="truncate">
-        {item.name}
-      </span>
-      <span
-        role="cell"
-        className="text-right font-mono text-[11.5px] text-muted-foreground"
-      >
-        {item.isDir ? '' : formatBytes(item.size)}
-      </span>
-      <span
-        role="cell"
-        className="hidden text-right font-mono text-[11.5px] text-muted-foreground sm:block"
-      >
-        {formatTime(item.modified)}
-      </span>
-      <span role="cell" className="text-muted-foreground">
-        {item.isDir && <ChevronRight size={14} aria-hidden="true" />}
-      </span>
-    </>
-  );
-  if (!item.isDir)
-    return (
-      <div role="row" className={ROW_CLASS} onPointerMove={trackPointer}>
-        {cells}
-      </div>
-    );
-  return (
-    <button
-      type="button"
-      role="row"
-      className={cn(
-        ROW_CLASS,
-        'hover:text-foreground disabled:pointer-events-none',
-      )}
-      onPointerMove={trackPointer}
-      onClick={onOpen}
-      disabled={disabled}
-      aria-label={t('browse.openItem', { name: item.name })}
-    >
-      {cells}
-    </button>
-  );
-}
-
-/** 路径面包屑导航，最后一段为当前目录。
- * @param props 当前路径、导航回调与禁用状态。
- * @returns 面包屑组件。
- * @throws 不适用。
- */
-function PathBreadcrumbs({
+function Breadcrumbs({
   path,
   onNavigate,
   disabled,
@@ -423,41 +380,43 @@ function PathBreadcrumbs({
   const { t } = useTranslation('instances');
   const segments = path.split('/').filter(Boolean);
   const crumb =
-    'shrink-0 rounded-full px-2.5 py-1 font-mono text-[12px] transition-colors hover:bg-white/5 hover:text-foreground disabled:opacity-50';
+    'shrink-0 rounded px-1.5 py-0.5 font-mono text-xs text-muted-foreground hover:bg-surface-2 hover:text-foreground disabled:opacity-50';
   return (
     <nav
-      className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto text-muted-foreground"
       aria-label={t('browse.path')}
+      className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto"
     >
       <button
         type="button"
         onClick={() => onNavigate('/')}
-        disabled={disabled}
+        disabled={disabled || segments.length === 0}
         className={crumb}
       >
         {t('browse.root')}
       </button>
       {segments.map((segment, position) => {
-        const segmentPath = `/${segments.slice(0, position + 1).join('/')}`;
+        const target = `/${segments.slice(0, position + 1).join('/')}`;
         const last = position === segments.length - 1;
         return (
-          <span
-            key={segmentPath}
-            className="flex shrink-0 items-center gap-0.5"
-          >
+          <span key={target} className="flex shrink-0 items-center gap-0.5">
             <ChevronRight
               size={12}
-              className="text-white/20"
               aria-hidden="true"
+              className="text-muted-foreground/60"
             />
             {last ? (
-              <span className="rounded-full bg-white/[0.05] px-2.5 py-1 font-mono text-[12px] text-foreground">
+              <span
+                translate="no"
+                aria-current="location"
+                className="rounded bg-surface-2 px-1.5 py-0.5 font-mono text-xs"
+              >
                 {segment}
               </span>
             ) : (
               <button
                 type="button"
-                onClick={() => onNavigate(segmentPath)}
+                translate="no"
+                onClick={() => onNavigate(target)}
                 disabled={disabled}
                 className={crumb}
               >

@@ -17,6 +17,10 @@ export default {
   INVALID_STATE: 'This action isn’t available in the current state.',
   INVALID_PATH: 'This path is invalid.',
   INVALID_CRON: 'Use a five-field cron expression, such as 0 3 * * *.',
+  INVALID_TIMEZONE:
+    'The schedule’s time zone is not valid. Edit the job to fix it.',
+  NO_NEXT_OCCURRENCE:
+    'This schedule has no upcoming time within the search range.',
   JOB_BUSY:
     'This job has an active run. Wait for it to finish or cancel it first.',
   PATH_OVERLAP: 'Another active run is using overlapping paths.',

@@ -361,30 +361,30 @@ function parseTargets(value: unknown): RunTargetView[] {
   return value.map(parseRunTarget);
 }
 
-/** 任务名称条目，仅用于运行列表显示任务名。 */
-export interface JobName {
-  /** 任务 UUID。 */
-  id: string;
-  /** 任务名称。 */
-  name: string;
+/** 运行列表项：RunView 加接受运行时冻结的任务名；活动运行的统计为实时值。 */
+export interface RunListItem extends RunView {
+  /** 运行快照中的任务名，不随任务改名或归档变化。 */
+  jobName: string;
 }
 
-/** 解析任务列表中的 id 与名称，忽略其余字段。
+/** 解析运行列表项。
  * @param value 未信任的 JSON。
- * @returns 任务名称分页结果。
- * @throws ApiError 响应不符合分页或条目契约。
+ * @returns 运行列表项。
+ * @throws ApiError 契约不符。
  */
-export function parseJobNamePage(value: unknown): Page<JobName> {
-  return parsePage(
-    value,
-    (item) => {
-      if (!isRecord(item))
-        throw new ApiError(0, 'INVALID_RESPONSE', 'Invalid job.');
-      return {
-        id: expectString(item.id, 'id'),
-        name: expectString(item.name, 'name'),
-      };
-    },
-    'job',
-  );
+export function parseRunListItem(value: unknown): RunListItem {
+  const run = parseRunView(value);
+  return {
+    ...run,
+    jobName: expectString(expectRecord(value, 'run').jobName, 'jobName'),
+  };
+}
+
+/** 解析运行列表分页。
+ * @param value 未信任的 JSON。
+ * @returns 运行列表项分页。
+ * @throws ApiError 契约不符。
+ */
+export function parseRunListPage(value: unknown): Page<RunListItem> {
+  return parsePage(value, parseRunListItem, 'run');
 }

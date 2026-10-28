@@ -1,22 +1,16 @@
-// 英文认证模块文案：登录、改密与会话提示。
+// English copy for authentication: sign-in, password change and session notices.
 export default {
   login: {
-    eyebrow: 'THE SYNCHRONIZATION OBSERVATORY',
-    headline1: 'Everything.',
-    headline2: 'In orbit.',
-    tagline: 'A considered space for the files that move between your worlds.',
-    footerRight: 'PRIVATE CONSOLE',
-    sourceDestination: 'SOURCE / DESTINATION',
-    access: 'ADMINISTRATOR ACCESS',
-    title: 'Welcome back.',
-    subtitle: 'Sign in to your synchronization workspace.',
-    formLabel: 'Administrator login',
+    title: 'Sign in',
+    subtitle: 'Sign in with your administrator account.',
+    formLabel: 'Administrator sign-in',
     username: 'Username',
     password: 'Password',
-    submit: 'Enter workspace',
+    submit: 'Sign in',
     submitting: 'Signing in…',
+    language: 'Language',
     sessionNote:
-      'Your session persists until it expires or you sign out. Changing your password ends all active sessions.',
+      'You stay signed in until the session expires or you sign out. Changing the password ends every session.',
   },
   notice: {
     'password-changed': 'Password updated. Sign in with your new password.',
@@ -24,18 +18,17 @@ export default {
     'signed-out': 'You have been signed out.',
   },
   password: {
-    eyebrow: 'ACCOUNT SECURITY',
-    forcedDescription:
-      'Replace your initial password before entering the workspace.',
-    description: 'Change the password for your administrator account.',
-    sessionsEnd: 'All existing sessions will end after this change.',
+    title: 'Change password',
+    forcedDescription: 'Replace the initial password before using the console.',
+    description: 'Change the password of the administrator account.',
+    sessionsEnd: 'Every existing session ends after the change.',
     formLabel: 'Change password',
     currentLabel: 'Current password',
     nextLabel: 'New password',
-    nextHint: '12–128 characters. Use a unique password for this console.',
+    nextHint: '12–128 characters. Use a password unique to this console.',
     confirmLabel: 'Confirm new password',
     submit: 'Update password',
-    submitting: 'Updating password…',
+    submitting: 'Updating…',
   },
   validation: {
     username: 'Enter a username of 1–64 characters.',

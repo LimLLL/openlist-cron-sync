@@ -1,235 +1,180 @@
-// 运行触发对话框：真实运行与预览运行两张可选卡片，另可确认删除；成功后进入运行详情。
-import { useState } from 'react';
-import * as Dialog from '@radix-ui/react-dialog';
-import { Check, Eye, LoaderCircle, Play, X } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
-import { Link, useNavigate } from 'react-router';
+// 运行选项对话框：正式运行/试运行、是否允许超阈值删除；回车即开始，成功后留在当前页并用提示条链接到新运行。
+import { useEffect, useRef, useState } from 'react';
+import type { SubmitEvent } from 'react';
+import { Link } from 'react-router';
 import { Trans, useTranslation } from 'react-i18next';
-import { ApiError } from '../../lib/api-client';
-import { cn } from '../../lib/utils';
-import { Button } from '../../components/ui/button';
+import { TriangleAlert } from 'lucide-react';
 import { ErrorState } from '../../components/states';
+import { Button } from '../../components/ui/button';
+import { Dialog, DialogClose, DialogContent } from '../../components/ui/dialog';
+import { Segmented } from '../../components/ui/segmented';
+import { SwitchField } from '../../components/ui/switch';
+import { toast } from '../../components/ui/toast';
+import { ApiError } from '../../lib/api-client';
 import { useTriggerRun } from './job-queries';
-import { SwitchRow } from './job-ui';
+import type { JobView } from './job-contract';
 
-/** 触发对话框属性。 */
+/** 运行选项对话框属性。 */
 interface JobTriggerDialogProps {
-  /** Job UUID。 */
-  jobId: string;
-  /** Job 名称。 */
-  jobName: string;
-  /** 是否打开。 */
-  open: boolean;
-  /** 关闭回调。 */
-  onOpenChange: (open: boolean) => void;
+  /** 要运行的任务；为 null 时对话框关闭。 */
+  job: Pick<JobView, 'id' | 'name' | 'targets'> | null;
+  /** 关闭回调（成功、取消或点遮罩）。 */
+  onClose: () => void;
+  /** 打开时是否预选试运行。 */
+  initialDryRun?: boolean;
 }
 
-/** 渲染一张运行类型卡片（单选项）。
- * @param props selected 是否选中；icon 图标；title/hint 文案；onSelect 选择回调。
- * @returns radio 按钮。
- * @throws 不适用。
- */
-function ModeCard({
-  selected,
-  icon: Icon,
-  title,
-  hint,
-  onSelect,
-}: {
-  selected: boolean;
-  icon: LucideIcon;
-  title: string;
-  hint: string;
-  onSelect: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      role="radio"
-      aria-checked={selected}
-      onClick={onSelect}
-      className={cn(
-        'relative flex h-full flex-col items-start gap-4 rounded-2xl border p-5 text-left transition-[border-color,background-color,box-shadow] duration-300',
-        selected
-          ? 'border-accent/45 bg-accent/[0.06] shadow-[0_0_40px_-18px_rgb(185_237_188/0.6)]'
-          : 'border-hairline bg-white/[0.015] hover:border-white/15',
-      )}
-    >
-      <span
-        className={cn(
-          'grid size-10 place-items-center rounded-full border',
-          selected
-            ? 'border-accent/40 bg-accent/10 text-accent'
-            : 'border-hairline text-muted-foreground',
-        )}
-      >
-        <Icon size={17} aria-hidden="true" />
-      </span>
-      <span>
-        <span className="block text-sm font-medium">{title}</span>
-        <span className="mt-1.5 block text-xs leading-5 text-muted-foreground">
-          {hint}
-        </span>
-      </span>
-      {selected && (
-        <span className="absolute top-4 right-4 grid size-5 place-items-center rounded-full bg-accent text-accent-foreground">
-          <Check size={12} strokeWidth={3} aria-hidden="true" />
-        </span>
-      )}
-    </button>
-  );
-}
-
-/** 渲染任务运行触发对话框。
- * @param props 对话框配置。
- * @returns 触发对话框。
- * @throws 不适用。
+/** 渲染运行选项对话框；同一时刻只服务一个任务。
+ * @param props 任务、关闭回调与预选类型。
+ * @returns 对话框。
+ * @throws 不适用；请求错误在框内显示。
  */
 export function JobTriggerDialog({
-  jobId,
-  jobName,
-  open,
-  onOpenChange,
+  job,
+  onClose,
+  initialDryRun = false,
 }: JobTriggerDialogProps) {
-  const { t } = useTranslation(['jobs', 'common']);
-  const [dryRun, setDryRun] = useState(false);
+  const { t } = useTranslation('common');
+  const trigger = useTriggerRun();
+  const [dryRun, setDryRun] = useState(initialDryRun);
   const [confirmDeletes, setConfirmDeletes] = useState(false);
-  const trigger = useTriggerRun(jobId);
-  const navigate = useNavigate();
+  const jobId = job?.id;
+  const { reset } = trigger;
+  const submitButton = useRef<HTMLButtonElement>(null);
 
-  /** 触发运行，成功后导航至运行详情；进行中不重复提交（无幂等键）。
+  // 每次为新任务打开时重置选项与上一次的错误；reset 引用稳定。
+  useEffect(() => {
+    if (!jobId) return;
+    setDryRun(initialDryRun);
+    setConfirmDeletes(false);
+    reset();
+  }, [jobId, initialDryRun, reset]);
+
+  /** 提交运行请求；进行中不重复提交（触发接口没有幂等键）。
+   * @param event 表单提交事件。
    * @returns 不适用。
    * @throws 不适用。
    */
-  function handleTrigger() {
-    if (trigger.isPending) return;
+  const submit = (event: SubmitEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!job || trigger.isPending) return;
     trigger.mutate(
-      { dryRun, confirmDeletes },
+      { jobId: job.id, dryRun, confirmDeletes },
       {
-        onSuccess: (result) => {
-          onOpenChange(false);
-          void navigate(`/runs/${result.id}`);
+        onSuccess: (run) => {
+          onClose();
+          toast({
+            title: t(dryRun ? 'runDialog.startedDry' : 'runDialog.started', {
+              name: job.name,
+            }),
+            action: { label: t('runDialog.view'), to: `/runs/${run.id}` },
+          });
         },
       },
     );
-  }
+  };
+
+  const error = trigger.error;
+  // 网络中断或响应无法解析时运行可能已被接受，提示先核对再重试。
+  const ambiguous =
+    error instanceof ApiError &&
+    (error.code === 'NETWORK_ERROR' || error.code === 'INVALID_RESPONSE');
+  const hasMirror = job?.targets.some((target) => target.mode === 'mirror');
 
   return (
-    <Dialog.Root
-      open={open}
-      onOpenChange={(next) => {
-        if (!trigger.isPending) onOpenChange(next);
+    <Dialog
+      open={job !== null}
+      onOpenChange={(open) => {
+        if (!open && !trigger.isPending) onClose();
       }}
     >
-      <Dialog.Portal>
-        <Dialog.Overlay className="dialog-overlay" />
-        <Dialog.Content className="dialog-content max-w-lg">
-          <p className="eyebrow">{t('detail.kicker')}</p>
-          <Dialog.Title className="mt-3 font-display text-2xl font-medium tracking-tight">
-            {t('trigger.title')}
-          </Dialog.Title>
-          <Dialog.Description className="mt-2 text-sm leading-6 text-muted-foreground">
-            <Trans
-              t={t}
-              i18nKey="trigger.description"
-              values={{ name: jobName }}
-              components={{ highlight: <span className="text-foreground" /> }}
+      {job && (
+        <DialogContent
+          size="sm"
+          title={t('runDialog.title', { name: job.name })}
+          closeDisabled={trigger.isPending}
+          onOpenAutoFocus={(event) => {
+            event.preventDefault();
+            submitButton.current?.focus();
+          }}
+        >
+          <form id="job-trigger-form" onSubmit={submit} className="space-y-4">
+            <div className="space-y-2">
+              <Segmented
+                label={t('runDialog.mode')}
+                value={dryRun ? 'dry' : 'real'}
+                onChange={(value) => setDryRun(value === 'dry')}
+                disabled={trigger.isPending}
+                options={[
+                  { value: 'real', label: t('runDialog.real') },
+                  { value: 'dry', label: t('runDialog.dry') },
+                ]}
+              />
+              <p className="text-xs text-muted-foreground">
+                {dryRun ? t('runDialog.dryHint') : t('runDialog.realHint')}
+              </p>
+            </div>
+            {hasMirror && !dryRun && (
+              <p className="flex gap-2 rounded-md bg-warning/10 p-2.5 text-xs leading-relaxed text-warning">
+                <TriangleAlert
+                  size={14}
+                  aria-hidden="true"
+                  className="mt-px shrink-0"
+                />
+                {t('runDialog.mirrorWarning')}
+              </p>
+            )}
+            <SwitchField
+              id="job-trigger-confirm-deletes"
+              label={t('runDialog.confirmDeletes')}
+              hint={t('runDialog.confirmDeletesHint')}
+              checked={confirmDeletes}
+              onCheckedChange={setConfirmDeletes}
+              disabled={trigger.isPending}
             />
-          </Dialog.Description>
-
-          <div
-            role="radiogroup"
-            aria-label={t('trigger.modeLabel')}
-            className="mt-6 grid gap-3 sm:grid-cols-2"
-          >
-            <ModeCard
-              selected={!dryRun}
-              icon={Play}
-              title={t('trigger.realTitle')}
-              hint={t('trigger.realHint')}
-              onSelect={() => setDryRun(false)}
-            />
-            <ModeCard
-              selected={dryRun}
-              icon={Eye}
-              title={t('trigger.previewOnly')}
-              hint={t('trigger.previewHint')}
-              onSelect={() => setDryRun(true)}
-            />
-          </div>
-
-          <SwitchRow
-            className="mt-3"
-            label={t('trigger.confirmDeletes')}
-            hint={t('trigger.confirmDeletesHint')}
-            checked={confirmDeletes}
-            onChange={setConfirmDeletes}
-          />
-
-          {trigger.isError && (
-            <div className="mt-5">
-              <ErrorState error={trigger.error} />
-              {trigger.error instanceof ApiError &&
-                (trigger.error.code === 'NETWORK_ERROR' ||
-                  trigger.error.code === 'INVALID_RESPONSE') && (
-                  <p className="mt-2 text-sm">
+            {error && (
+              <div className="space-y-2">
+                <ErrorState error={error} compact />
+                {ambiguous && (
+                  <p className="text-xs text-muted-foreground">
                     <Trans
                       t={t}
-                      i18nKey="trigger.ambiguous"
-                      components={{
-                        runs: (
-                          <Link
-                            to={`/runs?jobId=${jobId}`}
-                            className="text-accent underline"
-                          />
-                        ),
-                      }}
+                      i18nKey="runDialog.ambiguous"
+                      components={[
+                        <Link
+                          key="runs"
+                          to={`/runs?jobId=${job.id}`}
+                          className="text-link hover:underline"
+                          onClick={onClose}
+                        />,
+                      ]}
                     />
                   </p>
                 )}
-            </div>
-          )}
-
-          <div className="mt-7 flex justify-end gap-3">
-            <Dialog.Close asChild>
-              <Button variant="ghost" disabled={trigger.isPending}>
-                {t('common:actions.cancel')}
+              </div>
+            )}
+            <div className="flex justify-end gap-2 pt-1">
+              <DialogClose asChild>
+                <Button disabled={trigger.isPending}>
+                  {t('actions.cancel')}
+                </Button>
+              </DialogClose>
+              <Button
+                type="submit"
+                variant="primary"
+                disabled={trigger.isPending}
+                ref={submitButton}
+              >
+                {trigger.isPending
+                  ? t('runDialog.submitting')
+                  : dryRun
+                    ? t('runDialog.submitDry')
+                    : t('runDialog.submit')}
               </Button>
-            </Dialog.Close>
-            <Button onClick={handleTrigger} disabled={trigger.isPending}>
-              {trigger.isPending ? (
-                <>
-                  {t('trigger.triggering')}
-                  <LoaderCircle
-                    size={16}
-                    className="motion-safe:animate-spin"
-                    aria-hidden="true"
-                  />
-                </>
-              ) : (
-                <>
-                  {dryRun ? t('trigger.preview') : t('trigger.execute')}
-                  {dryRun ? (
-                    <Eye size={16} aria-hidden="true" />
-                  ) : (
-                    <Play size={16} aria-hidden="true" />
-                  )}
-                </>
-              )}
-            </Button>
-          </div>
-
-          <Dialog.Close asChild>
-            <button
-              className="absolute top-4 right-4 rounded-full p-2 text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground"
-              aria-label={t('common:actions.close')}
-              disabled={trigger.isPending}
-            >
-              <X size={16} aria-hidden="true" />
-            </button>
-          </Dialog.Close>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+            </div>
+          </form>
+        </DialogContent>
+      )}
+    </Dialog>
   );
 }

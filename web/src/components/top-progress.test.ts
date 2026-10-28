@@ -22,10 +22,9 @@ vi.mock('react', async (original) => ({
   },
   useRef: (initial: unknown) =>
     initial === null ? { current: hooks.element } : hooks.shown,
-  useSyncExternalStore: (_subscribe: unknown, snapshot: () => number) =>
+  useSyncExternalStore: (_subscribe: unknown, snapshot: () => unknown) =>
     snapshot(),
 }));
-vi.mock('framer-motion', () => ({ useReducedMotion: () => hooks.reduced }));
 vi.mock('@tanstack/react-query', async (original) => ({
   ...(await original<typeof import('@tanstack/react-query')>()),
   useIsFetching: (filters: QueryFilters) => client.isFetching(filters),
@@ -50,6 +49,7 @@ beforeEach(() => {
     clearTimeout,
     setInterval,
     clearInterval,
+    matchMedia: () => ({ matches: hooks.reduced }),
   });
   vi.stubGlobal('document', { hidden: false });
   client.clear();

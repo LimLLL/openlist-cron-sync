@@ -1,67 +1,66 @@
-// 状态标签：发丝线胶囊内一枚发光圆点加文字，进行中的状态带呼吸光环；文字始终可见，颜色不是唯一信息。
-import { cva } from 'class-variance-authority';
-import type { VariantProps } from 'class-variance-authority';
+// 状态徽标：语义色调 + 文字，可选圆点与“进行中”脉冲；颜色从不单独表达含义。
 import type { ReactNode } from 'react';
 import { cn } from '../../lib/utils';
-import { StatusDot } from './status-dot';
-import type { StatusTone } from './status-dot';
 
-const badgeVariants = cva(
-  'inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-[11px] font-medium leading-none tracking-wide whitespace-nowrap',
-  {
-    variants: {
-      variant: {
-        default: 'border-hairline bg-white/[0.02] text-muted-foreground',
-        success: 'border-accent/20 bg-accent/[0.06] text-accent',
-        warning: 'border-signal/25 bg-signal/[0.07] text-signal',
-        danger: 'border-danger/25 bg-danger/[0.07] text-danger',
-        info: 'border-white/15 bg-white/[0.04] text-foreground',
-        active: 'border-accent/25 bg-accent/[0.08] text-accent',
-      },
-    },
-    defaultVariants: { variant: 'default' },
-  },
-);
+/** 徽标色调。info 用于进行中的状态。 */
+export type Tone = 'neutral' | 'success' | 'warning' | 'danger' | 'info';
 
-const DOT_TONES: Record<NonNullable<BadgeProps['variant']>, StatusTone> = {
-  default: 'muted',
-  success: 'success',
-  warning: 'warning',
-  danger: 'danger',
-  info: 'info',
-  active: 'active',
+const TONES: Record<Tone, string> = {
+  neutral: 'bg-surface-3/70 text-muted-foreground',
+  success: 'bg-success/12 text-success',
+  warning: 'bg-warning/14 text-warning',
+  danger: 'bg-danger/12 text-danger',
+  info: 'bg-info/12 text-info',
 };
 
-/** 状态标签属性。 */
-type BadgeProps = VariantProps<typeof badgeVariants> & {
-  /** 标签内容。 */
-  children: ReactNode;
-  /** 附加样式。 */
-  className?: string;
-  /** 显示呼吸光环（用于进行中的状态）。 */
+/** 徽标属性。 */
+interface BadgeProps {
+  /** 色调，默认 neutral。 */
+  tone?: Tone;
+  /** 是否在文字前显示圆点。 */
+  dot?: boolean;
+  /** 圆点是否脉冲，用于进行中的状态；遵循减少动态效果设置。 */
   pulse?: boolean;
-  /** 隐藏圆点，仅保留文字胶囊（用于非状态类标签）。 */
-  plain?: boolean;
-};
+  /** 悬停提示，例如完整错误信息。 */
+  title?: string;
+  /** 额外类名。 */
+  className?: string;
+  /** 徽标文字。 */
+  children: ReactNode;
+}
 
-/** 渲染语义化状态标签。
- * @param props 变体、内容、呼吸光环与是否省略圆点。
- * @returns 状态标签。
+/** 渲染紧凑徽标。
+ * @param props 色调、圆点与文字。
+ * @returns 徽标元素。
  * @throws 不适用。
  */
 export function Badge({
-  variant,
-  children,
+  tone = 'neutral',
+  dot = false,
+  pulse = false,
+  title,
   className,
-  pulse,
-  plain,
+  children,
 }: BadgeProps) {
   return (
-    <span className={cn(badgeVariants({ variant }), className)}>
-      {!plain && (
-        <StatusDot tone={DOT_TONES[variant ?? 'default']} pulse={pulse} />
+    <span
+      title={title}
+      className={cn(
+        'inline-flex h-5 max-w-full shrink-0 items-center gap-1.5 rounded px-1.5 text-xs font-medium whitespace-nowrap',
+        TONES[tone],
+        className,
       )}
-      {children}
+    >
+      {dot && (
+        <span
+          aria-hidden="true"
+          className={cn(
+            'size-1.5 shrink-0 rounded-full bg-current',
+            pulse && 'motion-safe:animate-pulse',
+          )}
+        />
+      )}
+      <span className="truncate">{children}</span>
     </span>
   );
 }

@@ -121,3 +121,60 @@ export function useFilterParam(
 
   return [value, setValue];
 }
+
+/** 一次URL更新清除同一列表的多个筛选，保留排序、页大小和其他标签页状态。
+ * @param keys 需要清除的筛选参数。
+ * @param pageKey 此列表的页码参数。
+ * @returns 清除回调。
+ * @throws 不适用。
+ */
+export function useClearFilters(keys: readonly string[], pageKey = 'page') {
+  const [, setSearchParams] = useSearchParams();
+  return () => {
+    // React Router的连续setSearchParams不会像React setState一样排队合并。
+    setSearchParams(
+      (previous) => {
+        const next = new URLSearchParams(previous);
+        for (const key of keys) next.delete(key);
+        next.delete(pageKey);
+        return next;
+      },
+      { replace: true },
+    );
+  };
+}
+
+/** 从 URL 读取当前标签页；值不在允许列表时使用默认值，默认值不写入 URL。
+ * @template T 标签值类型。
+ * @param key 参数名。
+ * @param values 允许的标签值。
+ * @param fallback 默认标签。
+ * @returns [当前标签, 切换方法]。
+ * @throws 不适用。
+ */
+export function useTabParam<T extends string>(
+  key: string,
+  values: readonly T[],
+  fallback: T,
+): [T, (value: string) => void] {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const raw = searchParams.get(key);
+  const value = values.find((item) => item === raw) ?? fallback;
+
+  const setValue = useCallback(
+    (next: string) => {
+      setSearchParams(
+        (prev) => {
+          const params = new URLSearchParams(prev);
+          if (next === fallback) params.delete(key);
+          else params.set(key, next);
+          return params;
+        },
+        { replace: true },
+      );
+    },
+    [fallback, key, setSearchParams],
+  );
+
+  return [value, setValue];
+}

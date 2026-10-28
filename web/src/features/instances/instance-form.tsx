@@ -1,45 +1,42 @@
-// 实例创建/编辑表单：按标识、认证、传输三个编辑式分节组织，表单 id 允许顶栏按钮提交。
+// 实例创建/编辑表单：基本信息、认证、传输三个分区；本地校验与最小补丁由 instance-form-model 负责。
 import { useState } from 'react';
-import type { FormEvent } from 'react';
-import { LoaderCircle, Save } from 'lucide-react';
+import type { SubmitEvent } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Section } from '../../components/page';
+import { ErrorState } from '../../components/states';
 import { Button } from '../../components/ui/button';
-import { InputField } from '../../components/ui/input-field';
+import { Field } from '../../components/ui/field';
+import { Input } from '../../components/ui/input';
 import { PasswordField } from '../../components/ui/password-field';
 import { Segmented } from '../../components/ui/segmented';
-import { EditorialSection } from '../../components/ui/editorial-section';
-import { ErrorState } from '../../components/states';
 import { buildInstanceInput, InstanceFormError } from './instance-form-model';
 import type { Instance, InstanceInput } from './instance-contract';
 
 /** 表单属性。 */
 interface InstanceFormProps {
-  /** 编辑时的现有数据；创建时 undefined。 */
+  /** 编辑时的现有实例；创建时省略。 */
   instance?: Instance;
-  /** 提交处理。 */
+  /** 通过本地校验后的请求体。 */
   onSubmit: (data: InstanceInput) => void;
-  /** 是否正在提交。 */
+  /** 取消回调。 */
+  onCancel: () => void;
+  /** 请求进行中。 */
   pending: boolean;
-  /** 提交错误。 */
+  /** 服务端错误。 */
   error: Error | null;
-  /** 表单 id，顶栏按钮通过 form 属性提交。 */
-  formId: string;
-  /** 编辑模式的取消回调；创建页不提供。 */
-  onCancel?: () => void;
 }
 
-/** 渲染实例创建/编辑表单。
- * @param props 现有数据、提交方法、状态与表单 id。
- * @returns 实例表单。
- * @throws 不适用。
+/** 渲染实例表单。
+ * @param props 现有实例、提交与取消回调、请求状态。
+ * @returns 表单。
+ * @throws 不适用；校验错误显示在表单内。
  */
 export function InstanceForm({
   instance,
   onSubmit,
+  onCancel,
   pending,
   error,
-  formId,
-  onCancel,
 }: InstanceFormProps) {
   const { t } = useTranslation(['instances', 'common']);
   const [name, setName] = useState(instance?.name ?? '');
@@ -49,21 +46,22 @@ export function InstanceForm({
   );
   const [username, setUsername] = useState(instance?.auth.username ?? '');
   const [secret, setSecret] = useState('');
-  const [validationError, setValidationError] = useState<Error | null>(null);
+  const [downloadMode, setDownloadMode] = useState<'d' | 'p'>(
+    instance?.downloadMode ?? 'd',
+  );
+  const [invalid, setInvalid] = useState<InstanceFormError | null>(null);
+  // 新建、换认证方式或换密码模式用户名时必须重新填写凭据。
   const authChanged =
     !instance ||
     authMode !== instance.auth.mode ||
     (authMode === 'password' && username !== instance.auth.username);
-  const [downloadMode, setDownloadMode] = useState<'d' | 'p'>(
-    instance?.downloadMode ?? 'd',
-  );
 
-  /** 构建请求体并提交。
-   * @param event 表单事件。
+  /** 本地校验后提交；校验失败时显示对应文案。
+   * @param event 表单提交事件。
    * @returns 不适用。
    * @throws 不适用。
    */
-  function handleSubmit(event: FormEvent) {
+  const submit = (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (pending) return;
     try {
@@ -71,65 +69,59 @@ export function InstanceForm({
         { name, baseUrl, authMode, username, secret, downloadMode },
         instance,
       );
-      setValidationError(null);
+      setInvalid(null);
       onSubmit(body);
     } catch (failure) {
-      setValidationError(
-        failure instanceof Error ? failure : new InstanceFormError('invalid'),
+      setInvalid(
+        failure instanceof InstanceFormError
+          ? failure
+          : new InstanceFormError('invalid'),
       );
     }
-  }
-
-  /** 按当前语言翻译本地校验错误；渲染时翻译，切换语言后文案同步更新。
-   * @param failure 校验阶段捕获的错误。
-   * @returns 可交给 ErrorState 的错误。
-   * @throws 不适用。
-   */
-  function localize(failure: Error): Error {
-    if (!(failure instanceof InstanceFormError)) return failure;
-    return new Error(t(`validation.${failure.key}`));
-  }
+  };
 
   return (
-    <form id={formId} onSubmit={handleSubmit} aria-label={t('form.label')}>
-      <EditorialSection
-        index="01"
-        title={t('form.sections.identity')}
-        description={t('form.sections.identityHint')}
-      >
-        <div className="grid gap-6 md:grid-cols-2">
-          <InputField
-            id={`${formId}-name`}
-            label={t('form.name')}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder={t('form.namePlaceholder')}
-            required
-            minLength={1}
-            maxLength={100}
-            autoFocus={!instance}
-          />
-          <InputField
-            id={`${formId}-url`}
+    <form
+      onSubmit={submit}
+      aria-label={t('form.label')}
+      className="max-w-2xl space-y-4"
+    >
+      <Section title={t('form.sections.identity')}>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field id="instance-name" label={t('form.name')}>
+            <Input
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder={t('form.namePlaceholder')}
+              required
+              maxLength={100}
+              autoFocus={!instance}
+            />
+          </Field>
+          <Field
+            id="instance-url"
             label={t('form.baseUrl')}
-            type="url"
-            value={baseUrl}
-            onChange={(e) => setBaseUrl(e.target.value)}
-            placeholder={t('form.baseUrlPlaceholder')}
             hint={t('form.baseUrlHint')}
-            required
-          />
+          >
+            <Input
+              type="url"
+              value={baseUrl}
+              onChange={(event) => setBaseUrl(event.target.value)}
+              placeholder={t('form.baseUrlPlaceholder')}
+              required
+              translate="no"
+            />
+          </Field>
         </div>
-      </EditorialSection>
+      </Section>
 
-      <EditorialSection
-        index="02"
+      <Section
         title={t('form.sections.auth')}
         description={t('form.sections.authHint')}
       >
-        <div className="space-y-6">
-          <div className="space-y-2.5">
-            <p className="field-label">{t('form.mode')}</p>
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <p className="text-[13px] font-medium">{t('form.mode')}</p>
             <Segmented
               label={t('form.mode')}
               value={authMode}
@@ -140,19 +132,21 @@ export function InstanceForm({
               ]}
             />
           </div>
-          <div className="grid gap-6 md:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2">
             {authMode === 'password' && (
-              <InputField
-                id={`${formId}-username`}
-                label={t('form.username')}
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                required
-                autoComplete="off"
-              />
+              <Field id="instance-username" label={t('form.username')}>
+                <Input
+                  value={username}
+                  onChange={(event) => setUsername(event.target.value)}
+                  required
+                  autoComplete="off"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                />
+              </Field>
             )}
             <PasswordField
-              id={`${formId}-secret`}
+              id="instance-secret"
               name="secret"
               label={
                 !instance
@@ -162,26 +156,24 @@ export function InstanceForm({
                     : t('form.secretOptional')
               }
               value={secret}
-              onChange={(e) => setSecret(e.target.value)}
+              onChange={(event) => setSecret(event.target.value)}
               autoComplete="off"
               required={authChanged}
               hint={
-                authMode === 'token'
-                  ? t('form.tokenHint')
-                  : t('form.passwordHint')
+                !authChanged
+                  ? t('form.secretKeep')
+                  : authMode === 'token'
+                    ? t('form.tokenHint')
+                    : t('form.passwordHint')
               }
             />
           </div>
         </div>
-      </EditorialSection>
+      </Section>
 
-      <EditorialSection
-        index="03"
-        title={t('form.sections.transfer')}
-        description={t('form.sections.transferHint')}
-      >
-        <div className="space-y-3">
-          <p className="field-label">{t('form.downloadMode')}</p>
+      <Section title={t('form.sections.transfer')}>
+        <div className="space-y-1.5">
+          <p className="text-[13px] font-medium">{t('form.downloadMode')}</p>
           <Segmented
             label={t('form.downloadMode')}
             value={downloadMode}
@@ -197,34 +189,23 @@ export function InstanceForm({
               : t('form.downloadProxyHint')}
           </p>
         </div>
-      </EditorialSection>
+      </Section>
 
-      <div className="space-y-4 border-t border-hairline pt-8">
-        {validationError && <ErrorState error={localize(validationError)} />}
-        {error && <ErrorState error={error} />}
-        <div className="flex flex-wrap items-center justify-end gap-3">
-          {onCancel && (
-            <Button variant="ghost" onClick={onCancel} disabled={pending}>
-              {t('common:actions.cancel')}
-            </Button>
-          )}
-          <Button type="submit" disabled={pending}>
-            {pending ? (
-              <LoaderCircle
-                size={16}
-                className="motion-safe:animate-spin"
-                aria-hidden="true"
-              />
-            ) : (
-              <Save size={16} aria-hidden="true" />
-            )}
-            {pending
-              ? t('common:actions.saving')
-              : instance
-                ? t('form.save')
-                : t('form.create')}
-          </Button>
-        </div>
+      {invalid && (
+        <ErrorState error={new Error(t(`validation.${invalid.key}`))} />
+      )}
+      {error && <ErrorState error={error} />}
+      <div className="flex items-center justify-end gap-2">
+        <Button onClick={onCancel} disabled={pending}>
+          {t('common:actions.cancel')}
+        </Button>
+        <Button type="submit" variant="primary" disabled={pending}>
+          {pending
+            ? t('common:actions.saving')
+            : instance
+              ? t('form.save')
+              : t('form.create')}
+        </Button>
       </div>
     </form>
   );

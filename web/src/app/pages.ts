@@ -3,10 +3,10 @@ import { lazy } from 'react';
 
 const loaders = {
   password: () => import('../features/auth/password-page'),
-  dashboard: () => import('../features/dashboard/dashboard-page'),
+  overview: () => import('../features/dashboard/overview-page'),
   instances: () => import('../features/instances/instances-page'),
-  instanceCreate: () => import('../features/instances/instance-create-page'),
   instanceDetail: () => import('../features/instances/instance-detail-page'),
+  instanceForm: () => import('../features/instances/instance-form-pages'),
   jobs: () => import('../features/jobs/jobs-page'),
   jobDetail: () => import('../features/jobs/job-detail-page'),
   jobForm: () => import('../features/jobs/job-form-pages'),
@@ -19,21 +19,26 @@ const loaders = {
 export const PasswordPage = lazy(() =>
   loaders.password().then((module) => ({ default: module.PasswordPage })),
 );
-export const DashboardPage = lazy(() =>
-  loaders.dashboard().then((module) => ({ default: module.DashboardPage })),
+export const OverviewPage = lazy(() =>
+  loaders.overview().then((module) => ({ default: module.OverviewPage })),
 );
 export const InstancesPage = lazy(() =>
   loaders.instances().then((module) => ({ default: module.InstancesPage })),
-);
-export const InstanceCreatePage = lazy(() =>
-  loaders
-    .instanceCreate()
-    .then((module) => ({ default: module.InstanceCreatePage })),
 );
 export const InstanceDetailPage = lazy(() =>
   loaders
     .instanceDetail()
     .then((module) => ({ default: module.InstanceDetailPage })),
+);
+export const InstanceCreatePage = lazy(() =>
+  loaders
+    .instanceForm()
+    .then((module) => ({ default: module.InstanceCreatePage })),
+);
+export const InstanceEditPage = lazy(() =>
+  loaders
+    .instanceForm()
+    .then((module) => ({ default: module.InstanceEditPage })),
 );
 export const JobsPage = lazy(() =>
   loaders.jobs().then((module) => ({ default: module.JobsPage })),

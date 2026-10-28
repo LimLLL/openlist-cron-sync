@@ -29,7 +29,7 @@ const statsSchema = {
     ),
   ),
   description:
-    '运行详情在planned/executing/cancelling/recovering时读取实时SQL聚合，扫描和终态读取持久化统计；逻辑动作取最后attempt，字节含全部attempt及重传；relay进度约5秒持久化；预览执行结果和实际字节为0；源计数只计一次',
+    '运行列表和详情在planned/executing/cancelling/recovering时读取实时SQL聚合，排队、扫描和终态读取持久化统计；逻辑动作取最后attempt，字节含全部attempt及重传；relay进度约5秒持久化；预览执行结果和实际字节为0；源计数只计一次',
 };
 const errorSchema = nullable(
   objectSchema({ code: stringSchema, message: stringSchema }),
@@ -69,6 +69,15 @@ export const runViewSchema = objectSchema({
   queueDeadlineAt: timeSchema,
   cancelRequestedAt: nullable(timeSchema),
   recoveryDeadlineAt: nullable(timeSchema),
+});
+/** 列表名称来自冻结快照，不扩展触发/取消响应或持久化Run状态。 */
+export const runListItemSchema = objectSchema({
+  ...(runViewSchema.properties as Record<string, SchemaObject>),
+  jobName: {
+    type: 'string',
+    description:
+      '接受运行时config.job.name的冻结名称，不随当前Job改名或归档改变',
+  },
 });
 const runTargetSchema = objectSchema({
   id: idSchema,

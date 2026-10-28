@@ -1,22 +1,22 @@
-// 任务创建/编辑表单：编辑式分节组织全部配置，顶栏与底部都可提交；校验文案随语言切换。
+// 任务创建/编辑表单：分区填写全部配置，底部吸附操作栏显示校验错误与保存；校验文案在渲染时按当前语言生成。
 import { useState } from 'react';
-import type { FormEvent } from 'react';
+import type { SubmitEvent } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, ArrowUpRight, LoaderCircle } from 'lucide-react';
-import { PageHeader } from '../../components/page-header';
-import { Magnetic } from '../../components/motion/magnetic';
+import { PageHeader } from '../../components/page';
+import { EmptyState, ErrorState, LoadingState } from '../../components/states';
 import { Button } from '../../components/ui/button';
-import { ErrorState, LoadingState } from '../../components/states';
-import { useCreateJob, usePatchJob, useInstanceOptions } from './job-queries';
+import { InstanceBrowseDialog } from '../instances/instance-browse-dialog';
+import { useInstanceCatalog } from '../instances/instance-queries';
+import { useCreateJob, usePatchJob } from './job-queries';
 import {
   applyBrowsedPath,
   buildJobInput,
   emptyTarget,
   JobFormError,
   jobValidationText,
-  targetsFromJob,
   targetCreateModeState,
+  targetsFromJob,
 } from './job-form-model';
 import type { JobFormValues } from './job-form-model';
 import {
@@ -25,13 +25,10 @@ import {
   FilterFields,
   ScheduleFields,
   SourceFields,
-} from './job-form-sections';
-import type { UpdateField } from './job-form-sections';
+} from './job-form-fields';
+import type { UpdateField } from './job-form-fields';
 import { TargetsFields } from './job-target-fields';
 import type { JobView } from './job-contract';
-import { InstanceBrowseDialog } from '../instances/instance-browse-dialog';
-
-const FORM_ID = 'job-form';
 
 /** 由已有任务（编辑）或后端默认值（新建）生成初始表单值。
  * @param existing 已有任务；新建时为 undefined。
@@ -59,55 +56,23 @@ function initialValues(existing?: JobView): JobFormValues {
     allowEmptySource: existing?.allowEmptySource ?? false,
     syncEmptyDirs: existing?.syncEmptyDirs ?? false,
     retryCount: existing?.retryCount?.toString() ?? '',
-    relayBandwidthLimit: existing?.relayBandwidthLimit?.toString() ?? '0',
-    timeoutSeconds: existing?.timeoutSeconds?.toString() ?? '86400',
+    relayBandwidthLimit: existing?.relayBandwidthLimit.toString() ?? '0',
+    timeoutSeconds: existing?.timeoutSeconds.toString() ?? '86400',
   };
 }
 
-/** 渲染提交按钮内容（进行中显示旋转图标）。
- * @param props pending 是否提交中；isEdit 是否编辑。
- * @returns 按钮内容。
- * @throws 不适用。
- */
-function SubmitLabel({
-  pending,
-  isEdit,
-}: {
-  pending: boolean;
-  isEdit: boolean;
-}) {
-  const { t } = useTranslation('jobs');
-  if (pending)
-    return (
-      <>
-        {isEdit ? t('form.saving') : t('form.creating')}
-        <LoaderCircle
-          size={15}
-          className="motion-safe:animate-spin"
-          aria-hidden="true"
-        />
-      </>
-    );
-  return (
-    <>
-      {isEdit ? t('form.submitSave') : t('form.submitCreate')}
-      <ArrowUpRight size={15} aria-hidden="true" />
-    </>
-  );
-}
-
-/** 任务表单。
- * @param props 可选已有任务（编辑模式）。
+/** 任务表单；新建或编辑由 existing 决定，成功后进入任务详情。
+ * @param props existing 编辑模式下的已有任务。
  * @returns 表单页面。
- * @throws 不适用。
+ * @throws 不适用；请求与校验错误显示在底部操作栏。
  */
 export function JobForm({ existing }: { existing?: JobView }) {
   const { t } = useTranslation(['jobs', 'common']);
   const navigate = useNavigate();
   const create = useCreateJob();
   const patch = usePatchJob(existing?.id ?? '');
-  const instances = useInstanceOptions();
-  const isEdit = !!existing;
+  const instances = useInstanceCatalog();
+  const isEdit = existing !== undefined;
   const mutation = isEdit ? patch : create;
   const [values, setValues] = useState<JobFormValues>(() =>
     initialValues(existing),
@@ -124,11 +89,11 @@ export function JobForm({ existing }: { existing?: JobView }) {
     setValues((previous) => ({ ...previous, [field]: value }));
 
   /** 本地校验后提交；校验失败时只保存错误键，渲染时按当前语言生成文案。
-   * @param event 表单事件。
+   * @param event 表单提交事件。
    * @returns 不适用。
    * @throws 不适用。
    */
-  function handleSubmit(event: FormEvent) {
+  function handleSubmit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     if (mutation.isPending || !instances.data || invalidTargetMode) return;
     try {
@@ -171,58 +136,52 @@ export function JobForm({ existing }: { existing?: JobView }) {
     instanceList.find((item) => item.id === browseEndpoint.instanceId);
 
   return (
-    <section>
+    <section className="mx-auto max-w-4xl">
       <PageHeader
-        index="03"
-        kicker={isEdit ? t('form.kickerEdit') : t('form.kickerNew')}
-        title={isEdit ? existing.name : undefined}
-        description={
-          isEdit ? t('form.descriptionEdit') : t('form.descriptionNew')
+        back={{
+          to: backTo,
+          label: isEdit ? t('form.backToJob') : t('form.allJobs'),
+        }}
+        title={
+          isEdit
+            ? t('form.titleEdit', { name: existing.name })
+            : t('form.titleNew')
         }
-        meta={
-          <Link
-            to={backTo}
-            className="inline-flex items-center gap-1.5 transition-colors hover:text-foreground"
-          >
-            <ArrowLeft size={12} aria-hidden="true" />
-            {isEdit ? t('form.backToJob') : t('form.allJobs')}
-          </Link>
-        }
-        actions={
-          <>
-            <Button asChild variant="ghost" size="sm">
-              <Link to={backTo}>{t('common:actions.cancel')}</Link>
-            </Button>
-            <Magnetic>
-              <Button
-                type="submit"
-                form={FORM_ID}
-                size="sm"
-                disabled={submitDisabled}
-              >
-                <SubmitLabel pending={mutation.isPending} isEdit={isEdit} />
-              </Button>
-            </Magnetic>
-          </>
-        }
+        description={isEdit ? t('form.editNotice') : undefined}
       />
 
       {instances.isPending && (
-        <LoadingState label={t('form.loadingInstances')} />
+        <LoadingState label={t('form.loadingInstances')} className="mb-4" />
       )}
       {instances.isError && (
-        <ErrorState
-          error={instances.error}
-          onRetry={() => {
-            void instances.refetch();
-          }}
-        />
+        <div className="mb-4">
+          <ErrorState
+            error={instances.error}
+            onRetry={() => {
+              void instances.refetch();
+            }}
+          />
+        </div>
+      )}
+      {!isEdit && instances.data?.length === 0 && (
+        <div className="mb-4">
+          <EmptyState
+            title={t('form.noInstances')}
+            action={
+              <Button asChild variant="primary">
+                <Link to="/instances/new">{t('form.addInstance')}</Link>
+              </Button>
+            }
+          />
+        </div>
       )}
 
+      {/* 校验统一由 buildJobInput 完成并显示本地化错误；折叠的高级设置里的原生校验会静默阻止提交。 */}
       <form
-        id={FORM_ID}
+        noValidate
         onSubmit={handleSubmit}
         aria-label={t('form.formLabel')}
+        className="space-y-4"
       >
         <BasicsFields values={values} update={update} />
         <SourceFields
@@ -243,22 +202,31 @@ export function JobForm({ existing }: { existing?: JobView }) {
         <FilterFields values={values} update={update} />
         <AdvancedFields values={values} update={update} />
 
-        <div className="space-y-4 border-t border-hairline pt-8">
-          {shownValidationError && <ErrorState error={shownValidationError} />}
-          {mutation.isError && <ErrorState error={mutation.error} />}
-          <div className="flex items-center justify-between gap-4">
-            <Button asChild variant="ghost">
-              <Link to={backTo}>
-                <ArrowLeft size={16} aria-hidden="true" />
-                {t('common:actions.cancel')}
-              </Link>
+        {/* 底部吸附操作栏：长表单任何位置都能看到错误并保存。 */}
+        <div className="sticky bottom-0 z-10 -mb-5 flex flex-wrap items-center gap-3 border-t border-border bg-background/95 py-3 backdrop-blur lg:-mb-6">
+          <div className="min-w-0 flex-1 space-y-2">
+            {shownValidationError && (
+              <ErrorState error={shownValidationError} compact />
+            )}
+            {mutation.isError && <ErrorState error={mutation.error} compact />}
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <Button asChild>
+              <Link to={backTo}>{t('common:actions.cancel')}</Link>
             </Button>
-            <Button type="submit" disabled={submitDisabled}>
-              <SubmitLabel pending={mutation.isPending} isEdit={isEdit} />
+            <Button type="submit" variant="primary" disabled={submitDisabled}>
+              {mutation.isPending
+                ? isEdit
+                  ? t('form.saving')
+                  : t('form.creating')
+                : isEdit
+                  ? t('form.submitSave')
+                  : t('form.submitCreate')}
             </Button>
           </div>
         </div>
       </form>
+
       {browsing !== null && browseEndpoint && browseInstance && (
         <InstanceBrowseDialog
           instanceId={browseInstance.id}

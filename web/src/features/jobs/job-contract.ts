@@ -5,7 +5,11 @@ import {
   expectString,
   expectNumber,
   expectBoolean,
+  expectEnum,
+  expectRecord,
   nullableNumber,
+  nullableString,
+  parseDiagnostic,
   stringArray,
 } from '../../lib/parsers';
 import type { Page } from '../../lib/parsers';
@@ -104,6 +108,38 @@ export interface JobView {
   updatedAt: string;
   /** 归档 UTC 时间。 */
   archivedAt: string | null;
+}
+
+/** 任务列表中“最近一次终态正式运行”的摘要；不含统计。 */
+export interface TerminalRealRunSummary {
+  /** Run UUID。 */
+  id: string;
+  /** 终态状态。 */
+  status: 'succeeded' | 'partial' | 'failed' | 'cancelled' | 'interrupted';
+  /** 接受时间，也是“最近”的排序依据。 */
+  createdAt: string;
+  /** 开始扫描时间；从未开始（如排队超时）为 null。 */
+  startedAt: string | null;
+  /** 结束时间。 */
+  endedAt: string;
+  /** 停止原因：USER_CANCEL / RUN_TIMEOUT / PROCESS_RESTART，正常结束为 null。 */
+  stopReason: string | null;
+  /** Run 级错误；失败或部分成功也可能没有。 */
+  error: { code: string; message: string } | null;
+}
+
+/** 列表中的定时诊断码。 */
+export type ScheduleErrorCode =
+  'INVALID_TIMEZONE' | 'INVALID_CRON' | 'NO_NEXT_OCCURRENCE';
+
+/** 任务列表项：完整配置加只读的运行摘要与定时预览。 */
+export interface JobListItem extends JobView {
+  /** 最近一次终态正式运行；从未完成过正式运行为 null。 */
+  latestTerminalRealRun: TerminalRealRunSummary | null;
+  /** 下一次理论定时时间（UTC）；归档、停用、仅手动或定时错误时为 null。 */
+  nextFireAt: string | null;
+  /** 已启用定时无法计算下一次时间的原因。 */
+  scheduleError: { code: ScheduleErrorCode; message: string } | null;
 }
 
 /** 下次触发时间响应。 */
@@ -288,6 +324,74 @@ export function parseJob(value: unknown): JobView {
  */
 export function parseJobPage(value: unknown): Page<JobView> {
   return parsePage(value, parseJob, 'job');
+}
+
+/** 解析最近一次终态正式运行摘要。
+ * @param value 未信任 JSON 或 null。
+ * @returns 摘要或 null。
+ * @throws ApiError 契约不符。
+ */
+function parseTerminalSummary(value: unknown): TerminalRealRunSummary | null {
+  if (value === null) return null;
+  const run = expectRecord(value, 'latestTerminalRealRun');
+  return {
+    id: expectString(run.id, 'latestTerminalRealRun.id'),
+    status: expectEnum(
+      run.status,
+      ['succeeded', 'partial', 'failed', 'cancelled', 'interrupted'],
+      'latestTerminalRealRun.status',
+    ),
+    createdAt: expectString(run.createdAt, 'latestTerminalRealRun.createdAt'),
+    startedAt: nullableString(run.startedAt, 'latestTerminalRealRun.startedAt'),
+    endedAt: expectString(run.endedAt, 'latestTerminalRealRun.endedAt'),
+    stopReason: nullableString(
+      run.stopReason,
+      'latestTerminalRealRun.stopReason',
+    ),
+    error: parseDiagnostic(run.error),
+  };
+}
+
+/** 解析任务列表项。
+ * @param value 未信任 JSON。
+ * @returns 列表项。
+ * @throws ApiError 契约不符。
+ */
+export function parseJobListItem(value: unknown): JobListItem {
+  const job = parseJob(value);
+  const raw = expectRecord(value, 'job');
+  const scheduleError =
+    raw.scheduleError === null
+      ? null
+      : expectRecord(raw.scheduleError, 'scheduleError');
+  return {
+    ...job,
+    latestTerminalRealRun: parseTerminalSummary(raw.latestTerminalRealRun),
+    nextFireAt: nullableString(raw.nextFireAt, 'nextFireAt'),
+    scheduleError:
+      scheduleError === null
+        ? null
+        : {
+            code: expectEnum(
+              scheduleError.code,
+              ['INVALID_TIMEZONE', 'INVALID_CRON', 'NO_NEXT_OCCURRENCE'],
+              'scheduleError.code',
+            ),
+            message: expectString(
+              scheduleError.message,
+              'scheduleError.message',
+            ),
+          },
+  };
+}
+
+/** 解析任务列表分页。
+ * @param value 未信任 JSON。
+ * @returns 列表项分页。
+ * @throws ApiError 契约不符。
+ */
+export function parseJobListPage(value: unknown): Page<JobListItem> {
+  return parsePage(value, parseJobListItem, 'job');
 }
 
 /** 校验下次触发时间。

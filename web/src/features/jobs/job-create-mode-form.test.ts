@@ -1,6 +1,6 @@
-// 验证实际表单的禁用选项、行内错误、两个提交按钮及提交入口，不启动浏览器或服务。
+// 验证实际表单的禁用选项、行内错误、提交按钮及提交入口，不启动浏览器或服务。
 import { Children, createElement, isValidElement } from 'react';
-import type { FormEvent, ReactElement, ReactNode } from 'react';
+import type { ReactElement, ReactNode, SubmitEvent } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -35,12 +35,18 @@ vi.mock('react-i18next', async (original) => ({
 vi.mock('./job-queries', () => ({
   useCreateJob: () => mutation,
   usePatchJob: () => mutation,
-  useInstanceOptions: () => ({
+}));
+vi.mock('../instances/instance-queries', () => ({
+  useInstanceCatalog: () => ({
     data: [
       { id: '11111111-1111-4111-8111-111111111111', name: 'Source' },
       { id: '22222222-2222-4222-8222-222222222222', name: 'Other' },
     ],
   }),
+}));
+// 目录选择器只在打开时渲染，本测试不涉及；替换掉以免引入其请求依赖。
+vi.mock('../instances/instance-browse-dialog', () => ({
+  InstanceBrowseDialog: () => null,
 }));
 
 /** 从实际 React 元素树取得原生表单，直接验证键盘提交所走的入口。
@@ -50,11 +56,11 @@ vi.mock('./job-queries', () => ({
  */
 function findForm(
   node: ReactNode,
-): ReactElement<{ onSubmit: (event: FormEvent) => void }> | undefined {
+): ReactElement<{ onSubmit: (event: SubmitEvent) => void }> | undefined {
   if (
     !isValidElement<{
       children?: ReactNode;
-      onSubmit: (event: FormEvent) => void;
+      onSubmit: (event: SubmitEvent) => void;
     }>(node)
   )
     return;
@@ -97,17 +103,22 @@ describe('Target create mode form', () => {
         createElement(MemoryRouter, null, element),
       );
       const submits = markup.match(/<button[^>]*type="submit"[^>]*>/g);
-      expect(submits).toHaveLength(2);
+      expect(submits).toHaveLength(1);
       for (const button of submits ?? [])
         expect(button).toContain('disabled=""');
-      expect(markup).toContain('aria-checked="true" disabled=""');
+      // 保留已选中的服务端复制，但该选项不可再选。
+      const copyOption = markup.match(
+        /<button[^>]*data-value="server_copy"[^>]*>/,
+      )?.[0];
+      expect(copyOption).toContain('aria-checked="true"');
+      expect(copyOption).toContain('disabled=""');
       expect(markup).toContain('role="alert"');
       expect(markup).toContain(
         i18n.t('jobs:validation.serverCopySameInstance'),
       );
       const form = findForm(element);
       if (!form) throw new Error('Missing form');
-      const event = { preventDefault: vi.fn() } as unknown as FormEvent;
+      const event = { preventDefault: vi.fn() } as unknown as SubmitEvent;
       form.props.onSubmit(event);
       expect(event.preventDefault).toHaveBeenCalled();
       expect(mutation.mutate).not.toHaveBeenCalled();
@@ -124,7 +135,7 @@ describe('Target create mode form', () => {
     const element = JobForm({ existing: job });
     const form = findForm(element);
     if (!form) throw new Error('Missing form');
-    form.props.onSubmit({ preventDefault: vi.fn() } as unknown as FormEvent);
+    form.props.onSubmit({ preventDefault: vi.fn() } as unknown as SubmitEvent);
     expect(mutation.mutate).toHaveBeenCalledOnce();
     expect(mutation.mutate.mock.calls[0][0]).not.toHaveProperty('createMode');
     expect(mutation.mutate.mock.calls[0][0].targets).toMatchObject([
@@ -137,6 +148,10 @@ describe('Target create mode form', () => {
     );
     expect(markup).toContain('role="alert"');
     expect(markup).toContain(i18n.t('jobs:validation.serverCopySameInstance'));
+    const relayRadio = markup.match(
+      /<button[^>]*data-value="relay"[^>]*>/,
+    )?.[0];
+    expect(relayRadio).toContain('tabindex="0"');
   });
   /** 服务端复制不限时提示风险，分片并发只对中转可编辑。
    * @param 不适用。

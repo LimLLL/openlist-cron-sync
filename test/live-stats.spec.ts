@@ -164,6 +164,24 @@ describe('live run statistics', () => {
       stats: mixedFinal.stats,
       targets: mixedFinal.targets,
     });
+    // 同一数据库观察点下，列表与详情的重试、维护记录排除和字节口径必须一致。
+    for (const status of [
+      'planned',
+      'executing',
+      'cancelling',
+      'recovering',
+    ] as const) {
+      db.update(runs)
+        .set({ status, dryRun: false, endedAt: null })
+        .where(eq(runs.id, row.id))
+        .run();
+      const listed = fixture
+        .runs()
+        .list({ page: 1, pageSize: 20, status: 'active' });
+      expect(listed.items[0].stats).toEqual(mixed.stats);
+      expect(listed.items[0].stats).toEqual(fixture.runs().get(row.id).stats);
+      expect(listed.items[0].jobName).toBe(row.config.job.name);
+    }
     db.update(operations)
       .set({ bytesTransferred: Number.MAX_SAFE_INTEGER })
       .where(eq(operations.id, retryId))
@@ -176,8 +194,29 @@ describe('live run statistics', () => {
     expect(() => fixture.runs().get(row.id)).toThrow(
       'Run statistics exceed the safe integer range',
     );
+    expect(() => fixture.runs().list({ page: 1, pageSize: 1 })).toThrow(
+      expect.objectContaining({ code: 'RESOURCE_LIMIT' }),
+    );
+    // 不读取当前页之外的实时统计；Job列表同样不做实时聚合。
+    expect(fixture.runs().list({ page: 2, pageSize: 1 })).toMatchObject({
+      items: [],
+      total: 1,
+    });
+    expect(
+      fixture.jobs().list(1, 20, false).items[0].latestTerminalRealRun,
+    ).toBeNull();
     // 查询溢出不改写执行状态或历史统计。
     expect(fixture.runs().record(row.id).status).toBe('executing');
+    expect(fixture.runs().record(row.id).stats).toEqual(row.stats);
+    for (const status of ['queued', 'scanning', 'succeeded'] as const) {
+      db.update(runs)
+        .set({ status, endedAt: status === 'succeeded' ? now : null })
+        .where(eq(runs.id, row.id))
+        .run();
+      expect(
+        fixture.runs().list({ page: 1, pageSize: 20 }).items[0].stats,
+      ).toEqual(row.stats);
+    }
     db.update(runs)
       .set({ status: 'succeeded', endedAt: now })
       .where(eq(runs.id, row.id))

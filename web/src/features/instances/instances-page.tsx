@@ -1,208 +1,388 @@
-// 实例列表页：编辑式页头、状态统计条与编号列表，新建入口进入固定顶栏。
+// 实例列表：搜索与状态筛选（URL 保存）、紧凑表格、行内测试连接与更多操作（编辑/浏览/查看操作/归档）。
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { useTranslation } from 'react-i18next';
-import { Plus } from 'lucide-react';
-import { PageHeader } from '../../components/page-header';
-import { Magnetic } from '../../components/motion/magnetic';
-import { CountUp } from '../../components/motion/count-up';
-import { Button } from '../../components/ui/button';
-import { IndexHead, IndexList, IndexRow } from '../../components/ui/index-list';
-import { Pagination } from '../../components/ui/pagination';
-import { EmptyState, ErrorState, LoadingState } from '../../components/states';
-import { usePageParams } from '../../lib/hooks';
-import { formatRelative, formatTimeFull } from '../../lib/format';
-import { useErrorText } from '../../i18n/error-text';
-import { useInstances } from './instance-queries';
+import { MoreHorizontal, Plus, Search } from 'lucide-react';
+import { PageHeader, useDocumentTitle } from '../../components/page';
 import {
-  instanceStatus,
-  InstanceStatusBadge,
+  EmptyState,
+  ErrorState,
+  StaleNotice,
+  TableSkeleton,
+} from '../../components/states';
+import { PathText, RelativeTime } from '../../components/text';
+import { Button } from '../../components/ui/button';
+import { Input } from '../../components/ui/input';
+import {
+  Menu,
+  MenuContent,
+  MenuItem,
+  MenuSeparator,
+  MenuTrigger,
+} from '../../components/ui/menu';
+import { Pagination } from '../../components/ui/pagination';
+import { Segmented } from '../../components/ui/segmented';
+import { TBody, TD, TH, THead, TR, Table } from '../../components/ui/table';
+import { Tip } from '../../components/ui/tooltip';
+import { useErrorText } from '../../i18n/error-text';
+import {
+  useClearFilters,
+  useFilterParam,
+  usePageParams,
+} from '../../lib/hooks';
+import { useJobCatalog } from '../jobs/job-queries';
+import { InstanceBrowseDialog } from './instance-browse-dialog';
+import {
+  ArchiveInstanceDialog,
+  useAuthLabel,
+  useConnectionTest,
+  usageCounts,
+} from './instance-actions';
+import {
+  InstanceHealthBadge,
+  instanceHealth,
+  instanceNeedsAttention,
   shortVersion,
-} from './instance-display';
+} from './instance-health';
+import { useInstanceCatalog } from './instance-queries';
 import type { Instance } from './instance-contract';
 
-/** 渲染新建实例按钮；同一元素同时用于顶栏和空状态。
- * @param props label 按钮文字。
- * @returns 带磁吸效果的链接按钮。
- * @throws 不适用。
- */
-function NewInstanceButton({ label }: { label: string }) {
-  return (
-    <Magnetic>
-      <Button asChild size="sm">
-        <Link to="/instances/new">
-          <Plus size={15} aria-hidden="true" />
-          {label}
-        </Link>
-      </Button>
-    </Magnetic>
-  );
-}
+const FILTERS = ['all', 'attention', 'untested'] as const;
+/** 状态筛选值。 */
+type Filter = (typeof FILTERS)[number];
 
-/** 渲染状态统计条；只有当前页包含全部实例时才统计就绪与待处理，避免以一页数据冒充全局。
- * @param props items 当前页实例；total 实例总数。
- * @returns 发丝线分隔的大数字统计。
+/** 判断实例是否符合筛选与搜索词。
+ * @param instance 实例。
+ * @param filter 状态筛选。
+ * @param query 已转小写的搜索词。
+ * @returns 是否保留。
  * @throws 不适用。
  */
-function StatStrip({ items, total }: { items: Instance[]; total: number }) {
-  const { t } = useTranslation('instances');
-  const complete = items.length === total;
-  const ready = items.filter((item) => instanceStatus(item) === 'ready').length;
-  const stats = [
-    { label: t('list.stats.total'), value: total, tone: 'text-foreground' },
-    ...(complete
-      ? [
-          { label: t('list.stats.ready'), value: ready, tone: 'text-accent' },
-          {
-            label: t('list.stats.attention'),
-            value: total - ready,
-            tone: total - ready > 0 ? 'text-signal' : 'text-muted-foreground',
-          },
-        ]
-      : []),
-  ];
+function matches(instance: Instance, filter: Filter, query: string): boolean {
+  if (filter === 'attention' && !instanceNeedsAttention(instance)) return false;
+  if (filter === 'untested' && instanceHealth(instance) !== 'untested')
+    return false;
+  if (!query) return true;
   return (
-    <dl className="mb-12 grid grid-cols-3 border-y border-hairline">
-      {stats.map((stat, position) => (
-        <div
-          key={stat.label}
-          className={
-            position > 0 ? 'border-l border-hairline py-6 pl-6' : 'py-6'
-          }
-        >
-          <dt className="eyebrow">{stat.label}</dt>
-          <dd className={`stat-figure mt-3 ${stat.tone}`}>
-            <CountUp value={stat.value} />
-          </dd>
-        </div>
-      ))}
-    </dl>
-  );
-}
-
-/** 渲染单行实例条目。
- * @param props instance 实例；index 序号。
- * @returns 编号行。
- * @throws 不适用。
- */
-function InstanceRow({
-  instance,
-  index,
-}: {
-  instance: Instance;
-  index: number;
-}) {
-  const { t } = useTranslation('instances');
-  const errorText = useErrorText();
-  return (
-    <IndexRow
-      to={`/instances/${instance.id}`}
-      index={index}
-      title={instance.name}
-      subtitle={
-        instance.lastError ? (
-          <>
-            <span>{instance.baseUrl}</span>
-            <span className="ml-3 text-signal">
-              {errorText(instance.lastError.code, instance.lastError.message)}
-            </span>
-          </>
-        ) : (
-          instance.baseUrl
-        )
-      }
-      cells={[
-        instance.auth.mode === 'token'
-          ? t('form.modeToken')
-          : `${t('form.modePassword')} · ${instance.auth.username ?? ''}`,
-        shortVersion(instance.openlistVersion) ?? '—',
-        <span key="tested" title={formatTimeFull(instance.lastTestAt)}>
-          {instance.lastTestAt
-            ? formatRelative(instance.lastTestAt)
-            : t('list.neverTested')}
-        </span>,
-      ]}
-      status={<InstanceStatusBadge instance={instance} />}
-    />
+    instance.name.toLowerCase().includes(query) ||
+    instance.baseUrl.toLowerCase().includes(query)
   );
 }
 
 /** 渲染实例列表页。
- * @returns 分页实例列表。
- * @throws 不适用。
+ * @returns 实例列表。
+ * @throws 不适用；请求错误就地显示并可重试。
  */
 export function InstancesPage() {
   const { t } = useTranslation(['instances', 'common']);
-  const { page, pageSize, setPage } = usePageParams({ page: 1, pageSize: 20 });
-  const query = useInstances(page, pageSize);
-  const data = query.data;
+  useDocumentTitle(t('list.title'));
+  // 本页持有实例目录的轮询；任务目录只读，用于统计引用数。
+  const catalog = useInstanceCatalog({ poll: true });
+  const jobs = useJobCatalog();
+  const [rawQuery, setQuery] = useFilterParam('q');
+  const [rawFilter, setFilter] = useFilterParam('filter');
+  const clearFilters = useClearFilters(['q', 'filter']);
+  const filter: Filter = FILTERS.find((value) => value === rawFilter) ?? 'all';
+  const query = rawQuery ?? '';
+  const { page, pageSize, setPage } = usePageParams({ page: 1, pageSize: 50 });
+  const { test, run } = useConnectionTest();
+  const [browsing, setBrowsing] = useState<Instance | null>(null);
+  const [archiving, setArchiving] = useState<Instance | null>(null);
+
+  const items = useMemo(() => catalog.data ?? [], [catalog.data]);
+  const counts = useMemo(
+    () => (jobs.data ? usageCounts(jobs.data) : null),
+    [jobs.data],
+  );
+  const needle = query.trim().toLowerCase();
+  const filtered = useMemo(
+    () => items.filter((instance) => matches(instance, filter, needle)),
+    [items, filter, needle],
+  );
+  const filterCounts = useMemo(
+    () => ({
+      all: items.length,
+      attention: items.filter(instanceNeedsAttention).length,
+      untested: items.filter(
+        (instance) => instanceHealth(instance) === 'untested',
+      ).length,
+    }),
+    [items],
+  );
+  const visible = filtered.slice((page - 1) * pageSize, page * pageSize);
+  const create = (
+    <Button asChild variant="primary">
+      <Link to="/instances/new">
+        <Plus size={14} aria-hidden="true" />
+        {t('list.create')}
+      </Link>
+    </Button>
+  );
 
   return (
-    <section>
+    <>
       <PageHeader
-        index="02"
-        kicker={t('common:nav.instances')}
-        description={t('list.description')}
-        meta={data ? t('list.count', { count: data.total }) : undefined}
-        actions={<NewInstanceButton label={t('list.newInstance')} />}
+        title={t('list.title')}
+        description={
+          catalog.data ? t('list.count', { count: items.length }) : undefined
+        }
+        actions={create}
       />
 
-      {query.isPending && <LoadingState label={t('list.loading')} rows={5} />}
-      {query.isError && (
+      <StaleNotice show={catalog.isRefetchError} />
+      {catalog.isPending ? (
+        <TableSkeleton rows={5} columns={7} label={t('list.loading')} />
+      ) : catalog.isError && !catalog.data ? (
         <ErrorState
-          error={query.error}
-          onRetry={() => {
-            void query.refetch();
+          error={catalog.error}
+          onRetry={() => void catalog.refetch()}
+        />
+      ) : items.length === 0 ? (
+        <EmptyState
+          title={t('list.emptyTitle')}
+          description={t('list.emptyDescription')}
+          action={create}
+        />
+      ) : (
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative w-full sm:w-72">
+              <Search
+                size={14}
+                aria-hidden="true"
+                className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-muted-foreground"
+              />
+              <Input
+                type="search"
+                aria-label={t('list.search')}
+                placeholder={t('list.search')}
+                value={query}
+                onChange={(event) => setQuery(event.target.value || undefined)}
+                className="pl-8"
+              />
+            </div>
+            <Segmented
+              label={t('list.filterLabel')}
+              value={filter}
+              onChange={(value) =>
+                setFilter(value === 'all' ? undefined : value)
+              }
+              options={FILTERS.map((value) => ({
+                value,
+                label: t(`list.filters.${value}`),
+                count: filterCounts[value],
+              }))}
+            />
+          </div>
+          {filtered.length === 0 ? (
+            <EmptyState
+              title={t('common:states.noMatches')}
+              action={
+                <Button onClick={clearFilters}>
+                  {t('common:actions.clearFilters')}
+                </Button>
+              }
+            />
+          ) : (
+            <>
+              <Table>
+                <THead>
+                  <tr>
+                    <TH className="w-32">{t('list.columns.status')}</TH>
+                    <TH>{t('list.columns.name')}</TH>
+                    <TH>{t('list.columns.address')}</TH>
+                    <TH className="hidden lg:table-cell">
+                      {t('list.columns.auth')}
+                    </TH>
+                    <TH className="hidden xl:table-cell">
+                      {t('list.columns.download')}
+                    </TH>
+                    <TH>{t('list.columns.version')}</TH>
+                    <TH className="text-right">{t('list.columns.jobs')}</TH>
+                    <TH>{t('list.columns.tested')}</TH>
+                    <TH className="text-right">
+                      <span className="sr-only">
+                        {t('list.columns.actions')}
+                      </span>
+                    </TH>
+                  </tr>
+                </THead>
+                <TBody>
+                  {visible.map((instance) => (
+                    <InstanceRow
+                      key={instance.id}
+                      instance={instance}
+                      jobs={counts?.get(instance.id) ?? (counts ? 0 : null)}
+                      testing={
+                        test.isPending && test.variables?.id === instance.id
+                      }
+                      // 同一时刻只测试一个实例：mutate 的回调只对最后一次调用生效，并行点击会丢失前一个结果提示。
+                      testBusy={test.isPending}
+                      onTest={() => run(instance)}
+                      onBrowse={() => setBrowsing(instance)}
+                      onArchive={() => setArchiving(instance)}
+                    />
+                  ))}
+                </TBody>
+              </Table>
+              <Pagination
+                page={page}
+                pageSize={pageSize}
+                total={filtered.length}
+                onPageChange={(next) => setPage({ page: next })}
+              />
+            </>
+          )}
+        </div>
+      )}
+
+      {browsing && (
+        <InstanceBrowseDialog
+          key={browsing.id}
+          instanceId={browsing.id}
+          instanceName={browsing.name}
+          open
+          onOpenChange={(open) => {
+            if (!open) setBrowsing(null);
           }}
         />
       )}
+      <ArchiveInstanceDialog
+        instance={archiving}
+        onClose={() => setArchiving(null)}
+      />
+    </>
+  );
+}
 
-      {data && data.items.length === 0 && (
-        <>
-          <EmptyState
-            title={t('list.emptyTitle')}
-            description={t('list.emptyDescription')}
-            action={<NewInstanceButton label={t('list.create')} />}
-          />
-          <Pagination
-            page={page}
-            pageSize={pageSize}
-            total={data.total}
-            onPageChange={(next) => setPage({ page: next })}
-            className="mt-6"
-          />
-        </>
-      )}
+/** 单行属性。 */
+interface InstanceRowProps {
+  /** 实例。 */
+  instance: Instance;
+  /** 引用它的任务数；任务目录未加载时为 null。 */
+  jobs: number | null;
+  /** 本行是否正在测试。 */
+  testing: boolean;
+  /** 是否有任意实例正在测试。 */
+  testBusy: boolean;
+  /** 测试连接。 */
+  onTest: () => void;
+  /** 打开浏览对话框。 */
+  onBrowse: () => void;
+  /** 打开归档确认框。 */
+  onArchive: () => void;
+}
 
-      {data && data.items.length > 0 && (
-        <>
-          <StatStrip items={data.items} total={data.total} />
-          <IndexHead
-            title={t('list.columns.name')}
-            cells={[
-              t('list.columns.auth'),
-              t('list.columns.version'),
-              t('list.columns.tested'),
-            ]}
-            status={t('list.columns.status')}
-          />
-          <IndexList>
-            {data.items.map((instance, position) => (
-              <InstanceRow
-                key={instance.id}
-                instance={instance}
-                index={(data.page - 1) * data.pageSize + position + 1}
-              />
-            ))}
-          </IndexList>
-          <Pagination
-            page={data.page}
-            pageSize={data.pageSize}
-            total={data.total}
-            onPageChange={(next) => setPage({ page: next })}
-            className="mt-8"
-          />
-        </>
-      )}
-    </section>
+/** 渲染实例表格的一行。
+ * @param props 实例、引用数与行内操作。
+ * @returns 表格行。
+ * @throws 不适用。
+ */
+function InstanceRow({
+  instance,
+  jobs,
+  testing,
+  testBusy,
+  onTest,
+  onBrowse,
+  onArchive,
+}: InstanceRowProps) {
+  const { t } = useTranslation(['instances', 'common']);
+  const errorText = useErrorText();
+  const authLabel = useAuthLabel();
+  const version = shortVersion(instance.openlistVersion);
+  const blocked = instance.authState === 'auth_blocked';
+  const error = instance.lastError
+    ? errorText(instance.lastError.code, instance.lastError.message)
+    : null;
+  return (
+    <TR>
+      <TD>
+        <Tip content={error}>
+          <span tabIndex={error ? 0 : undefined} className="inline-flex">
+            <InstanceHealthBadge instance={instance} />
+          </span>
+        </Tip>
+      </TD>
+      <TD className="max-w-48">
+        <Link
+          to={`/instances/${instance.id}`}
+          className="block truncate font-medium hover:underline"
+        >
+          {instance.name}
+        </Link>
+      </TD>
+      <TD className="max-w-64">
+        <PathText path={instance.baseUrl} className="text-muted-foreground" />
+      </TD>
+      <TD className="hidden whitespace-nowrap lg:table-cell">
+        {authLabel(instance)}
+      </TD>
+      <TD className="hidden whitespace-nowrap xl:table-cell">
+        {t(`download.${instance.downloadMode}`)}
+      </TD>
+      <TD className="whitespace-nowrap">
+        {version ? (
+          <span title={instance.openlistVersion ?? undefined}>{version}</span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        )}
+      </TD>
+      <TD className="text-right">
+        {jobs === null ? (
+          <span className="text-muted-foreground" title={t('list.jobsUnknown')}>
+            —
+          </span>
+        ) : (
+          jobs
+        )}
+      </TD>
+      <TD className="whitespace-nowrap">
+        {instance.lastTestAt ? (
+          <RelativeTime iso={instance.lastTestAt} />
+        ) : (
+          <span className="text-muted-foreground">{t('list.neverTested')}</span>
+        )}
+      </TD>
+      <TD>
+        <div className="flex items-center justify-end gap-1">
+          <Button size="sm" onClick={onTest} disabled={testBusy}>
+            {testing
+              ? t('actions.testing')
+              : blocked
+                ? t('actions.retryAuth')
+                : t('actions.test')}
+          </Button>
+          <Menu>
+            <MenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label={t('common:actions.more')}
+              >
+                <MoreHorizontal size={15} aria-hidden="true" />
+              </Button>
+            </MenuTrigger>
+            <MenuContent>
+              <MenuItem asChild>
+                <Link to={`/instances/${instance.id}/edit`}>
+                  {t('actions.edit')}
+                </Link>
+              </MenuItem>
+              <MenuItem onSelect={onBrowse}>{t('actions.browse')}</MenuItem>
+              <MenuItem asChild>
+                <Link to={`/operations?instanceId=${instance.id}`}>
+                  {t('actions.operations')}
+                </Link>
+              </MenuItem>
+              <MenuSeparator />
+              <MenuItem danger onSelect={onArchive}>
+                {t('actions.archive')}
+              </MenuItem>
+            </MenuContent>
+          </Menu>
+        </div>
+      </TD>
+    </TR>
   );
 }

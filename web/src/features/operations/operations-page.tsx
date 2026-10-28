@@ -1,153 +1,224 @@
-// 全局操作列表：编辑式页头、筛选工具条与编号行列表，支持状态筛选。
-import { ChevronDown } from 'lucide-react';
+// 跨运行的文件操作列表（从实例详情进入，用于排查某实例上失败或结果未知的文件）：按实例与状态筛选，筛选写进 URL。
+import { Link } from 'react-router';
 import { useTranslation } from 'react-i18next';
-import { Badge } from '../../components/ui/badge';
+import { PageHeader, useDocumentTitle } from '../../components/page';
+import { EmptyState, ErrorState, TableSkeleton } from '../../components/states';
+import { OperationStatusBadge } from '../../components/status';
+import { Endpoint, RelativeTime, ShortId } from '../../components/text';
+import { Button } from '../../components/ui/button';
+import { NativeSelect } from '../../components/ui/input';
 import { Pagination } from '../../components/ui/pagination';
-import { IndexHead, IndexList, IndexRow } from '../../components/ui/index-list';
-import { PageHeader } from '../../components/page-header';
-import { ErrorState, LoadingState, EmptyState } from '../../components/states';
-import { usePageParams, useFilterParam } from '../../lib/hooks';
-import { formatBytes, formatRelative } from '../../lib/format';
-import { useOperations } from './operation-queries';
+import { Table, TBody, TD, TH, THead, TR } from '../../components/ui/table';
+import {
+  useClearFilters,
+  useFilterParam,
+  usePageParams,
+} from '../../lib/hooks';
+import { useInstanceCatalog } from '../instances/instance-queries';
 import { OPERATION_STATUSES } from './operation-contract';
-import type { OperationView } from './operation-contract';
-import { ACTION_ICONS, splitPath, statusBadge } from './operation-status';
+import { useOperations } from './operation-queries';
+import { OperationSize } from './operation-details';
 
-/** 渲染全局操作列表页。
- * @returns 操作列表页面。
- * @throws 不适用。
+const UUID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/** 渲染跨运行操作列表页面。
+ * @returns 带筛选与分页的操作表格。
+ * @throws 不适用；请求错误在页面内显示。
  */
 export function OperationsPage() {
-  const { page, pageSize, setPage } = usePageParams();
-  const [status, setStatus] = useFilterParam('status');
-  const ops = useOperations({ page, pageSize, status });
   const { t } = useTranslation(['operations', 'common']);
+  useDocumentTitle(t('list.title'));
+  const { page, pageSize, setPage } = usePageParams();
+  const [rawInstanceId, setInstanceId] = useFilterParam('instanceId');
+  const [rawStatus, setStatus] = useFilterParam('status');
+  const clearFilters = useClearFilters(['instanceId', 'status']);
+  const instanceId =
+    rawInstanceId && UUID.test(rawInstanceId) ? rawInstanceId : undefined;
+  const status = OPERATION_STATUSES.some((value) => value === rawStatus)
+    ? rawStatus
+    : undefined;
+  const operations = useOperations({ page, pageSize, instanceId, status });
+  const instances = useInstanceCatalog();
+  const data = operations.data;
+  const filtered = Boolean(instanceId || status);
+  const current = instances.data?.find((item) => item.id === instanceId);
+
   return (
     <section>
       <PageHeader
-        index="05"
-        kicker={t('common:nav.operations')}
+        title={t('list.title')}
         description={t('list.description')}
-        meta={ops.data ? t('list.total', { count: ops.data.total }) : undefined}
+        back={
+          instanceId
+            ? {
+                to: `/instances/${instanceId}`,
+                label: current?.name ?? t('list.backInstance'),
+              }
+            : { to: '/instances', label: t('list.backInstances') }
+        }
       />
 
-      <div className="mb-8 flex flex-wrap items-center justify-between gap-3">
-        <label className="relative inline-flex items-center">
-          <span className="sr-only">{t('list.statusFilter')}</span>
-          <select
-            value={status ?? ''}
-            onChange={(event) => setStatus(event.target.value || undefined)}
-            className="appearance-none rounded-full border border-hairline bg-white/[0.02] py-2 pr-9 pl-4 text-xs font-medium text-foreground transition-colors hover:border-white/20 focus:border-accent/60 focus:outline-none"
-          >
-            <option value="">{t('list.allStatuses')}</option>
-            {OPERATION_STATUSES.map((value) => (
-              <option key={value} value={value}>
-                {t(`common:operationStatus.${value}`)}
-              </option>
-            ))}
-          </select>
-          <ChevronDown
-            size={14}
-            className="pointer-events-none absolute right-3.5 text-muted-foreground"
-            aria-hidden="true"
-          />
-        </label>
+      <div
+        role="group"
+        aria-label={t('list.filters')}
+        className="mb-3 flex flex-wrap items-center gap-2"
+      >
+        <NativeSelect
+          aria-label={t('list.instanceFilter')}
+          value={instanceId ?? ''}
+          onChange={(event) => setInstanceId(event.target.value || undefined)}
+          className="w-56"
+        >
+          <option value="">{t('list.allInstances')}</option>
+          {instanceId && !current && (
+            <option value={instanceId}>{instanceId.slice(0, 8)}</option>
+          )}
+          {(instances.data ?? []).map((instance) => (
+            <option key={instance.id} value={instance.id}>
+              {instance.name}
+            </option>
+          ))}
+        </NativeSelect>
+        <NativeSelect
+          aria-label={t('list.statusFilter')}
+          value={status ?? ''}
+          onChange={(event) => setStatus(event.target.value || undefined)}
+          className="w-40"
+        >
+          <option value="">{t('list.allStatuses')}</option>
+          {OPERATION_STATUSES.map((value) => (
+            <option key={value} value={value}>
+              {t(`common:operationStatus.${value}`)}
+            </option>
+          ))}
+        </NativeSelect>
+        {data && (
+          <span className="ml-auto text-xs text-muted-foreground tabular-nums">
+            {t('list.total', { count: data.total })}
+          </span>
+        )}
       </div>
 
-      {ops.isPending ? (
-        <LoadingState label={t('list.loading')} rows={6} />
-      ) : ops.isError ? (
-        <ErrorState error={ops.error} onRetry={() => void ops.refetch()} />
-      ) : ops.data.items.length === 0 ? (
-        <>
-          <EmptyState
-            title={t('list.emptyTitle')}
-            description={t('list.emptyDescription')}
+      {operations.isRefetchError && (
+        <p role="status" className="mb-2 text-xs text-warning">
+          {t('common:states.stale')}
+        </p>
+      )}
+
+      {!data ? (
+        operations.isError ? (
+          <ErrorState
+            error={operations.error}
+            onRetry={() => void operations.refetch()}
           />
+        ) : (
+          <TableSkeleton columns={7} label={t('list.loading')} />
+        )
+      ) : data.items.length === 0 ? (
+        <>
+          {filtered ? (
+            <EmptyState
+              title={t('common:states.noMatches')}
+              action={
+                <Button onClick={clearFilters}>
+                  {t('common:actions.clearFilters')}
+                </Button>
+              }
+            />
+          ) : (
+            <EmptyState
+              title={t('list.emptyTitle')}
+              description={t('list.emptyDescription')}
+            />
+          )}
           <Pagination
-            className="mt-6"
             page={page}
             pageSize={pageSize}
-            total={ops.data.total}
+            total={data.total}
             onPageChange={(next) => setPage({ page: next })}
+            className="mt-3"
           />
         </>
       ) : (
         <>
-          <IndexHead
-            title={t('list.columns.target')}
-            cells={[
-              t('list.columns.method'),
-              t('list.columns.size'),
-              t('list.columns.created'),
-            ]}
-            status={t('list.columns.status')}
-          />
-          <IndexList>
-            {ops.data.items.map((op, position) => (
-              <OperationRow
-                key={op.id}
-                operation={op}
-                index={(ops.data.page - 1) * ops.data.pageSize + position + 1}
-              />
-            ))}
-          </IndexList>
+          <Table>
+            <THead>
+              <tr>
+                <TH className="w-28">{t('list.columns.status')}</TH>
+                <TH className="w-24">{t('list.columns.action')}</TH>
+                <TH>{t('list.columns.target')}</TH>
+                <TH>{t('list.columns.source')}</TH>
+                <TH className="w-24 text-right">{t('list.columns.size')}</TH>
+                <TH className="w-24">{t('list.columns.run')}</TH>
+                <TH className="w-28">{t('list.columns.created')}</TH>
+                <TH className="w-16">
+                  <span className="sr-only">{t('list.open')}</span>
+                </TH>
+              </tr>
+            </THead>
+            <TBody>
+              {data.items.map((operation) => (
+                <TR key={operation.id}>
+                  <TD>
+                    <OperationStatusBadge status={operation.status} />
+                  </TD>
+                  <TD className="text-[13px] whitespace-nowrap">
+                    {t(`common:operationAction.${operation.action}`)}
+                  </TD>
+                  <TD className="max-w-80">
+                    <Endpoint
+                      instance={operation.targetInstanceName}
+                      path={operation.targetPath}
+                    />
+                  </TD>
+                  <TD className="max-w-72">
+                    {operation.sourcePath ? (
+                      <Endpoint
+                        instance={operation.sourceInstanceName ?? '—'}
+                        path={operation.sourcePath}
+                      />
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </TD>
+                  <TD className="text-right">
+                    <OperationSize
+                      operation={operation}
+                      directory={t('list.directory')}
+                    />
+                  </TD>
+                  <TD>
+                    <Link
+                      to={`/runs/${operation.runId}`}
+                      className="hover:underline"
+                    >
+                      <ShortId id={operation.runId} />
+                    </Link>
+                  </TD>
+                  <TD>
+                    <RelativeTime iso={operation.createdAt} />
+                  </TD>
+                  <TD>
+                    <Button asChild variant="ghost" size="sm">
+                      <Link to={`/operations/${operation.id}`}>
+                        {t('list.open')}
+                      </Link>
+                    </Button>
+                  </TD>
+                </TR>
+              ))}
+            </TBody>
+          </Table>
           <Pagination
-            className="mt-8"
-            page={ops.data.page}
-            pageSize={ops.data.pageSize}
-            total={ops.data.total}
+            page={page}
+            pageSize={pageSize}
+            total={data.total}
             onPageChange={(next) => setPage({ page: next })}
+            className="mt-3"
           />
         </>
       )}
     </section>
-  );
-}
-
-/** 渲染一行操作：末段名称为标题，动作与完整目标路径为副信息。
- * @param props operation 操作；index 列表序号。
- * @returns 编号行。
- * @throws 不适用。
- */
-function OperationRow({
-  operation: op,
-  index,
-}: {
-  operation: OperationView;
-  index: number;
-}) {
-  const { t } = useTranslation(['operations', 'common']);
-  const badge = statusBadge(op.status);
-  const Icon = ACTION_ICONS[op.action];
-  const { name } = splitPath(op.targetPath);
-  const size =
-    op.expectedSourceSize ?? (op.affectedBytes > 0 ? op.affectedBytes : null);
-  return (
-    <IndexRow
-      to={`/operations/${op.id}`}
-      index={index}
-      title={
-        <span className="inline-flex max-w-full items-center gap-2.5">
-          <Icon
-            size={15}
-            className="shrink-0 text-muted-foreground"
-            aria-hidden="true"
-          />
-          <span className="truncate">{name || op.targetPath}</span>
-        </span>
-      }
-      subtitle={`${t(`common:operationAction.${op.action}`)} · ${op.targetPath}`}
-      cells={[
-        t(`common:operationMethod.${op.method}`),
-        op.isDir ? t('list.directory') : formatBytes(size),
-        formatRelative(op.createdAt),
-      ]}
-      status={
-        <Badge variant={badge.variant} pulse={badge.pulse}>
-          {t(`common:operationStatus.${op.status}`)}
-        </Badge>
-      }
-    />
   );
 }

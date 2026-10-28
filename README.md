@@ -38,7 +38,7 @@
 - **删除保护**：支持 dry-run 预览、删除数量和比例阈值；扫描不完整时禁止删除；本轮结果未知时不重试，后续运行按自己的扫描独立规划。
 - **安全**：单管理员登录（JWT）；保存的 OpenList 凭据用 AES-256-GCM 加密存储。
 - **管理与集成**：REST API 加 OpenAPI 文档，提供 Docker 镜像。Webhook 通知和配置导入导出计划中。
-- **Web 控制台**：提供深色概览、管理员登录与改密、实例配置和目录浏览、任务配置与触发、运行监控及操作历史查看，支持中文和英文界面。概览使用现有 API 的分页数据，并标注统计范围。
+- **Web 控制台**：高信息密度的运维界面，浅色与深色主题默认跟随系统。概览集中显示运行中、需要处理（按最近一次正式运行判断，试运行不计）、即将运行和最近运行；任务列表直接显示上次正式运行结果、下次定时并可在行内运行；运行详情显示实时计数及操作、问题、目标明细；实例页提供连接测试、目录浏览，并可按实例排查文件操作。支持中文和英文界面。
 
 明确不做的事：
 
@@ -90,7 +90,7 @@ DATA_DIR=/path/to/data ADMIN_PASSWORD='your-strong-password' node dist/main.js
 - `DATA_DIR` 必须是绝对路径，并且属于运行服务的用户。服务启动时会把它的权限收紧为 0700。
 - 如果不设置 `ADMIN_PASSWORD`，首次启动会生成一个随机密码，并在 stderr 打印一次；用它首次登录后必须修改密码。
 - 服务默认监听 `0.0.0.0:3000`。
-- Web 控制台与 API 共用端口，在 <http://localhost:3000/> 打开。登录后 JWT 保存在浏览器 localStorage 中，刷新页面仍保持登录，直到令牌过期或主动退出；改密会撤销所有旧会话。界面语言首次按浏览器语言选择（中文或英文），手动切换后会被记住。
+- Web 控制台与 API 共用端口，在 <http://localhost:3000/> 打开。登录后 JWT 保存在浏览器 localStorage 中，刷新页面仍保持登录，直到令牌过期或主动退出；改密会撤销所有旧会话。界面语言首次按浏览器语言选择（中文或英文），主题默认跟随系统深浅色；两者都可在左下角账户菜单中切换，切换后会被记住。
 
 启动后可以这样验证：
 
@@ -179,7 +179,7 @@ Job保存五段cron（IANA时区，默认UTC）后，`POST /jobs/:id/enable`启�
 
 ## 开发
 
-技术栈：NestJS 12、TypeScript 6（ESM）、SQLite（better-sqlite3 + Drizzle ORM）、Vitest、oxlint；`web/` 为 pnpm workspace 成员，使用 React 19、Vite 6、Tailwind CSS 4、TanStack Query、Motion（framer-motion）和 react-i18next。
+技术栈：NestJS 12、TypeScript 6（ESM）、SQLite（better-sqlite3 + Drizzle ORM）、Vitest、oxlint；`web/` 为 pnpm workspace 成员，使用 React 19、Vite 6、Tailwind CSS 4、Radix UI、TanStack Query 和 react-i18next。
 
 ```sh
 NODE_ENV=development pnpm run start:dev   # 开发模式：监听文件变化，读取 .env

@@ -1,5 +1,7 @@
 // 描述 Job 创建、合并补丁与完整公共响应的 OpenAPI 契约。
 import type { SchemaObject } from '@nestjs/swagger';
+import { TERMINAL_RUNS } from '../runs/run-finalizer.js';
+import { SCHEDULE_ERROR_CODES } from '../scheduling/cron-time.js';
 import {
   arraySchema,
   booleanSchema,
@@ -211,4 +213,44 @@ export const jobViewSchema = objectSchema({
   createdAt: timeSchema,
   updatedAt: timeSchema,
   archivedAt: nullable(timeSchema),
+});
+
+/** 显式列表形状；不能通过allOf扩展additionalProperties:false的Job快照。 */
+export const jobListItemSchema = objectSchema({
+  ...(jobViewSchema.properties as Record<string, SchemaObject>),
+  latestTerminalRealRun: {
+    ...nullable(
+      objectSchema({
+        id: idSchema,
+        status: { type: 'string', enum: [...TERMINAL_RUNS] },
+        createdAt: timeSchema,
+        startedAt: nullable(timeSchema),
+        endedAt: timeSchema,
+        stopReason: nullable({
+          type: 'string',
+          enum: ['USER_CANCEL', 'RUN_TIMEOUT', 'PROCESS_RESTART'],
+        }),
+        error: nullable(
+          objectSchema({ code: stringSchema, message: stringSchema }),
+        ),
+      }),
+    ),
+    description:
+      '仅dryRun=false且终态，按createdAt DESC、id DESC选择；没有符合条件的运行为null；无实时统计',
+  },
+  nextFireAt: {
+    ...nullable(timeSchema),
+    description:
+      '以本响应统一参考时刻计算的下一理论cron发生UTC时刻，不保证届时执行；归档、disabled、manual-only或调度错误为null',
+  },
+  scheduleError: {
+    ...nullable(
+      objectSchema({
+        code: { type: 'string', enum: [...SCHEDULE_ERROR_CODES] },
+        message: stringSchema,
+      }),
+    ),
+    description:
+      '仅已启用未归档cron的可预期错误；NO_NEXT_OCCURRENCE表示固定库搜索范围耗尽；其他计算错误使请求失败',
+  },
 });

@@ -33,6 +33,7 @@ import {
 import { RunsService } from './runs.service.js';
 import {
   runViewSchema,
+  runListItemSchema,
   runDetailSchema,
   operationViewSchema,
   issueViewSchema,
@@ -121,11 +122,15 @@ export class RunsController {
   }
   /** 分页查询运行历史。
    * @param query 过滤及分页。
-   * @returns Page RunView。
-   * @throws ApiError 查询错误。
+   * @returns Page RunListItem，含冻结Job名称及当前页实时统计。
+   * @throws ApiError 查询错误或实时聚合RESOURCE_LIMIT。
    */
   @Get('runs')
-  @ApiOkResponse({ schema: pageSchema(runViewSchema) })
+  @ApiOkResponse({ schema: pageSchema(runListItemSchema) })
+  @ApiInternalServerErrorResponse({
+    type: ErrorDto,
+    description: 'RESOURCE_LIMIT：实时聚合超过安全整数；读取不改变Run状态',
+  })
   list(@Query() query: RunQueryDto) {
     return this.runs.list(query);
   }

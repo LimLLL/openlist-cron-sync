@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { apiRequest } from './api-client';
 import { parsePageParams } from './hooks';
 import { parseEmpty, parsePage } from './parsers';
-import { parseHealth } from '../features/dashboard/dashboard-contract';
+import { parseHealth } from '../features/system/health-contract';
 import { parseRunDetail, parseRunView } from '../features/runs/run-contract';
 import {
   operationNeedsPolling,

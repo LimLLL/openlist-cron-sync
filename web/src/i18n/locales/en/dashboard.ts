@@ -1,106 +1,77 @@
-// 英文 dashboard 模块文案。
+// English overview copy: KPI tiles, needs-attention list, running now, upcoming schedules, recent runs and first-use steps.
 export default {
-  hero: {
-    description:
-      'Every instance, schedule and run in one living map — what needs you, what is moving, and what fires next.',
-  },
-  system: {
-    ok: 'System operational',
-    notReady: 'System not ready',
-    unavailable: 'Health unavailable',
-    checking: 'Checking system',
-  },
+  title: 'Overview',
   actions: { newInstance: 'New instance', newJob: 'New job' },
-  loading: {
-    attention: 'Loading attention items…',
-    activity: 'Loading activity…',
-    fleet: 'Loading instances and jobs…',
-  },
-  viz: {
-    caption: 'SYNC NETWORK',
-    summary: '{{nodes}} nodes · {{paths}} paths',
-    engine: 'openlist-cron-sync',
-    legendReady: 'Ready',
-    legendBlocked: 'Blocked',
-    legendError: 'Error',
-    legendPath: 'Job path',
-    legendFailing: 'Last run failed',
-    stateReady: 'ready',
-    stateBlocked: 'blocked',
-    stateError: 'error',
-    stateUntested: 'untested',
-    emptyTitle: 'An empty sky.',
-    emptyHint:
-      'Connect your first OpenList instance and its orbit will appear here.',
-  },
-  stats: {
-    instances: 'Instances',
-    instancesSub: '{{ready}} ready · {{blocked}} blocked · {{loaded}} loaded',
-    jobs: 'Jobs',
-    jobsSub: '{{scheduled}} scheduled · {{loaded}} loaded',
-    system: 'System',
-    systemOk: 'Online',
-    systemNotReady: 'Not ready',
-    systemUnavailable: 'Unknown',
-    database: { ok: 'Database healthy', error: 'Database error' },
-    healthFailed: 'Health check failed',
-    checking: 'Checking…',
-    schedules: 'Schedules',
-    schedulesSub: 'enabled cron jobs loaded',
+  kpi: {
+    label: 'Key figures',
+    running: 'Running now',
+    runningSub: '{{real}} real · {{dry}} dry run',
+    attentionJobs: 'Jobs needing attention',
+    attentionJobsSub_one: 'of {{count}} job',
+    attentionJobsSub_other: 'of {{count}} jobs',
+    attentionInstances: 'Instances needing attention',
+    attentionInstancesSub_one: 'of {{count}} instance',
+    attentionInstancesSub_other: 'of {{count}} instances',
+    nextFire: 'Next scheduled run',
+    nextFireNone: 'No upcoming schedules',
+    loadFailed: 'Could not load',
   },
   attention: {
     title: 'Needs attention',
-    scope: 'Failed or partial runs among the latest 50.',
-    empty: 'All clear. Nothing in the latest 50 runs needs you.',
-    columns: { item: 'Item', kind: 'Kind', when: 'When', state: 'State' },
-    kindRun: 'Run',
-  },
-  activity: {
-    title: 'Activity',
-    scope:
-      'Live runs (up to 20 per active state) followed by the most recent finished runs.',
-    allRuns: 'All runs',
-    empty: 'Quiet orbit. No runs yet.',
-    columns: { run: 'Run', trigger: 'Trigger', when: 'When', state: 'State' },
-    unknownJob: 'Archived job',
-  },
-  fleet: {
-    title: 'Fleet',
-    description:
-      'Connection health of your instances and the next scheduled fires.',
-    instancesTitle: 'Instances',
-    noInstances: 'No instances configured yet.',
-    authState: {
-      ready: 'Ready',
-      untested: 'Untested',
-      auth_blocked: 'Blocked',
-    },
-    healthError: 'Error',
-    tested: 'tested {{when}}',
+    loading: 'Loading items that need attention…',
+    empty: 'All clear',
+    emptyDescription:
+      'No failed real runs, broken schedules or unhealthy instances.',
+    busy: 'This job already has a run in progress.',
+    lastTested: 'tested {{time}}',
     neverTested: 'never tested',
-    more_one: '+ {{count}} more instance',
-    more_other: '+ {{count}} more instances',
-    nextTimes: 'Next fires',
-    nextTimesScope: 'Shown for the first 6 enabled scheduled jobs.',
-    noSchedules: 'No scheduled jobs.',
-    noUpcoming: 'No upcoming fire',
-    unavailable: 'Unavailable',
-    loading: 'Loading…',
-    partialScope:
-      'Summaries cover the first {{instancesShown}} of {{instancesTotal}} instances and {{jobsShown}} of {{jobsTotal}} jobs.',
+  },
+  running: {
+    title: 'Running now',
+    empty: 'Nothing is running',
+    queued: 'queued {{time}}',
+    elapsed: 'running {{time}}',
+    created: 'created {{done}} / {{planned}}',
+    transferred: 'transferred {{bytes}}',
+    planned: 'plan: create {{creates}} · delete {{deletes}}',
+  },
+  upcoming: {
+    title: 'Upcoming',
+    empty: 'No enabled schedules',
+  },
+  recent: {
+    title: 'Recent runs',
+    loading: 'Loading recent runs…',
+    empty: 'No runs yet',
+    emptyDescription:
+      'Runs appear here once a job runs manually or on schedule.',
+    notStarted: 'Not started',
+    columns: {
+      job: 'Job',
+      status: 'Status',
+      type: 'Type',
+      trigger: 'Trigger',
+      started: 'Started',
+      duration: 'Duration',
+      result: 'Result',
+    },
   },
   onboarding: {
-    title: 'Begin here',
-    description:
-      'Three steps from an empty sky to your first synchronized file.',
-    step1: 'Connect an instance',
-    step1Body:
-      'Add an OpenList server with a token or account and test the connection.',
-    step2: 'Define a job',
-    step2Body:
-      'Pick a source folder, one or more targets, and an optional schedule.',
-    step3: 'Preview, then run',
-    step3Body:
-      'Dry-run first to see every planned change before anything is written.',
+    title: 'Get started',
+    description: 'Three steps to your first synchronization.',
+    done: 'Done',
+    instance: {
+      title: 'Add an OpenList instance',
+      description: 'Connect the servers you want to copy between.',
+    },
+    job: {
+      title: 'Create a job',
+      description:
+        'Choose a source folder, one or more targets and a schedule.',
+    },
+    run: {
+      title: 'Run it',
+      description: 'Start a dry run first to preview what will change.',
+    },
   },
 } as const;
