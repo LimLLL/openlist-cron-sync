@@ -63,11 +63,11 @@
 
 M2实现边界：只接受显式dryRun=true（否则400 VALIDATION_ERROR）；Jobs CRUD保存enabled/cron但不调度，通知关联仅接受[]。Runs负责短事务接受、(createdAt,id) FIFO、GLOBAL_MAX_RUNS扫描位、独立于执行位的队列期限，以及从startedAt计算的扫描/规划timeoutSeconds（cancelled + RUN_TIMEOUT）。关闭停止派发并等待扫描退出，不写Run终态；启动queued沿用原快照和期限，scanning/planned按PROCESS_RESTART中断旧计划。完整ExecutionSettings从M2开始校验与固定。M2时extras及空目录删除仅规划；执行随M3a/M3b合并交付。
 
-M2预览无跨Run写路径占用；该互斥必须在M3a第一笔真实写入前实现，不能推迟到M4。M3a仍负责cancel API、unknown/quarantine和真实执行；M3a/M3b同时交付完整Run期限、SIGTERM与relay恢复；M4只负责cron及启停/next-fire/DST。
+M2预览无跨Run写路径占用；该互斥必须在M3a第一笔真实写入前实现，不能推迟到M4。M3a仍负责cancel API、unknown 历史和真实执行；M3a/M3b同时交付完整Run期限、SIGTERM与relay恢复；M4只负责cron及启停/next-fire/DST。
 
 ## M3a 默认relay的新建与基础恢复
 
-交付（与M3b作为一个变更）：新建及替换create（createMode=relay）、下载/上传worker与spool、multipart分片上传、0字节put、Target根创建、尝试记录、全局/实例名额、取消、submitting窗口、unknown隔离，以及unknown处理端点：POST /operations/:id/quarantine-release、POST /operations/:id/resolve（abandoned）、带unresolved过滤的GET /operations。
+交付（与M3b作为一个变更）：新建及替换create（createMode=relay）、下载/上传worker与spool、multipart分片上传、0字节put、Target根创建、尝试记录、全局/实例名额、取消、submitting窗口、unknown 历史，以及按状态查询的 GET /operations。
 
 任务：[relay结果分类](../design/relay.md#结果分类)与[完成分类](../design/openlist-integration.md#完成分类)、spool预算与防死锁、chunk重试与status心跳、Range续传、路径互斥、upload_id持久化与重启收尾、Operation查询。
 
@@ -75,9 +75,9 @@ M2预览无跨Run写路径占用；该互斥必须在M3a第一笔真实写入前
 
 - 文件明显大于可用spool时仍持续推进；下载不等上传；已开始上传的文件不被预读饿死；自身session临时争用只等待。持久化init后，若独占空间也容不下该文件一个frontier payload，则有界主动abort并failed SPOOL_FULL，同Run不反复重建session；真实ENOSPC/EDQUOT也记SPOOL_FULL，摘要区分实际写入失败与容量不足。
 - 最后一个chunk只在源EOF且字节数等于计划大小后发出；源过长或过短时主动abort并记failed，不提交截断文件。
-- 明确的执行前拒绝（init的400、403含file exists与IgnoredSystemFile、405、认证阻断）直接failed，不做观察；IgnoredSystemFile不重试。mkdir、0字节put得到JSON 500时只做一次refresh=true观察。init或complete响应丢失→unknown并隔离；complete成功后查不到session不判失败。
+- 明确的执行前拒绝（init的400、403含file exists与IgnoredSystemFile、405、认证阻断）直接failed，不做观察；IgnoredSystemFile不重试。mkdir、0字节put得到JSON 500时只做一次refresh=true观察。init或complete响应丢失→unknown；complete成功后查不到session不判失败。
 - Target根缺失时，真实Run先以prepare mkdir创建根，再执行create。
-- TTL到期或提前释放后先refresh再写；Run和Operation历史结果不改写。
+- 后续 Run 按自己的扫描规划，不因旧 unknown 额外刷新；Run 和 Operation 历史结果不改写。
 - 真实L1/L3拓扑：同实例同storage、同实例跨storage与跨实例relay均通过；跨origin跳转不泄漏token；限速按Job聚合上传payload。
 
 M3a与M3b不拆分交付，同时执行Mirror文件extras、syncEmptyDirs空目录清理、取消/超时、SIGTERM与启动恢复。该阶段最初只开放真实relay；现已与M4–M6合并补齐server_copy执行及task跟踪，dry-run继续支持两种模式。
@@ -91,7 +91,7 @@ M3a与M3b不拆分交付，同时执行Mirror文件extras、syncEmptyDirs空目�
 验收：
 
 - relay在源打开且首块准备成功前不删除旧文件；server_copy在source元数据前提（refresh原名/类型/大小）成立前不删除；原名仍存在不create；无自动rollback；create失败时目标暂缺该文件，下一次Run重新创建。
-- 替换链的全部失败出口按[故障窗口](testing.md#必须覆盖的故障窗口)中“替换链”各项通过：delete超时或丢响应→unknown并隔离原路径；删除前重读或删除确认时刷新失败/视图suspect→不开始create；create重试发现部分目标→refresh后以retry_cleanup删除，绝不overwrite=true；已成功的delete不重复提交。
+- 替换链的全部失败出口按[故障窗口](testing.md#必须覆盖的故障窗口)中“替换链”各项通过：delete超时或丢响应→unknown原路径；删除前重读或删除确认时刷新失败/视图suspect→不开始create；create重试发现部分目标→refresh后以retry_cleanup删除，绝不overwrite=true；已成功的delete不重复提交。
 - remove得到JSON 500时按M3a的观察规则分类。
 - 真实L1/L3拓扑：delete→refresh→create全链路通过。
 
@@ -99,7 +99,7 @@ M3a与M3b不拆分交付，同时执行Mirror文件extras、syncEmptyDirs空目�
 
 - 某Target失败不删其extras；另一Target可成功。mirror且syncEmptyDirs=true：Target独有目录（source中不存在、非保护）在其中extras删除后自底向上删除，每个目录先refresh=true确认为空；syncEmptyDirs=false时从不删除Target目录，允许留下空目录壳。
 - queued占Job名额；读写交叉的Run不并发；恢复最终interrupted，不执行旧pending。
-- 取消与Run超时停止新派发；已派发的mkdir/remove/0字节put响应及删除确认在CANCEL_GRACE_SECONDS内收尾并按结果记录，宽限结束仍无结论才unknown并隔离。
+- 取消与Run超时停止新派发；已派发的mkdir/remove/0字节put响应及删除确认在CANCEL_GRACE_SECONDS内收尾并按结果记录，宽限结束仍无结论才unknown。
 - SIGTERM：ready=false；停止新触发、派发和提交；中止本地扫描与relay；在关机宽限内保存已收到的结果，宽限内无结论的已派发动作保持submitting/running交给下次启动；不cancel已知OpenList task，不写Run终态。下次启动按[启动恢复](../design/scheduling-recovery.md)收尾为interrupted（stopReason=PROCESS_RESTART）；recovery_deadline_at只在首次进入recovering时写入，反复重启不延长。
 
 ## M4 Cron调度
@@ -110,13 +110,13 @@ M3a与M3b不拆分交付，同时执行Mirror文件extras、syncEmptyDirs空目�
 
 ## M5 历史保留
 
-交付：按既有保留规范清理终态Run及其引用闭包；unknown责任不得因保留期删除。Mirror执行已纳入M3a/M3b，本阶段不重新实现。
+交付：按既有保留规范清理终态Run及其引用闭包；历史 unknown 按普通保留期删除，实际 task 责任仍阻止所属历史删除。Mirror执行已纳入M3a/M3b，本阶段不重新实现。
 
 ## M6 server_copy
 
 交付：可选的createMode=server_copy、copy task逐id跟踪、取消、远程任务记录清理与重启恢复。
 
-任务：同Instance配置校验、task状态映射、REMOTE_TASK_CHANGED、task清理维护循环。
+任务：同Instance配置校验、task 状态映射、远程任务重启日志及旧 REMOTE_TASK_CHANGED 历史兼容、task 记录删除维护循环。
 
 验收：
 
@@ -147,20 +147,20 @@ M3a与M3b不拆分交付，同时执行Mirror文件extras、syncEmptyDirs空目�
 
 - 用固定版本的官方OpenList发布镜像及4.2.5镜像重跑L1/L2/L3，包括M3a/M3b/M6的真实拓扑验收；记录copy实际是同步返回还是fallback，并把镜像tag/digest和OpenList版本写入兼容版本记录。
 - 只有实际通过的Local操作可在驱动矩阵标integration-tested；其余保持source-derived；仅有设计不能标tested。
-- 用户指南写明两类已接受风险：未知结果的隔离到期后旧请求仍可能迟到写入（[ADR 0004](../adr/0004-quarantine-expiry.md)）；server_copy下异步受理驱动的同存储复制按成功计，后台失败不可见（[ADR 0005](../adr/0005-openlist-success.md)）；relay主动中止上传后目标端可能迟到清理。指南同时说明驱动矩阵的读法和云盘人工验证步骤。
+- 用户指南写明两类已接受风险：未知结果的旧请求仍可能迟到写入（[ADR 0004](../adr/0004-unknown-outcomes.md)）；server_copy下异步受理驱动的同存储复制按成功计，后台失败不可见（[ADR 0005](../adr/0005-openlist-success.md)）；relay主动中止上传后目标端可能迟到清理。指南同时说明驱动矩阵的读法和云盘人工验证步骤。
 
 ## 端点归属
 
 路径均相对/api/v1，形状见[REST API](../reference/rest-api.md)与[执行API](../reference/api-execution.md)。端点在下表的里程碑交付并通过API e2e。
 
-| 里程碑 | 端点                                                                                                                                                                              |
-| ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| M0     | POST /auth/login、GET /auth/me、POST /auth/change-password、GET /system/health/live、GET /system/health/ready、GET /docs、GET /openapi.json                                       |
-| M1     | /instances的CRUD、POST /instances/:id/test、POST /instances/:id/browse                                                                                                            |
-| M2     | /jobs的CRUD、POST /jobs/:id/runs（dryRun=true）、GET /runs、GET /runs/:id、GET /runs/:id/operations、GET /runs/:id/issues                                                         |
-| M3a    | POST /jobs/:id/runs真实执行、POST /runs/:id/cancel、GET /operations/:id、GET /operations（unresolved过滤）、POST /operations/:id/quarantine-release、POST /operations/:id/resolve |
-| M4     | POST /jobs/:id/enable、POST /jobs/:id/disable、GET /jobs/:id/next-fire-times                                                                                                      |
-| M7     | /notification-channels（含POST /notification-channels/:id/test）、/notification-deliveries、GET /system/info、GET /system/export、POST /system/import                             |
+| 里程碑 | 端点                                                                                                                                                  |
+| ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| M0     | POST /auth/login、GET /auth/me、POST /auth/change-password、GET /system/health/live、GET /system/health/ready、GET /docs、GET /openapi.json           |
+| M1     | /instances的CRUD、POST /instances/:id/test、POST /instances/:id/browse                                                                                |
+| M2     | /jobs的CRUD、POST /jobs/:id/runs（dryRun=true）、GET /runs、GET /runs/:id、GET /runs/:id/operations、GET /runs/:id/issues                             |
+| M3a    | POST /jobs/:id/runs真实执行、POST /runs/:id/cancel、GET /operations/:id、GET /operations（status过滤）                                                |
+| M4     | POST /jobs/:id/enable、POST /jobs/:id/disable、GET /jobs/:id/next-fire-times                                                                          |
+| M7     | /notification-channels（含POST /notification-channels/:id/test）、/notification-deliveries、GET /system/info、GET /system/export、POST /system/import |
 
 ## 横向完成条件
 

@@ -2,7 +2,8 @@
 import Database from 'better-sqlite3';
 import { ConfigService } from '@nestjs/config';
 import { join } from 'node:path';
-import { eq, sql } from 'drizzle-orm';
+import { eq, sql, getTableColumns } from 'drizzle-orm';
+import { operations } from '../src/database/operation-schema.js';
 import { readMigrationFiles } from 'drizzle-orm/migrator';
 import { AppConfig } from '../src/configuration/app-config.js';
 import { DatabaseService } from '../src/database/database.service.js';
@@ -84,7 +85,11 @@ describe('per-Target create mode migration', () => {
         seedLegacyRun(old, config, 'relay', 'succeeded', true),
       ];
       const oldOperations = old
-        .prepare('SELECT * FROM operations ORDER BY id')
+        .prepare(
+          `SELECT ${Object.values(getTableColumns(operations))
+            .map((column) => column.name)
+            .join(',')} FROM operations ORDER BY id`,
+        )
         .all();
       old.close();
       service.onModuleInit();

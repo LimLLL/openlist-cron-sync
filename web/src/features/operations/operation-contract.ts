@@ -29,18 +29,6 @@ export const OPERATION_STATUSES = [
 /** 操作状态类型。 */
 export type OperationStatus = (typeof OPERATION_STATUSES)[number];
 
-/** 操作解决结果。 */
-export interface Resolution {
-  /** 解决方式。 */
-  kind: 'observed' | 'superseded' | 'abandoned';
-  /** 解决备注。 */
-  note: string | null;
-  /** 解决时间。 */
-  resolvedAt: string;
-  /** 解决者 Run UUID。 */
-  runId: string | null;
-}
-
 /** 操作完整视图。 */
 export interface OperationView {
   /** 操作 UUID。 */
@@ -83,8 +71,6 @@ export interface OperationView {
   affectedBytes: number;
   /** 重试的源操作 UUID。 */
   retryOf: string | null;
-  /** 因果源操作 UUID。 */
-  causedByOperationId: string | null;
   /** 尝试序号。 */
   attemptNo: number;
   /** 远程任务。 */
@@ -113,16 +99,6 @@ export interface OperationView {
   endedAt: string | null;
   /** unknown 开始时间。 */
   unknownSince: string | null;
-  /** unknown 结束时间。 */
-  unknownUntil: string | null;
-  /** 隔离释放时间。 */
-  quarantineReleasedAt: string | null;
-  /** 隔离释放原因。 */
-  quarantineReleaseReason: string | null;
-  /** 重新观测时间。 */
-  reobservedAt: string | null;
-  /** 解决结果。 */
-  resolution: Resolution | null;
 }
 
 /** 解析 OperationView。
@@ -137,26 +113,6 @@ export function parseOperation(value: unknown): OperationView {
     typeof value.status !== 'string'
   )
     throw new ApiError(0, 'INVALID_RESPONSE', 'Invalid operation.');
-  const resolutionValue =
-    value.resolution === null
-      ? null
-      : expectRecord(value.resolution, 'resolution');
-  const resolution =
-    resolutionValue === null
-      ? null
-      : {
-          kind: expectEnum(
-            resolutionValue.kind,
-            ['observed', 'superseded', 'abandoned'] as const,
-            'resolution.kind',
-          ),
-          note: nullableString(resolutionValue.note, 'resolution.note'),
-          resolvedAt: expectString(
-            resolutionValue.resolvedAt,
-            'resolution.resolvedAt',
-          ),
-          runId: nullableString(resolutionValue.runId, 'resolution.runId'),
-        };
   const taskValue =
     value.task === null ? null : expectRecord(value.task, 'task');
   const task =
@@ -230,14 +186,9 @@ export function parseOperation(value: unknown): OperationView {
     ),
     affectedBytes: expectNumber(value.affectedBytes, 'affectedBytes'),
     retryOf: nullableString(value.retryOf, 'retryOf'),
-    causedByOperationId: nullableString(
-      value.causedByOperationId,
-      'causedByOperationId',
-    ),
     attemptNo: expectNumber(value.attemptNo, 'attemptNo'),
     task,
     multipart,
-    resolution,
     bytesDownloaded: expectNumber(value.bytesDownloaded, 'bytesDownloaded'),
     bytesTransferred: expectNumber(value.bytesTransferred, 'bytesTransferred'),
     error: parseDiagnostic(value.error),
@@ -246,16 +197,6 @@ export function parseOperation(value: unknown): OperationView {
     submittedAt: nullableString(value.submittedAt, 'submittedAt'),
     endedAt: nullableString(value.endedAt, 'endedAt'),
     unknownSince: nullableString(value.unknownSince, 'unknownSince'),
-    unknownUntil: nullableString(value.unknownUntil, 'unknownUntil'),
-    quarantineReleasedAt: nullableString(
-      value.quarantineReleasedAt,
-      'quarantineReleasedAt',
-    ),
-    quarantineReleaseReason: nullableString(
-      value.quarantineReleaseReason,
-      'quarantineReleaseReason',
-    ),
-    reobservedAt: nullableString(value.reobservedAt, 'reobservedAt'),
   };
 }
 
@@ -268,18 +209,15 @@ export function parseOperationPage(value: unknown): Page<OperationView> {
   return parsePage(value, parseOperation, 'operation');
 }
 
-/** 判断操作是否仍可能由执行器或维护任务更新。
- * @param operation 当前公开状态和解决结果。
- * @returns 活动操作或未解决 unknown 是否需要轮询。
+/** 判断操作是否仍处于本地执行阶段；终态 unknown 只作为历史展示。
+ * @param operation 当前公开状态。
+ * @returns 是否需要轮询执行进度。
  * @throws 不适用。
  */
 export function operationNeedsPolling(
-  operation: Pick<OperationView, 'status' | 'resolution'>,
+  operation: Pick<OperationView, 'status'>,
 ): boolean {
-  return (
-    ['pending', 'submitting', 'submitted', 'running'].includes(
-      operation.status,
-    ) ||
-    (operation.status === 'unknown' && operation.resolution === null)
+  return ['pending', 'submitting', 'submitted', 'running'].includes(
+    operation.status,
   );
 }

@@ -43,7 +43,7 @@ M8 发布验收记录（2026-10-21）：同一 v4.2.7（`openlistteam/openlist:l
 | GET /p/{globalPath}?sign=...                | 同上                                                                           | 代理内容或配置的下载代理302；可能403                                                                | 强制代理选项                    |
 
 password字段填该endpoint的路径密码（从runs.secret_snapshot_enc解密，无密码时为空字符串）。只有fs/list和fs/get接收路径密码；mkdir/copy/remove/put/multipart由/api/me权限位和meta write_users控制。子路径自己的meta密码不同时返回403，按扫描不完整处理，不当作缺失。
-任务只来自server_copy的copy。若As-Task:false的0字节put返回非预期task，其形状为 `data.task: TaskInfo`（与 copy 的 `data.tasks[]` 不同），属于非符合协议的服务响应；执行器记unknown + UPSTREAM_PROTOCOL_ERROR并隔离，不保存tid、不跟踪上传task，也不按无副作用失败重传。
+任务只来自server_copy的copy。若As-Task:false的0字节put返回非预期task，其形状为 `data.task: TaskInfo`（与 copy 的 `data.tasks[]` 不同），属于非符合协议的服务响应；执行器记unknown + UPSTREAM_PROTOCOL_ERROR，不保存tid、不跟踪上传task，也不按无副作用失败重传。
 multipart session按创建它的用户校验所有权，只在内存中保存，OpenList重启即消失，闲置30分钟过期；本服务不用path+size形式的status接管会话。
 绝不调用task.retry、delete运行任务、clear_*、fs/move、recursive_move、remove_empty_directory或目录copy。批量names只用单个名字以避免部分提交不知对应关系。
 

@@ -31,7 +31,7 @@
 | recovering                      | 用户取消                                                                                                  | recovering               | 只写cancelRequestedAt；对仍未终态的已知tid每进程最多尝试一次cancel；最终仍为interrupted                    |
 | scanning/planned                | 进程重启                                                                                                  | interrupted              | 旧计划不可执行；pending→skipped（PLAN_INTERRUPTED）                                                        |
 | executing/cancelling/recovering | 进程重启                                                                                                  | recovering               | 只恢复已知远程任务，不派发旧 pending；同一事务将剩余pending标skipped（PLAN_INTERRUPTED）                   |
-| recovering                      | 已知任务均终态或持久恢复时钟派生的最终宽限届满                                                            | interrupted              | 未决副作用按 unknown 隔离；stop_reason=PROCESS_RESTART                                                     |
+| recovering                      | 已知任务均终态或持久恢复时钟派生的最终宽限届满                                                            | interrupted              | 未决副作用按 unknown 记录；stop_reason=PROCESS_RESTART                                                     |
 
 扫描期资源超限指 SCAN_MAX_DIRECTORY_ENTRIES、列表响应超过 OPENLIST_MAX_JSON_BYTES、MAX_OPERATIONS_PER_RUN、MAX_SCAN_ISSUES_PER_RUN：Run failed，不执行部分计划。SCAN_MAX_DEPTH 例外：超过深度的子树记 scan_issue（SCAN_DEPTH_EXCEEDED，protect_subtree=1），按子树读取不完整处理，不使整个 Run 失败。执行期刷新超限只阻断相关动作，见[删除保护](deletion.md#执行时复查)。
 Target 根目录不可用不是 Run 失败：该 Target 记 TARGET_ROOT_UNAVAILABLE，不做新建和删除，Run partial；根目录确认不存在时由 prepare mkdir 创建，见[同步引擎](sync-engine.md#阶段一scan--plan)。
@@ -43,14 +43,14 @@ queued 重启仍 queued，保留 createdAt 和 queueDeadlineAt；过期则 faile
 
 ### 正常关机（SIGTERM）
 
-关机不写任何 Run 终态：ready=false；停止新触发、派发、提交和维护；中止本地扫描与 relay（已记录 session 的 relay 在关机宽限内尝试 abort，结果按 [relay 结果分类](relay.md#结果分类)记录，通常为 unknown 并隔离）；保存已收到的结果；不主动 cancel 已知 OpenList task。下次启动按上表“进程重启”各行处理。
+关机不写任何 Run 终态：ready=false；停止新触发、派发、提交和维护；中止本地扫描与 relay（已记录 session 的 relay 在关机宽限内尝试 abort，结果按 [relay 结果分类](relay.md#结果分类)记录，通常为 unknown）；保存已收到的结果；不主动 cancel 已知 OpenList task。下次启动按上表“进程重启”各行处理。
 
 ## Run 聚合
 
 聚合按本轮每个必要逻辑动作的最后一次attempt计算；同一retryOf根下早先failed被后续succeeded替代时，不再作为当前失败或extras阻断条件，原记录保持failed。unknown不在本轮自动重试，不能用此规则抹去。若计划中的依赖还可安全重试，先重连依赖并保持下游pending；预算耗尽才将下游skipped。
 在未被取消/中断的 Run 内，结果为 cancelled 的 Operation（例如管理员在 OpenList 外部取消了 task）按 failed 参与聚合和 extras 判定。
 
-- dry-run：未发现降级类异常为 succeeded；降级类保护、冲突、未知隔离、子树读取失败为 partial；source 根失败为 failed。预览计数不冒充执行计数。
+- dry-run：未发现降级类异常为 succeeded；降级类保护、冲突、子树读取失败为 partial；source 根失败为 failed。预览计数不冒充执行计数。
 - 正常：所有必要动作 succeeded 或 unchanged，且无降级类扫描/保护问题 → succeeded。下表的提示/警告不使Run降级，保护这些路径不妨碍其他extras。
 - 已有成功动作或 unchanged 文件，同时有 failed/unknown/cancelled/异常 skipped → partial。
 - 只有保护/冲突导致无动作 → partial；全部尝试失败且无任何成功/unchanged → failed。
@@ -86,7 +86,6 @@ queued 重启仍 queued，保留 createdAt 和 queueDeadlineAt；过期则 faile
 | TARGET_UNKNOWN_SIZE（与 source 文件同名） | scan_issue                  | 保护，不替换                                                                   | 是（该 Target）          | 是       |
 | DELETE_BLOCKED                            | skipped Operation           | 扫描保护阻断的Target删除及依赖create；具体原因见blockReasons/issues            | 是                       | 是       |
 | DELETE_LIMIT                              | skipped Operation           | 该 Target 全部 delete 及依赖 create                                            | 是                       | 是       |
-| PREVIOUS_OUTCOME_UNKNOWN                  | skipped Operation           | 隔离路径                                                                       | 是                       | 是       |
 | SOURCE_CHANGED / PRECONDITION_CHANGED     | skipped Operation           | 当前文件                                                                       | 是                       | 是       |
 | PRECONDITION_UNVERIFIED                   | skipped Operation           | 前提读取失败的文件及依赖 create                                                | 是                       | 是       |
 | DEPENDENCY_FAILED                         | skipped Operation           | 依赖未成功的下游                                                               | 是                       | 是       |
@@ -134,29 +133,18 @@ queued 重启仍 queued，保留 createdAt 和 queueDeadlineAt；过期则 faile
 relay 在 init 前为 submitting，收到有效 init 响应并写入 upload_id 后为 running；init 明确拒绝则 failed，init 响应丢失则 unknown。0 字节文件的普通 put 按 create 的同步成功处理。
 delete 使用 remove 确认路径；mkdir/create 没有常规后验文件校验。
 失败可重试只有在没有仍可能进行的写入、当前前提仍满足且次数未耗尽时；见 [集成](openlist-integration.md)。
-管理员在 OpenList 中手动重试了本服务已结束的 task、使其重新运行时（REMOTE_TASK_CHANGED）：原 Operation 结果不变；在同一 run/run_target 新建一条相同 action/method/路径的 Operation，status=unknown、caused_by_operation_id 指向原记录，以此隔离相关路径。
+管理员在 OpenList 中重试已结束的 task 时，维护仅更新原 remote_state 并记录终态逆转日志，不新增 Operation。原结果保持不变，任务再次终态才删除远程记录。旧 REMOTE_TASK_CHANGED 行保留历史但排除于执行统计。
 
 <a id="auxiliary-states"></a>
 
 ## 辅助状态与派生事实
 
-| 对象                        | 枚举/事实                                              | 转换                                                                                                                       |
-| --------------------------- | ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
-| Instance.authState          | untested / ready / auth_blocked                        | 成功认证→ready；登录401/402/429、静态token401、/api/me 账号与已记录不符（ACCOUNT_CHANGED）→auth_blocked；更新凭据→untested |
-| NotificationDelivery.status | pending / sending / succeeded / failed                 | pending→sending→succeeded；失败有预算→pending，否则failed；重启时pending/sending→failed（PROCESS_RESTART），不补发         |
-| Quarantine                  | active / reobserve_required / clear（派生，不存 enum） | 见下                                                                                                                       |
+| 对象                        | 枚举/事实                              | 转换                                                                                                                       |
+| --------------------------- | -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Instance.authState          | untested / ready / auth_blocked        | 成功认证→ready；登录401/402/429、静态token401、/api/me 账号与已记录不符（ACCOUNT_CHANGED）→auth_blocked；更新凭据→untested |
+| NotificationDelivery.status | pending / sending / succeeded / failed | pending→sending→succeeded；失败有预算→pending，否则failed；重启时pending/sending→failed（PROCESS_RESTART），不补发         |
 
-Quarantine 派生规则（只对 status=unknown 的 Operation）：
-
-- active：resolution_kind 为空、now < unknown_until 且 quarantine_released_at 为空。
-- reobserve_required：已到期或已释放，且 resolution_kind 为空。
-- clear：其他情况。
-
-管理员 abandon 结束该记录的unknown责任：若 quarantine_released_at 为空，abandon 事务同时写入释放时间和原因，之后不再要求重新观察。reobserve_required 的路径在下一次非 dry-run Run 中必须先对全部受影响父目录 refresh=true 读取成功后才能写入；该 Run 写 reobserved_at/reobserved_by_run_id。没有 resolution 的 unknown 每次运行都重新观察，直到出现 observed 或 superseded resolution。
-unknown Operation 保持 unknown。管理员释放只写 quarantineReleasedAt/reason；本次运行刷新许可不持久化为“永远安全”。
-任一 unknown 可由管理员写 resolutionKind=abandoned。后续新 Run 观察目标条件满足可写 observed；均不改 status。自动到期不写 resolutionKind。
-superseded 只在后续同一 instance+target_path 的 succeeded Operation 覆盖了该 unknown 全部受影响路径时写入。
-unknown 的观察解决只记录本产品比较条件满足，不能证明旧写入已经停止；该风险已接受，见 [ADR 0004](../adr/0004-quarantine-expiry.md)。
+unknown 是历史终态，不派生路径阻断状态；后续 Run 按自己的扫描独立规划。当前 Run 的依赖和删除保护仍生效，详见[ADR 0004](../adr/0004-unknown-outcomes.md)。
 
 ## 典型时序
 

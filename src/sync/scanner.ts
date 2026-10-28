@@ -250,16 +250,6 @@ export class Scanner {
         );
         if (!targetPath) continue;
         this.recordDecision(target, decision, path, targetPath);
-        if (
-          decision.kind === 'unchanged' &&
-          decision.source?.size !== null &&
-          decision.source?.size !== undefined
-        )
-          await this.reader.quarantine.unchanged(
-            target.row,
-            targetPath,
-            decision.source.size,
-          );
         if (decision.kind === 'directory') {
           if (decision.source?.isDir) {
             const missing = !decision.target && targetView.trustMissing;
@@ -288,11 +278,6 @@ export class Scanner {
           if (!sourcePath) continue;
           const parent = await this.writer.prepare(target, cursor.prepare);
           const dependencies = parent ? [parent] : [];
-          const allowed = await this.reader.quarantine.allows(
-            target.row,
-            targetPath,
-            decision.kind === 'replace' ? 'delete' : 'create',
-          );
           if (decision.kind === 'replace')
             dependencies.push(
               this.writer.operation(
@@ -304,7 +289,6 @@ export class Scanner {
                 undefined,
                 decision.target,
                 [],
-                !allowed,
               ),
             );
           this.writer.operation(
@@ -316,7 +300,6 @@ export class Scanner {
             sourcePath,
             decision.target,
             dependencies,
-            !allowed,
           );
         } else if (decision.kind === 'extra')
           this.writer.operation(
@@ -328,11 +311,6 @@ export class Scanner {
             undefined,
             decision.target,
             [],
-            !(await this.reader.quarantine.allows(
-              target.row,
-              targetPath,
-              'delete',
-            )),
           );
       }
     }
@@ -467,7 +445,6 @@ export class Scanner {
           undefined,
           decision.target,
           [],
-          !(await this.reader.quarantine.allows(target.row, child, 'delete')),
         );
       else clean = false;
     }
@@ -485,7 +462,6 @@ export class Scanner {
         undefined,
         directory,
         [],
-        !(await this.reader.quarantine.allows(target.row, path, 'delete')),
       );
     return clean;
   }

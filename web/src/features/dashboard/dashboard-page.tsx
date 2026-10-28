@@ -25,7 +25,6 @@ import {
   useHealth,
   useNextFireTimes,
   useRecentRuns,
-  useUnresolvedOperations,
 } from './dashboard-queries';
 
 const EASE = [0.16, 1, 0.3, 1] as const;
@@ -56,7 +55,6 @@ export function DashboardPage() {
   const { t } = useTranslation(['dashboard', 'common']);
   const recentRuns = useRecentRuns();
   const activeRuns = useActiveRuns();
-  const unresolvedOps = useUnresolvedOperations();
   const instances = useAllInstances();
   const jobs = useAllJobs();
   const health = useHealth();
@@ -96,7 +94,7 @@ export function DashboardPage() {
     instances.isError && jobs.isError && recentRuns.isError
       ? instances.error
       : null;
-  const attentionError = unresolvedOps.error ?? recentRuns.error;
+  const attentionError = recentRuns.error;
   const activityError = activeRuns.error ?? recentRuns.error;
   const fleetError = instances.error ?? jobs.error;
   const fleetLoaded = !instances.isPending && !jobs.isPending;
@@ -208,21 +206,14 @@ export function DashboardPage() {
           <EditorialSection
             index={number(0)}
             title={t('attention.title')}
-            description={t('attention.scope', {
-              shown: unresolvedOps.data?.items.length ?? 0,
-              total: unresolvedOps.data?.total ?? 0,
-            })}
+            description={t('attention.scope')}
           >
             {attentionError ? (
               <ErrorState error={attentionError} />
-            ) : unresolvedOps.isPending || recentRuns.isPending ? (
+            ) : recentRuns.isPending ? (
               <LoadingState label={t('loading.attention')} />
             ) : (
-              <AttentionSection
-                failedRuns={failedRuns}
-                unresolvedOps={unresolvedOps.data?.items ?? []}
-                jobNames={jobNames}
-              />
+              <AttentionSection failedRuns={failedRuns} jobNames={jobNames} />
             )}
           </EditorialSection>
         </Reveal>

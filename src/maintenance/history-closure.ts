@@ -25,7 +25,7 @@ export function idList(ids: string[]) {
     sql`, `,
   );
 }
-/** 判断一个Run是否超期、终态且没有未知或task责任。
+/** 判断一个Run是否超期、终态且没有待删除的远程任务记录。
  * @param db 数据库。
  * @param id Run ID。
  * @param cutoff 本轮固定截止时刻。
@@ -40,7 +40,7 @@ export function eligibleRun(
   return (
     db.get(sql`SELECT 1 FROM runs r WHERE r.id=${id} AND r.ended_at < ${cutoff}
     AND r.status IN ('succeeded','partial','failed','cancelled','interrupted')
-    AND NOT EXISTS (SELECT 1 FROM operations o WHERE o.run_id=r.id AND ((o.status='unknown' AND o.resolution_kind IS NULL) OR o.remote_cleanup_pending=1))`) !==
+    AND NOT EXISTS (SELECT 1 FROM operations o WHERE o.run_id=r.id AND o.remote_cleanup_pending=1)`) !==
     undefined
   );
 }
@@ -76,35 +76,15 @@ export async function historyClosure(
           queue.push(row.id);
         }
     };
-    for (const field of [
-      'resolved_by_run_id',
-      'reobserved_by_run_id',
-    ] as const) {
-      let after = '';
-      for (;;) {
-        const rows = db.all<{ id: string; run_id: string }>(
-          sql`SELECT id,run_id FROM operations WHERE ${sql.identifier(field)}=${id} AND id>${after} ORDER BY id LIMIT 256`,
-        );
-        if (!rows.length) break;
-        for (const row of rows) {
-          after = row.id;
-          add([{ id: row.run_id }]);
-        }
-        await yieldLoop(undefined, { signal });
-      }
-    }
     // 显式分页操作ID，使跨Run异常引用也不能绕过闭包；每页反向FK查询命中各引用索引。
     let afterSeq = 0;
     for (;;) {
       const rows = db.all<{
         id: string;
         seq: number;
-        resolved: string | null;
-        observed: string | null;
         retry: string | null;
-        cause: string | null;
       }>(sql`
-        SELECT id,seq,resolved_by_run_id AS resolved,reobserved_by_run_id AS observed,retry_of AS retry,caused_by_operation_id AS cause
+        SELECT id,seq,retry_of AS retry
         FROM operations WHERE run_id=${id} AND seq>${afterSeq} ORDER BY seq LIMIT 256`);
       if (!rows.length) break;
       const ids: string[] = [];
@@ -112,10 +92,7 @@ export async function historyClosure(
       for (const row of rows) {
         afterSeq = row.seq;
         ids.push(row.id);
-        if (row.resolved) add([{ id: row.resolved }]);
-        if (row.observed) add([{ id: row.observed }]);
         if (row.retry) refs.push(row.retry);
-        if (row.cause) refs.push(row.cause);
       }
       if (refs.length)
         add(
@@ -123,12 +100,11 @@ export async function historyClosure(
             sql`SELECT DISTINCT run_id AS id FROM operations WHERE id IN (${idList(refs)}) AND run_id != ${id}`,
           ),
         );
-      for (const field of ['retry_of', 'caused_by_operation_id'] as const)
-        add(
-          db.all<RunId>(
-            sql`SELECT DISTINCT run_id AS id FROM operations WHERE ${sql.identifier(field)} IN (${idList(ids)}) AND run_id != ${id}`,
-          ),
-        );
+      add(
+        db.all<RunId>(
+          sql`SELECT DISTINCT run_id AS id FROM operations WHERE retry_of IN (${idList(ids)}) AND run_id != ${id}`,
+        ),
+      );
       await yieldLoop(undefined, { signal });
     }
   }

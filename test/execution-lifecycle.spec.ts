@@ -7,7 +7,6 @@ import { latch } from './openlist-fixture.js';
 import { DatabaseService } from '../src/database/database.service.js';
 import { runs } from '../src/database/run-schema.js';
 import { operations } from '../src/database/operation-schema.js';
-import { OperationsService } from '../src/runs/operations.service.js';
 import { PathOccupancy } from '../src/coordination/path-occupancy.js';
 
 /** 注册执行生命周期行为。
@@ -15,7 +14,7 @@ import { PathOccupancy } from '../src/coordination/path-occupancy.js';
  * @returns 不适用。
  * @throws 不适用。
  */
-describe('M3 cancellation, recovery and quarantine', () => {
+describe('M3 cancellation, recovery and historical unknown outcomes', () => {
   let f: RelayFixture;
   /** 每个场景有独立本地和远端状态。
    * @param 不适用。
@@ -143,7 +142,7 @@ describe('M3 cancellation, recovery and quarantine', () => {
     expect(restored.status).toBe('interrupted');
     const operation = plan(f, result.id)[0];
     expect(operation.status).toBe('unknown');
-    expect(operation.unknownUntil).not.toBeNull();
+    expect(operation.unknownSince).not.toBeNull();
     expect(
       f.server.calls.some(
         /** 识别重启后不应出现的init请求。
@@ -154,9 +153,9 @@ describe('M3 cancellation, recovery and quarantine', () => {
         (call) => call.url.endsWith('/init'),
       ),
     ).toBe(false);
-    const until = operation.unknownUntil;
+    const since = operation.unknownSince;
     await f.restart();
-    expect(plan(f, result.id)[0].unknownUntil).toBe(until);
+    expect(plan(f, result.id)[0].unknownSince).toBe(since);
   });
   /** 已经recovering的Run沿用首次deadline，旧pending一律废弃。
    * @param 不适用。
@@ -184,58 +183,6 @@ describe('M3 cancellation, recovery and quarantine', () => {
       status: 'skipped',
       error: { code: 'PLAN_INTERRUPTED' },
     });
-  });
-  /** 释放仅改变事实；下一真实Run刷新并另建动作后可解决旧unknown。
-   * @param 不适用。
-   * @returns 验证完成。
-   * @throws Error 断言失败。
-   */
-  it('refreshes released quarantine and supersedes it without changing history', async () => {
-    f.fault =
-      /** 丢弃init响应但保留目标副作用。
-       * @param call 真实HTTP请求及其捕获头。
-       * @param response 正常响应；stream回调时为测试HTTP响应。
-       * @returns 本故障窗口对应的响应；其它请求保持原响应。
-       * @throws 不适用。
-       */
-      (call, response) =>
-        call.url.endsWith('/init') ? { disconnect: true } : response;
-    const job = f.job();
-    const first = await terminal(
-      f,
-      f.runs().trigger(job.id, { dryRun: false, confirmDeletes: false }).id,
-    );
-    const unknown = plan(f, first.id)[0];
-    const management = f.app.get(OperationsService);
-    management.release(unknown.id, 'Reviewed');
-    f.fault = undefined;
-    const before = f.server.calls.length;
-    const next = await terminal(
-      f,
-      f.runs().trigger(job.id, { dryRun: false, confirmDeletes: true }).id,
-    );
-    expect(next.status).toBe('succeeded');
-    expect(management.get(unknown.id)).toMatchObject({
-      status: 'unknown',
-      reobservedAt: expect.any(String),
-      resolution: { kind: 'superseded', runId: next.id },
-    });
-    const calls = f.server.calls.slice(before);
-    expect(
-      calls.find(
-        /** 定位重新观察目标父目录的列表请求。
-         * @param call 真实HTTP请求及其捕获头。
-         * @returns 用于当前断言的字段。
-         * @throws 不适用。
-         */
-        (call) =>
-          call.url === '/api/fs/list' &&
-          call.json &&
-          typeof call.json === 'object' &&
-          'path' in call.json &&
-          call.json.path === '/target',
-      )?.json,
-    ).toMatchObject({ refresh: true });
   });
   /** dry-run只读占用阻止重叠写入，同时允许不同Job的只读预览。
    * @param 不适用。

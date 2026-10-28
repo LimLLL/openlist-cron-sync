@@ -30,7 +30,7 @@ export function overlaps(a: PathClaim, b: PathClaim): boolean {
     (containsPath(a.path, b.path) || containsPath(b.path, a.path))
   );
 }
-/** 统一服务派发、恢复和管理员解决操作的路径占用。
+/** 统一服务派发和恢复期间的读写路径占用。
  * @param 不适用。
  * @returns 不适用。
  * @throws 不适用。
@@ -101,26 +101,6 @@ export class PathOccupancy {
    */
   restore(run: RunRecord): void {
     this.claims.set(run.id, this.forRun(run));
-  }
-  /** 检查管理员操作是否与任何活动读取或写入重叠。
-   * @param claim 被管理的未知操作路径。
-   * @returns 是否有活动运行占用。
-   * @throws ApiError 快照路径非法。
-   */
-  busy(claim: PathClaim): boolean {
-    for (const held of this.claims.values())
-      if (
-        held.some(
-          /** 检查管理员管理路径是否与活动占用相交。
-           * @param item 当前待检查值。
-           * @returns 是否被占用。
-           * @throws ApiError 快照路径非法。
-           */
-          (item) => overlaps(item, claim),
-        )
-      )
-        return true;
-    return false;
   }
   /** 仅在终态已持久化或进程停止时释放。
    * @param runId 运行ID。

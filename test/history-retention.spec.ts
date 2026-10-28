@@ -1,4 +1,4 @@
-// 使用真实SQLite验证闭包资格、分批删除及cause CHECK不被放宽。
+// 使用真实SQLite验证闭包资格、分批删除及依赖外键完整性。
 import { randomUUID } from 'node:crypto';
 import { eq, sql } from 'drizzle-orm';
 import { m2Fixture, preview, plan } from './m2-fixture.js';
@@ -49,7 +49,7 @@ describe('M5 history closure retention', () => {
       .where(eq(runs.id, old.id))
       .run();
     db.update(operations)
-      .set({ resolvedByRunId: recent.id })
+      .set({ retryOf: plan(f, recent.id)[0].id })
       .where(eq(operations.id, plan(f, old.id)[0].id))
       .run();
     await f.app.get(HistoryRetention).cycle();
@@ -62,12 +62,12 @@ describe('M5 history closure retention', () => {
     expect(f.runs().list({ page: 1, pageSize: 50 }).total).toBe(0);
     expect(db.all(sql`PRAGMA foreign_key_check`)).toEqual([]);
   });
-  /** release不解决unknown，不能被保留期抹掉。
+  /** 终态 unknown 是普通历史，可以按保留期删除。
    * @param 不适用。
    * @returns 验证完成。
    * @throws Error 断言失败。
    */
-  it('keeps expired unresolved unknown even after quarantine release', async () => {
+  it('deletes expired unknown history without requiring an administrative action', async () => {
     const run = await preview(f, f.job());
     const db = f.app.get(DatabaseService).db;
     db.update(runs).set({ endedAt: 1 }).where(eq(runs.id, run.id)).run();
@@ -76,20 +76,18 @@ describe('M5 history closure retention', () => {
         status: 'unknown',
         endedAt: 1,
         unknownSince: 1,
-        unknownUntil: 2,
-        quarantineReleasedAt: 2,
       })
       .where(eq(operations.runId, run.id))
       .run();
     await f.app.get(HistoryRetention).cycle();
-    expect(f.runs().get(run.id).id).toBe(run.id);
+    expect(f.runs().list({ page: 1, pageSize: 50 }).total).toBe(0);
   });
-  /** 大组分批让出事件循环，维护子记录先删以满足operations_cause。
+  /** 大组分批让出事件循环，先删除依赖再删除含旧版维护记录的历史。
    * @param 不适用。
    * @returns 验证完成。
    * @throws Error 断言失败。
    */
-  it('deletes bounded chunks including resolved maintenance children and dependencies', async () => {
+  it('deletes bounded chunks including legacy maintenance records and dependencies', async () => {
     const run = await preview(f, f.job());
     const db = f.app.get(DatabaseService).db;
     const original = db
@@ -115,13 +113,8 @@ describe('M5 history closure retention', () => {
               method: 'server_copy',
               status: 'unknown',
               endedAt: 1,
-              causedByOperationId: original.id,
               errorCode: 'REMOTE_TASK_CHANGED',
               unknownSince: 1,
-              unknownUntil: 2,
-              resolutionKind: 'abandoned',
-              resolvedAt: 3,
-              resolutionNote: 'Fixture resolved',
             })
             .run();
           db.insert(operationDependencies)
@@ -146,10 +139,6 @@ describe('M5 history closure retention', () => {
     expect(yielded).toBe(true);
     expect(db.select().from(operations).all()).toHaveLength(0);
     expect(db.all(sql`PRAGMA foreign_key_check`)).toEqual([]);
-    const query = db.all<{ detail: string }>(
-      sql`EXPLAIN QUERY PLAN SELECT id FROM operations WHERE resolved_by_run_id=${run.id}`,
-    );
-    expect(JSON.stringify(query)).toContain('operations_resolved_run');
   });
   /** 未知引用导致RESTRICT时只保留该组，不关闭FK或把错误吞成成功。
    * @param 不适用。

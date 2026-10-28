@@ -11,7 +11,7 @@ openlist-cron-sync 是一个自托管的后端服务。它通过 [OpenList](http
 - 按 cron 或手动触发一次运行（Run）。每次 Run 比较 source 与每个 Target：新建目标缺失的文件，替换大小发生变化的文件；mirror 模式还会删除目标上多余的文件。见[同步引擎](sync-engine.md)。
 - 新建文件默认由本服务下载上传（relay）：下载 worker 把源文件分块写入本地缓冲，上传 worker 同时用目标 OpenList 的分片上传接口写入，两边互不等待。同实例的 Target 也可以显式改选 server_copy，由 OpenList 在同一实例内自己复制。见[创建方式](sync-engine.md#创建方式)与[Relay](relay.md)。
 - 删除一律调用 OpenList 的 remove。
-- 执行前有固定的安全检查：dry-run 预览、删除数量/比例阈值、扫描不完整时禁止删除、结果不明时隔离相关路径。见[删除保护](deletion.md)。
+- 执行前有固定的安全检查：dry-run 预览、删除数量/比例阈值、扫描不完整时禁止删除、本轮结果不明时阻止依赖动作。见[删除保护](deletion.md)。
 - 管理面是 REST API 加 OpenAPI 文档，单管理员登录，支持 Webhook 通知、脱敏配置导入导出和 Docker 部署。见[REST API](../reference/rest-api.md)。
 
 ## 这个服务不做什么
@@ -27,19 +27,18 @@ openlist-cron-sync 是一个自托管的后端服务。它通过 [OpenList](http
 
 ## 核心概念
 
-| 概念                 | 含义                                                                                                                                                                     | 规范                                                  |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------- |
-| Instance             | 一个 OpenList 服务地址加一个账号凭据（用户名密码或 token）；本服务通过它调用 OpenList API。OpenList 最低 4.2.5                                                           | [配置表](configuration-tables.md#instances)           |
-| Job                  | 一条同步配置：一个 source、一个或多个 Target、Job 级过滤规则、cron 与时区等                                                                                              | [配置表](configuration-tables.md#jobs)                |
-| source               | Job 的来源端点，即（Instance，目录）；本服务只读                                                                                                                         | [需求](requirements.md#产品范围)                      |
-| Target               | 目标端点（Instance，目录），并带有本目标自己的同步模式 mode、创建方式 createMode、删除阈值和 refresh 设置                                                                | [配置表](configuration-tables.md#job_targets)         |
-| incremental / mirror | Target 的两种模式。incremental 新建缺失文件、替换大小变化的文件，保留目标上 source 没有的文件（extras）；mirror 在此基础上还会删除 extras                                | [行为矩阵](sync-engine.md#行为矩阵)                   |
-| relay / server_copy  | Target 的两种创建方式，同一 Job 可以混合使用。relay（默认）由本服务下载再分片上传，适用于任意实例；server_copy 调用 OpenList copy，只适用于同一实例                      | [创建方式](sync-engine.md#创建方式)                   |
-| Run                  | Job 的一次执行。创建时固定配置快照，之后编辑 Job 不影响它；状态从 queued 经 scanning、planned、executing 到终态（succeeded、partial、failed、cancelled、interrupted）    | [RunStatus](state-machines.md#run-status)             |
-| Operation            | Run 中针对一个目标路径的一次远程动作（mkdir、create、delete）及其结果；重试会创建新的 Operation，旧记录不改写                                                            | [OperationStatus](state-machines.md#operation-status) |
-| dry-run              | 只扫描、规划和做安全检查，不写任何远程文件的 Run；用来预览计划和被阻止的原因                                                                                             | [同步引擎](sync-engine.md)                            |
-| unknown              | Operation 的一种终态：请求可能已到达 OpenList，但本服务无法确定它是否生效（例如超时或响应丢失）。unknown 记录永远不会改写为成功                                          | [OperationStatus](state-machines.md#operation-status) |
-| quarantine（隔离）   | 对 unknown 涉及路径的写入隔离。到期（默认期限见[配置](../reference/configuration.md)）或管理员提前释放之前，后续 Run 不写这些路径；之后先 refresh 重新观察，再决定怎么做 | [Unknown 隔离](scheduling-recovery.md#unknown隔离)    |
+| 概念                 | 含义                                                                                                                                                                  | 规范                                                  |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| Instance             | 一个 OpenList 服务地址加一个账号凭据（用户名密码或 token）；本服务通过它调用 OpenList API。OpenList 最低 4.2.5                                                        | [配置表](configuration-tables.md#instances)           |
+| Job                  | 一条同步配置：一个 source、一个或多个 Target、Job 级过滤规则、cron 与时区等                                                                                           | [配置表](configuration-tables.md#jobs)                |
+| source               | Job 的来源端点，即（Instance，目录）；本服务只读                                                                                                                      | [需求](requirements.md#产品范围)                      |
+| Target               | 目标端点（Instance，目录），并带有本目标自己的同步模式 mode、创建方式 createMode、删除阈值和 refresh 设置                                                             | [配置表](configuration-tables.md#job_targets)         |
+| incremental / mirror | Target 的两种模式。incremental 新建缺失文件、替换大小变化的文件，保留目标上 source 没有的文件（extras）；mirror 在此基础上还会删除 extras                             | [行为矩阵](sync-engine.md#行为矩阵)                   |
+| relay / server_copy  | Target 的两种创建方式，同一 Job 可以混合使用。relay（默认）由本服务下载再分片上传，适用于任意实例；server_copy 调用 OpenList copy，只适用于同一实例                   | [创建方式](sync-engine.md#创建方式)                   |
+| Run                  | Job 的一次执行。创建时固定配置快照，之后编辑 Job 不影响它；状态从 queued 经 scanning、planned、executing 到终态（succeeded、partial、failed、cancelled、interrupted） | [RunStatus](state-machines.md#run-status)             |
+| Operation            | Run 中针对一个目标路径的一次远程动作（mkdir、create、delete）及其结果；重试会创建新的 Operation，旧记录不改写                                                         | [OperationStatus](state-machines.md#operation-status) |
+| dry-run              | 只扫描、规划和做安全检查，不写任何远程文件的 Run；用来预览计划和被阻止的原因                                                                                          | [同步引擎](sync-engine.md)                            |
+| unknown              | Operation 的一种终态：请求可能已到达 OpenList，但本服务无法确定它是否生效（例如超时或响应丢失）。unknown 记录永远不会改写为成功                                       | [OperationStatus](state-machines.md#operation-status) |
 
 ## 一次运行走查
 
@@ -86,7 +85,7 @@ Run 在全局队列中等待一个执行位，并占用路径：source 目录按
 
 ### 3. 安全检查
 
-服务对每个 Target 检查[删除保护](deletion.md)：扫描是否完整、是否有受保护或冲突的路径、是否有隔离中的路径，以及删除数量是否超过阈值。
+服务对每个 Target 检查[删除保护](deletion.md)：扫描是否完整、是否有受保护或冲突的路径，以及删除数量是否超过阈值。
 
 - Target 1：计划删除 R = 1 个替换 + 1 个 extra = 2；受管理的目标文件 D = 118 + b.jpg + old.jpg = 120。远低于默认阈值，通过。
 - Target 2：只有 1 个替换，通过。
@@ -133,16 +132,16 @@ Run 最终为 succeeded：所有必要动作都成功或 unchanged，且没有�
 
 ## 出问题时会怎样
 
-| 情况                                     | 结果                                                                                                                                                                          |
-| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 旧 b.jpg 已删除，但新版本 create 失败    | 目标暂时缺少 b.jpg；该 Target 本次不执行 extras；Run 为 partial。下一次 Run 发现缺失会重新创建                                                                                |
-| 请求超时或响应丢失                       | Operation 记为 unknown，相关路径隔离，依赖它的 create 不执行；Run 为 partial（本例还有其他成功或 unchanged 的文件）。到期或管理员释放后，下一次 Run 先 refresh 重新观察再决定 |
-| 下载中途断开                             | 从已写好的最后一块用 Range 接着下载，不用中止上传；源大小变了则中止该文件并记失败                                                                                             |
-| 本地磁盘快满                             | 下载暂停，等上传释放空间；只有真实写盘失败才报错                                                                                                                              |
-| OpenList 执行前明确拒绝（如 403 无权限） | Operation 记为 failed，不当作文件缺失                                                                                                                                         |
-| OpenList 已处理但返回错误                | 做一次有界的 refresh 观察：已生效记成功；原状态未变记可重试的失败；无法判断记 unknown 并隔离                                                                                  |
-| 某个 Target 扫描不完整                   | 该 Target 的所有删除（含替换）都被禁止，已确认的新建仍可执行；Run 为 partial                                                                                                  |
-| 服务重启或收到 SIGTERM                   | 不续跑旧计划、不续传；重启后有界收尾已知的上传会话和 task，Run 记为 interrupted（stopReason=PROCESS_RESTART）；下一次 cron 或手动 Run 重新扫描                                |
-| 用户取消                                 | 停止派发，中止上传会话、对已知 task 请求取消，宽限期内仍未确认结果的动作记 unknown；Run 为 cancelled                                                                          |
+| 情况                                     | 结果                                                                                                                                                     |
+| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 旧 b.jpg 已删除，但新版本 create 失败    | 目标暂时缺少 b.jpg；该 Target 本次不执行 extras；Run 为 partial。下一次 Run 发现缺失会重新创建                                                           |
+| 请求超时或响应丢失                       | Operation 记为 unknown，同一 Run 不重试且依赖 create 不执行；本例已有成功/unchanged，因此 Run partial。下一 Run 按自己的配置和扫描独立规划，旧结果不变。 |
+| 下载中途断开                             | 从已写好的最后一块用 Range 接着下载，不用中止上传；源大小变了则中止该文件并记失败                                                                        |
+| 本地磁盘快满                             | 下载暂停，等上传释放空间；只有真实写盘失败才报错                                                                                                         |
+| OpenList 执行前明确拒绝（如 403 无权限） | Operation 记为 failed，不当作文件缺失                                                                                                                    |
+| OpenList 已处理但返回错误                | 做一次有界的 refresh 观察：已生效记成功；原状态未变记可重试的失败；无法判断记 unknown                                                                    |
+| 某个 Target 扫描不完整                   | 该 Target 的所有删除（含替换）都被禁止，已确认的新建仍可执行；Run 为 partial                                                                             |
+| 服务重启或收到 SIGTERM                   | 不续跑旧计划、不续传；重启后有界收尾已知的上传会话和 task，Run 记为 interrupted（stopReason=PROCESS_RESTART）；下一次 cron 或手动 Run 重新扫描           |
+| 用户取消                                 | 停止派发，中止上传会话、对已知 task 请求取消，宽限期内仍未确认结果的动作记 unknown；Run 为 cancelled                                                     |
 
 各情况的完整规则见[状态机](state-machines.md)、[调度与恢复](scheduling-recovery.md)和[时序](sequences.md)。

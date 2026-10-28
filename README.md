@@ -35,10 +35,10 @@
 - **定时或手动同步**：按 cron 表达式定时运行，也可以手动触发。每次运行比较源目录和目标目录中文件的名称、类型和大小，新建目标缺失的文件，替换大小发生变化的文件。
 - **两种目标模式**：`incremental` 只新增和替换文件；`mirror` 还会删除目标上源目录中没有的文件。
 - **跨实例传输**：默认由本服务边下载边分片上传，适用于任意两个 OpenList 实例；源和目标在同一实例时，也可以改用 OpenList 自带的服务端复制。
-- **删除保护**：支持 dry-run 预览、删除数量和比例阈值；扫描不完整时禁止删除；结果不明的路径会被暂时隔离，不再写入。
+- **删除保护**：支持 dry-run 预览、删除数量和比例阈值；扫描不完整时禁止删除；本轮结果未知时不重试，后续运行按自己的扫描独立规划。
 - **安全**：单管理员登录（JWT）；保存的 OpenList 凭据用 AES-256-GCM 加密存储。
 - **管理与集成**：REST API 加 OpenAPI 文档，提供 Docker 镜像。Webhook 通知和配置导入导出计划中。
-- **Web 控制台**：提供深色概览、管理员登录与改密、实例配置和目录浏览、任务配置与触发、运行监控及未知操作管理，支持中文和英文界面。概览使用现有 API 的分页数据，并标注统计范围。
+- **Web 控制台**：提供深色概览、管理员登录与改密、实例配置和目录浏览、任务配置与触发、运行监控及操作历史查看，支持中文和英文界面。概览使用现有 API 的分页数据，并标注统计范围。
 
 明确不做的事：
 
@@ -53,7 +53,7 @@
 | M0      | 基础设施：配置、数据库、管理员认证、密钥、健康检查、API 文档 | 已完成           |
 | M1      | OpenList 客户端与实例管理                                    | 已完成           |
 | M2      | 扫描、规划与 dry-run 预览                                    | 已实现           |
-| M3a/M3b | relay新建/替换、Mirror、取消/隔离与恢复                      | 已实现           |
+| M3a/M3b | relay新建/替换、Mirror、取消、未知历史与恢复                 | 已实现           |
 | M4      | cron、启停与next-fire/DST                                    | 已实现           |
 | M5      | 历史记录保留                                                 | 已实现           |
 | M6      | 同实例服务端复制                                             | 已实现           |
@@ -173,7 +173,7 @@ curl -X POST http://localhost:3000/api/v1/auth/login \
 
 Job保存五段cron（IANA时区，默认UTC）后，`POST /jobs/:id/enable`启用定时、`POST /jobs/:id/disable`停用；两者运行期间也可调用，不影响已开始的运行，停用后仍可手动运行。`GET /jobs/:id/next-fire-times?count=5`返回接下来的触发时间（UTC，附Job时区），很稀疏的表达式可能少于count。迟到的定时只补跑一次，服务停机期间错过的不补跑。
 
-`POST /api/v1/jobs/:id/runs`默认`dryRun=false`；预览须显式传`true`。真实执行按各Target的`createMode`新建文件：`relay`（默认）由本服务下载再分片上传；`server_copy`调用OpenList服务端复制并逐个跟踪其后台任务，要求选择server_copy的目标与源使用同一Instance ID。`POST /runs/:id/cancel`取消运行；`GET /operations`支持`unresolved`过滤；`POST /operations/:id/quarantine-release`提前释放隔离，`POST /operations/:id/resolve`以abandoned结束责任。释放/放弃不证明远端旧请求已停止。
+`POST /api/v1/jobs/:id/runs`默认`dryRun=false`；预览须显式传`true`。真实执行按各Target的`createMode`新建文件：`relay`（默认）由本服务下载再分片上传；`server_copy`调用OpenList服务端复制并逐个跟踪其后台任务，要求选择server_copy的目标与源使用同一Instance ID。`POST /runs/:id/cancel`取消运行；`GET /operations?status=unknown`查询未知历史。后续 Run 不因历史结果按路径跳过；未结束的已知 copy task 仍占用 Target 并发额度。取消/abort 不保证云端动作已经停止，后续扫描也无法发现同大小内容错误或自动修复类型冲突，见[未知结果与迟到副作用](docs/adr/0004-unknown-outcomes.md)。
 
 连续登录失败会被限流：默认 15 分钟内失败 5 次后，接口返回 429 并带上 `Retry-After` 响应头。完整接口规范见 [REST API](docs/reference/rest-api.md)。
 

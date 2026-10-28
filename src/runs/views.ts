@@ -224,7 +224,6 @@ export function operationView(
     affectedFileCount: row.affectedFileCount,
     affectedBytes: row.affectedBytes,
     retryOf: row.retryOf,
-    causedByOperationId: row.causedByOperationId,
     attemptNo: row.attemptNo,
     task:
       row.openlistTaskId === null
@@ -251,18 +250,5 @@ export function operationView(
     submittedAt: time(row.submittedAt),
     endedAt: time(row.endedAt),
     unknownSince: time(row.unknownSince),
-    unknownUntil: time(row.unknownUntil),
-    quarantineReleasedAt: time(row.quarantineReleasedAt),
-    quarantineReleaseReason: row.quarantineReleaseReason,
-    reobservedAt: time(row.reobservedAt),
-    resolution:
-      row.resolutionKind === null
-        ? null
-        : {
-            kind: row.resolutionKind,
-            note: row.resolutionNote,
-            resolvedAt: time(row.resolvedAt),
-            runId: row.resolvedByRunId,
-          },
   };
 }

@@ -89,7 +89,7 @@ export function activeRunReference(
       .get() !== undefined
   );
 }
-/** 统一未决责任：非终态 Run、未解决 unknown 或待清理远程任务。
+/** 统一活动责任：非终态 Run 或待删除的远程任务记录；历史 unknown 不占用实例。
  * @param db 数据库或事务。
  * @param instanceId 实例 ID。
  * @returns 是否承担责任。
@@ -104,19 +104,12 @@ export function hasResponsibility(
     eq(operations.sourceInstanceId, instanceId),
     eq(operations.targetInstanceId, instanceId),
   );
-  // 两类事实分开查询，分别命中 (status, unknown_until) 与 remote_cleanup_pending 索引，避免扫描全部历史。
-  for (const pending of [
-    and(eq(operations.status, 'unknown'), isNull(operations.resolutionKind)),
-    eq(operations.remoteCleanupPending, true),
-  ])
-    if (
-      db
-        .select({ id: operations.id })
-        .from(operations)
-        .where(and(pending, endpoint))
-        .limit(1)
-        .get() !== undefined
-    )
-      return true;
-  return false;
+  return (
+    db
+      .select({ id: operations.id })
+      .from(operations)
+      .where(and(eq(operations.remoteCleanupPending, true), endpoint))
+      .limit(1)
+      .get() !== undefined
+  );
 }

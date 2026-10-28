@@ -1,5 +1,5 @@
 // 按逻辑动作最后attempt聚合执行结果，传输字节仍累计全部尝试。
-import { and, asc, eq, gt, isNull, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, sql } from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { operations } from '../database/operation-schema.js';
 import { runTargets } from '../database/run-schema.js';
@@ -67,7 +67,7 @@ export function liveRunResult(db: BetterSQLite3Database, run: RunRecord) {
               AND newer.attempt_no > o.attempt_no
           ) AS latest
         FROM operations AS o
-        WHERE o.run_id = ${run.id} AND o.caused_by_operation_id IS NULL
+        WHERE o.run_id = ${run.id} AND o.error_code IS NOT 'REMOTE_TASK_CHANGED'
       ),
       reasons AS MATERIALIZED (
         SELECT run_target_id, coalesce(error_code, 'DEPENDENCY_FAILED') AS code, min(seq) AS first_seq
@@ -195,7 +195,7 @@ export function targetResult(
         and(
           eq(operations.runTargetId, target.id),
           gt(operations.seq, after),
-          isNull(operations.causedByOperationId),
+          sql`${operations.errorCode} IS NOT 'REMOTE_TASK_CHANGED'`,
         ),
       )
       .orderBy(asc(operations.seq))

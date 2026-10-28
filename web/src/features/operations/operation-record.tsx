@@ -1,9 +1,8 @@
-// 操作详情的记录部分：错误横幅、生命周期时间线、标识与传输事实规格表、处置结果。
+// 操作详情的记录部分：错误横幅、生命周期时间线、标识与传输事实规格表。
 import { CircleAlert } from 'lucide-react';
 import { Link } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { ScrambleText } from '../../components/motion/scramble-text';
-import { Badge } from '../../components/ui/badge';
 import { SpecGrid } from '../../components/ui/spec-grid';
 import type { SpecItem } from '../../components/ui/spec-grid';
 import { Timeline } from '../../components/ui/timeline';
@@ -49,7 +48,7 @@ export function OperationError({
   );
 }
 
-/** 渲染生命周期时间线；隔离相关节点只在出现过未知结果时显示。
+/** 渲染生命周期时间线；保留首次记录未知结果的时间。
  * @param props op 操作视图。
  * @returns 时间线。
  * @throws 不适用。
@@ -66,43 +65,11 @@ export function OperationTimeline({ op }: { op: OperationView }) {
       tone: op.status === 'failed' ? 'danger' : undefined,
     },
   ];
-  if (op.unknownSince) {
-    items.push(
-      {
-        label: t('detail.lifecycle.unknownSince'),
-        time: time(op.unknownSince),
-        tone: 'danger',
-      },
-      {
-        label: t('detail.lifecycle.unknownUntil'),
-        time: time(op.unknownUntil),
-        tone: 'warning',
-      },
-    );
-  }
-  if (op.quarantineReleasedAt)
+  if (op.unknownSince)
     items.push({
-      label: t('detail.lifecycle.quarantineReleased'),
-      time: time(op.quarantineReleasedAt),
-      tone: 'warning',
-      note: op.quarantineReleaseReason
-        ? t('detail.lifecycle.releaseReason', {
-            reason: op.quarantineReleaseReason,
-          })
-        : undefined,
-    });
-  if (op.reobservedAt)
-    items.push({
-      label: t('detail.lifecycle.reobserved'),
-      time: time(op.reobservedAt),
-    });
-  if (op.resolution)
-    items.push({
-      label: t('detail.lifecycle.resolved', {
-        kind: t(`detail.resolution.kind.${op.resolution.kind}`),
-      }),
-      time: time(op.resolution.resolvedAt),
-      tone: op.resolution.kind === 'abandoned' ? 'warning' : 'success',
+      label: t('detail.lifecycle.unknownSince'),
+      time: time(op.unknownSince),
+      tone: 'danger',
     });
   return <Timeline items={items} />;
 }
@@ -189,17 +156,6 @@ export function OperationFacts({ op }: { op: OperationView }) {
       value: <IdLink to={`/operations/${op.retryOf}`} id={op.retryOf} />,
       mono: true,
     });
-  if (op.causedByOperationId)
-    items.push({
-      label: t('detail.record.causedBy'),
-      value: (
-        <IdLink
-          to={`/operations/${op.causedByOperationId}`}
-          id={op.causedByOperationId}
-        />
-      ),
-      mono: true,
-    });
   if (op.task)
     items.push({
       label: t('detail.record.remoteTask'),
@@ -241,55 +197,4 @@ export function OperationFacts({ op }: { op: OperationView }) {
       },
     );
   return <SpecGrid items={items} columns={3} />;
-}
-
-/** 渲染处置结果：类型、备注、时间与确认它的运行。
- * @param props resolution 处置结果。
- * @returns 处置信息。
- * @throws 不适用。
- */
-export function ResolutionBlock({
-  resolution,
-}: {
-  resolution: NonNullable<OperationView['resolution']>;
-}) {
-  const { t } = useTranslation('operations');
-  const variant =
-    resolution.kind === 'observed'
-      ? 'success'
-      : resolution.kind === 'superseded'
-        ? 'info'
-        : 'warning';
-  return (
-    <div>
-      <Badge variant={variant}>
-        {t(`detail.resolution.kind.${resolution.kind}`)}
-      </Badge>
-      {resolution.note && (
-        <blockquote className="serif-accent mt-5 border-l border-accent/40 pl-5 text-xl leading-relaxed">
-          {resolution.note}
-        </blockquote>
-      )}
-      <SpecGrid
-        className="mt-6"
-        columns={2}
-        items={[
-          {
-            label: t('detail.resolution.at'),
-            value: formatTimeFull(resolution.resolvedAt),
-            mono: true,
-          },
-          {
-            label: t('detail.resolution.byRun'),
-            value: resolution.runId ? (
-              <IdLink to={`/runs/${resolution.runId}`} id={resolution.runId} />
-            ) : (
-              NONE
-            ),
-            mono: true,
-          },
-        ]}
-      />
-    </div>
-  );
 }

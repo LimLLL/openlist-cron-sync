@@ -1,4 +1,4 @@
-用途：定义Run、Operation、隔离释放与未知结果处理接口。
+用途：定义 Run 执行与只读 Operation 历史接口。
 
 范围：全部需要管理JWT；模型见[API schemas](api-schemas.md)，不提供任意远程删除或旧计划重放API。
 
@@ -6,23 +6,21 @@
 
 ## 路由
 
-| 方法/路径                               | 请求/查询                                                       | 成功响应                                  |
-| --------------------------------------- | --------------------------------------------------------------- | ----------------------------------------- |
-| POST /jobs/:id/runs                     | {dryRun?:boolean=false,confirmDeletes?:boolean=false}           | 202 RunView，Location=/api/v1/runs/:runId |
-| GET /runs                               | page,pageSize,jobId?,status?,dryRun?                            | 200 Page<RunView>                         |
-| GET /runs/:id                           | 无                                                              | 200 RunDetail                             |
-| POST /runs/:id/cancel                   | {}                                                              | 202 RunView；已终态200现有Run             |
-| GET /runs/:id/operations                | page,pageSize,status?,action?,includeMaintenance?:boolean=false | 200 Page<OperationView>                   |
-| GET /runs/:id/issues                    | page,pageSize                                                   | 200 Page<ScanIssueView>                   |
-| GET /operations/:id                     | 无                                                              | 200 OperationView                         |
-| GET /operations                         | page,pageSize,status?,instanceId?,unresolved?:boolean           | 200 Page<OperationView>                   |
-| POST /operations/:id/quarantine-release | {reason:string}                                                 | 200 OperationView                         |
-| POST /operations/:id/resolve            | {kind:'abandoned',reason:string}                                | 200 OperationView                         |
+| 方法/路径                | 请求/查询                                                       | 成功响应                                  |
+| ------------------------ | --------------------------------------------------------------- | ----------------------------------------- |
+| POST /jobs/:id/runs      | {dryRun?:boolean=false,confirmDeletes?:boolean=false}           | 202 RunView，Location=/api/v1/runs/:runId |
+| GET /runs                | page,pageSize,jobId?,status?,dryRun?                            | 200 Page<RunView>                         |
+| GET /runs/:id            | 无                                                              | 200 RunDetail                             |
+| POST /runs/:id/cancel    | {}                                                              | 202 RunView；已终态200现有Run             |
+| GET /runs/:id/operations | page,pageSize,status?,action?,includeMaintenance?:boolean=false | 200 Page<OperationView>                   |
+| GET /runs/:id/issues     | page,pageSize                                                   | 200 Page<ScanIssueView>                   |
+| GET /operations/:id      | 无                                                              | 200 OperationView                         |
+| GET /operations          | page,pageSize,status?,instanceId?                               | 200 Page<OperationView>                   |
 
-reason要求1–1000字符，禁止只有空白。分页和错误格式继承[REST](rest-api.md)，error code取值见[固定原因码](rest-api.md#reason-codes)。没有Operation直接retry API；请求新Run重新扫描，自动有限attempt由执行器负责。
-Operation列表按(runId,seq)升序，seq是Run内的计划顺序。includeMaintenance=false时不返回维护循环挂在该Run下的REMOTE_TASK_CHANGED隔离记录；GET /operations不按此过滤。
+分页和错误格式继承[REST](rest-api.md)，error code取值见[固定原因码](rest-api.md#reason-codes)。没有Operation直接retry API；请求新Run重新扫描，自动有限attempt由执行器负责。
+Operation列表按(runId,seq)升序，seq是Run内的计划顺序。includeMaintenance=false时不返回旧版本留下的 REMOTE_TASK_CHANGED 历史记录；GET /operations不按此过滤。
 
-默认dryRun=false，支持relay与server_copy真实执行、取消及unknown管理；dry-run仅规划。
+默认dryRun=false，支持relay与server_copy真实执行、取消及 unknown 历史查询；dry-run仅规划。
 
 ## 手动执行
 
@@ -32,7 +30,6 @@ confirmDeletes只在该Run有效，不修改Job保存值。它只跳过每个Tar
 - 扫描完整性与suspect视图、挂载边界；
 - 空源保护（allowEmptySource）；
 - 名称/类型碰撞及受保护后代；
-- 未决unknown隔离与重新观察；
 - PLAN_INVALID。
 
 dryRun=true且confirmDeletes=true只展示跳过阈值后的计划，仍没有远程文件变更。
@@ -40,27 +37,18 @@ dryRun=true且confirmDeletes=true只展示跳过阈值后的计划，仍没有�
 
 取消：非终态Run返回202并写cancelRequestedAt，重复请求不重复发送远程cancel或abort。recovering Run同样返回202，但只写cancelRequestedAt，并对仍未终态的已知task每进程最多尝试一次cancel（崩溃后允许重复）；该Run最终仍为interrupted（stopReason=PROCESS_RESTART），不会变为cancelled。完整转换见[取消与超时](../design/scheduling-recovery.md#取消与超时)。
 
-## 两种管理动作的区别
+## 未知结果
 
-| 动作                        | 改变                                                                                                                                                                                                                                               | 不改变                                                 |
-| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
-| quarantine-release          | 写quarantineReleasedAt及原因；隔离提前结束，路径进入reobserve_required                                                                                                                                                                             | 不改Operation.status，不写resolution，不直接写远程文件 |
-| operation.resolve abandoned | 写独立resolution（kind=abandoned，note=reason）；对unknown行，quarantineReleasedAt为空时同一事务写入当前时间及reason，并结束该记录；该Operation不再计入unknown责任，也不再要求重新观察；remote_cleanup_pending及task额度由维护器按当前责任分类处理 | 不改status，不修复或回滚目标                           |
-
-quarantine-release一个unknown之后，任何要写受影响路径或删除其祖先的非dry-run Run，都必须先用refresh=true读取全部受影响父目录，成功后才写reobservedAt；读取失败则本轮不写这些路径。规则见[Unknown隔离](../design/scheduling-recovery.md#unknown隔离)，派生状态见[辅助状态](../design/state-machines.md#auxiliary-states)。
-
-quarantine-release仅允许status=unknown且无resolution；重复release返回200现有结果，不延长/重置期限。其他状态409 INVALID_STATE。
-operation.resolve只接受status=unknown且无resolution的Operation。对已abandoned的同一Operation重复请求返回200现有对象，不覆盖已存note。已有observed/superseded resolution或不属于上述对象时409 INVALID_STATE。有活动Run占用受影响路径时409 PATH_BUSY。
-人工resolve不保证旧请求已停止，与隔离到期接受同一迟到写入风险（见[ADR 0004](../adr/0004-quarantine-expiry.md)）；必须在UI/API描述里写明。凭据修复、取消请求和隔离释放不是一个动作。
+unknown 只作为本次尝试的历史结果，不提供管理动作或直接重试接口。需要同步时触发新的 Run，它按自己的配置和扫描规划；不改旧结果，不额外强制 refresh。旧请求仍可能迟到生效，见[ADR 0004](../adr/0004-unknown-outcomes.md)。
 
 ## 查询与进度
 
-Operation未知列表用status=unknown&unresolved=true；已resolution但历史unknown仍能用status=unknown查到。不要用状态成功数推算它们已被改写。
-Stats排除caused_by_operation_id非空的维护Operation，含Run尚未终态时的聚合及extras判断。Stats在Run终态固定；后续resolution只改变其独立记录，不改变历史同步统计或重发终态通知。
+Operation 未知列表使用 status=unknown，可按 instanceId 过滤；历史结果不因后续 Run 成功而改写。
+Stats 按 error.code=REMOTE_TASK_CHANGED 排除旧版维护记录，含活动 Run 聚合和 extras 判断。Stats 在 Run 终态固定；维护只更新 task 事实，不改变历史同步结果或重发终态通知。
 GET /runs/:id在planned/executing/cancelling/recovering时用单条SQL聚合每个Target的当前执行统计，规则与终态聚合一致；queued/scanning显示已持久化的规划统计。issueCount读取已提交的scan_issues。下载及上传字节约每5秒持久化，因此长单文件上传中也会增长；不是逐字节更新。payload全部发送完成后刷新最终字节并停止周期写入，complete等待仍保留心跳；源EOF释放配额不等于Operation成功，也不提前持久化上传的EOF检查点。聚合超出安全整数返回HTTP 500 RESOURCE_LIMIT，不通过读取改变Run状态。GET /runs列表及触发/取消返回的RunView仍为持久化摘要，详情轮询使用GET /runs/:id。
 RunDetail.sourceInstanceName、targets[].instanceName以及操作响应的sourceInstanceName/targetInstanceName按冻结名称、当前（含归档）实例名、8字符Instance ID前缀解析；操作没有源端时sourceInstanceName为null。所有原始ID仍返回。操作过滤的“全部”对应省略status/action，不能发送all；翻页参数仍为page/pageSize。
 RunDetail.config只包含当时有效的脱敏值；路径密码和download sign从不展示。
-轮询建议3s，允许客户端退避；MVP没有SSE、WS、按字节实时数据库更新承诺。
+活动操作轮询建议 3s，终态 unknown 不持续轮询；允许客户端退避；MVP没有SSE、WS、按字节实时数据库更新承诺。
 
 ## 例子
 
@@ -70,11 +58,4 @@ RunDetail.config只包含当时有效的脱敏值；路径密码和download sign
 
 这是一次完整扫描预览请求，不产生可直接执行的审批产物。后续实跑再次POST并设dryRun=false。
 
-```json
-{
-  "kind": "abandoned",
-  "reason": "已在OpenList中确认该路径状态，不再跟踪这次未知结果"
-}
-```
-
-这是结束一条unknown记录的请求；不能用于表示“云端复制已经被校验”。
+查看未知历史使用 `GET /operations?status=unknown`。

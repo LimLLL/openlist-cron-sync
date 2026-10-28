@@ -49,16 +49,16 @@ OpenList 行为依据 OpenList v4.2.6 系列源码（上游 main 分支 2026-09 
 | [configuration-tables.md](design/configuration-tables.md)               | 给出管理员、实例、Job、Target及通知配置的完整存储字段                                 |
 | [data-model.md](design/data-model.md)                                   | 定义 SQLite/Drizzle 的公共类型、约束、事务和表关系                                    |
 | [deployment.md](design/deployment.md)                                   | 规定单进程容器部署、数据持久化、升级和恢复操作                                        |
-| [execution-tables.md](design/execution-tables.md)                       | 定义运行计划、操作结果、隔离及保留责任的持久化结构                                    |
+| [execution-tables.md](design/execution-tables.md)                       | 定义运行计划、操作结果、远程任务及保留责任的持久化结构                                |
 | [filters-paths.md](design/filters-paths.md)                             | 定义路径、过滤、名称碰撞和类型冲突的确定性规则                                        |
 | [observability-notifications.md](design/observability-notifications.md) | 定义运行统计、结构化日志和可验证的Webhook协议                                         |
 | [openlist-integration.md](design/openlist-integration.md)               | 定义 OpenList client 的认证、路径、错误、任务和缓存契约，并规定变更请求结果的分类规则 |
 | [relay.md](design/relay.md)                                             | 定义 createMode=relay（下载上传）的分片流水线、资源、字节规则和结果分类               |
 | [requirements.md](design/requirements.md)                               | 定义 openlist-cron-sync 的实现范围、对外保证和已接受风险                              |
 | [deletion.md](design/deletion.md)                                       | 规定所有替换和镜像删除的保护条件、阈值公式及依赖阻断行为                              |
-| [scheduling-recovery.md](design/scheduling-recovery.md)                 | 定义触发、资源互斥、取消、重启与未知副作用隔离的行为                                  |
+| [scheduling-recovery.md](design/scheduling-recovery.md)                 | 定义触发、资源互斥、取消、重启与未知结果历史的行为                                    |
 | [security.md](design/security.md)                                       | 规定管理员认证、秘密存储、网络出口和日志保密边界                                      |
-| [sequences.md](design/sequences.md)                                     | 用事件顺序明确正常、预览、失败、中断及隔离释放的因果关系                              |
+| [sequences.md](design/sequences.md)                                     | 用事件顺序明确正常、预览、失败、中断及后续运行的因果关系                              |
 | [state-machines.md](design/state-machines.md)                           | 提供 Run、Operation 及辅助生命周期的唯一规范枚举和转换条件                            |
 | [sync-engine.md](design/sync-engine.md)                                 | 定义持久化三阶段同步管线及每类输入的执行出口                                          |
 | [retention.md](design/retention.md)                                     | 定义维护任务的调度，以及SQLite历史记录的保留与清理                                    |
@@ -67,7 +67,7 @@ OpenList 行为依据 OpenList v4.2.6 系列源码（上游 main 分支 2026-09 
 
 | 文件                                                         | 一句话用途                                                 |
 | ------------------------------------------------------------ | ---------------------------------------------------------- |
-| [api-execution.md](reference/api-execution.md)               | 定义Run、Operation、隔离释放与未知结果处理接口             |
+| [api-execution.md](reference/api-execution.md)               | 定义Run 执行与只读 Operation 历史接口                      |
 | [api-schemas.md](reference/api-schemas.md)                   | 定义REST公共数据形状、字段必填性、校验与序列化规则         |
 | [configuration.md](reference/configuration.md)               | 集中定义可调默认值、单位、验证范围及其理由                 |
 | [driver-compatibility.md](reference/driver-compatibility.md) | 解释驱动兼容矩阵的来源、分类及产品策略                     |
@@ -92,7 +92,7 @@ OpenList 行为依据 OpenList v4.2.6 系列源码（上游 main 分支 2026-09 
 | [0001-persisted-plan.md](adr/0001-persisted-plan.md)               | 记录持久化三阶段计划的取舍与后果                            |
 | [0002-single-process-sqlite.md](adr/0002-single-process-sqlite.md) | 记录单进程SQLite的取舍与后果                                |
 | [0003-delete-create.md](adr/0003-delete-create.md)                 | 记录先删除再创建的替换的取舍与后果                          |
-| [0004-quarantine-expiry.md](adr/0004-quarantine-expiry.md)         | 记录未知结果的限时路径隔离的取舍与后果                      |
+| [0004-unknown-outcomes.md](adr/0004-unknown-outcomes.md)           | 记录未知结果只保留历史、后续运行独立规划的取舍              |
 | [0005-openlist-success.md](adr/0005-openlist-success.md)           | 记录server_copy模式统一采用OpenList复制成功语义的取舍与后果 |
 | [0006-create-mode.md](adr/0006-create-mode.md)                     | 记录每个 Target 独立选择创建方式的取舍与后果                |
 | [0007-relay.md](adr/0007-relay.md)                                 | 记录分片流水线 relay 的取舍与后果                           |

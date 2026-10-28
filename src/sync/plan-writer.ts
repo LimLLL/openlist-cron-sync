@@ -10,7 +10,6 @@ import { runs, runTargets, scanIssues } from '../database/run-schema.js';
 import type { RunRecord, RunTargetRecord } from '../database/run-schema.js';
 import { addStat, emptyStats, PlanError } from './stats.js';
 import type { Stats } from './stats.js';
-import type { QuarantineObserver } from './quarantine-observer.js';
 import type { Entry } from './planner.js';
 
 /** 扫描期间每目标的有界累计状态。 */
@@ -54,7 +53,6 @@ export class PlanWriter {
    * @param run 固定运行记录。
    * @param targets 所有目标累计值。
    * @param signal 扫描停止信号。
-   * @param quarantine 当前Run的分页隔离检查与强制观察能力。
    * @returns 不适用。
    * @throws 不适用。
    */
@@ -63,7 +61,6 @@ export class PlanWriter {
     readonly run: RunRecord,
     readonly targets: TargetState[],
     private readonly signal: AbortSignal,
-    readonly quarantine: QuarantineObserver,
   ) {}
   /** 追加计划，seq 是整个 Run 的持久化顺序。
    * @param target 目标累计值。
@@ -74,7 +71,6 @@ export class PlanWriter {
    * @param sourcePath create 的源路径。
    * @param old 目标原条目。
    * @param dependencies 已规划的必要依赖。
-   * @param blocked 该候选是否因隔离记录为skipped。
    * @returns 新操作 ID。
    * @throws PlanError 超限；Error 数据库或依赖失败。
    */
@@ -87,7 +83,6 @@ export class PlanWriter {
     sourcePath?: string,
     old?: Entry,
     dependencies: string[] = [],
-    blocked = false,
   ): string {
     this.signal.throwIfAborted();
     if (this.operationCount >= this.run.config.settings.maxOperationsPerRun)
@@ -125,20 +120,10 @@ export class PlanWriter {
         affectedBytes: isDir ? 0 : (size ?? 0),
         createdAt: now,
         updatedAt: now,
-        status: blocked ? 'skipped' : 'pending',
-        endedAt: blocked ? now : null,
-        errorCode: blocked ? 'PREVIOUS_OUTCOME_UNKNOWN' : null,
-        errorMessage: blocked ? 'PREVIOUS_OUTCOME_UNKNOWN' : null,
+        status: 'pending',
       },
       dependencies,
     });
-    if (
-      blocked &&
-      !target.row.blockReasons.includes('PREVIOUS_OUTCOME_UNKNOWN')
-    ) {
-      target.row.blockReasons.push('PREVIOUS_OUTCOME_UNKNOWN');
-      target.row.extrasBlocked = true;
-    }
     if (action === 'create') {
       addStat(target.row.stats, 'plannedCreates');
       addStat(target.row.stats, 'plannedBytes', source?.size ?? 0);
@@ -178,7 +163,6 @@ export class PlanWriter {
       undefined,
       undefined,
       parent ? [parent] : [],
-      !(await this.quarantine.allows(target.row, directory.path, 'mkdir')),
     );
     if (
       this.run.dryRun &&

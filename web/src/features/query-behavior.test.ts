@@ -18,7 +18,6 @@ import {
   useRunOperations,
   useRuns,
 } from './runs/run-queries';
-import { useResolveOperation } from './operations/operation-queries';
 
 /** 需要捕获的查询 hook 参数。 */
 interface QueryOptions {
@@ -135,18 +134,6 @@ describe('cross-page query behavior', () => {
     expect(
       client.getQueryState(['dashboard', 'instances'])?.isInvalidated,
     ).toBe(true);
-  });
-  it('refreshes run operations and dashboard attention after resolving an operation', () => {
-    const keys = [
-      ['operations', 'list'],
-      ['runs', 'run', 'operations', 'page=1', 'failed'],
-      ['dashboard', 'unresolved-operations'],
-    ];
-    for (const key of keys) client.setQueryData(key, {});
-    useResolveOperation();
-    mutation().onSuccess({ id: 'op', runId: 'run' }, { id: 'op' });
-    for (const key of keys)
-      expect(client.getQueryState(key)?.isInvalidated).toBe(true);
   });
   it('loads picker options beyond the first 200 instances and forwards cancellation', async () => {
     capture.request

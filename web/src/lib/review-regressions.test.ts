@@ -75,29 +75,18 @@ describe('review regressions', () => {
   it('does not accept incomplete records as valid run or operation data', () => {
     expect(() => parseRunView({ id: 'run', status: 'executing' })).toThrow();
     expect(() =>
-      parseOperation({ id: 'operation', status: 'unknown', resolution: {} }),
+      parseOperation({ id: 'operation', status: 'unknown' }),
     ).toThrow();
   });
-  it('polls active or unresolved operations and stops after resolution', () => {
-    expect(operationNeedsPolling({ status: 'running', resolution: null })).toBe(
-      true,
-    );
-    expect(operationNeedsPolling({ status: 'unknown', resolution: null })).toBe(
-      true,
-    );
-    expect(
-      operationNeedsPolling({ status: 'succeeded', resolution: null }),
-    ).toBe(false);
-    expect(
-      operationNeedsPolling({
-        status: 'unknown',
-        resolution: {
-          kind: 'abandoned',
-          note: 'Reviewed',
-          resolvedAt: '2026-01-01',
-          runId: null,
-        },
-      }),
-    ).toBe(false);
+  it('polls active operations but leaves terminal unknown outcomes as history', () => {
+    expect(operationNeedsPolling({ status: 'running' })).toBe(true);
+    for (const status of [
+      'unknown',
+      'succeeded',
+      'failed',
+      'cancelled',
+      'skipped',
+    ] as const)
+      expect(operationNeedsPolling({ status })).toBe(false);
   });
 });

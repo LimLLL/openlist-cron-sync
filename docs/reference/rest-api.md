@@ -25,7 +25,6 @@ Error={error:{code:string,message:string,details:FieldError[]},requestId:string}
 | 409  | PATH_OVERLAP                                          | 同Job的source与targets、或targets之间路径重叠             |
 | 409  | AUTH_COOLDOWN                                         | OpenList登录429冷却期内的人工重试                         |
 | 409  | INVALID_STATE                                         | 对象当前状态不允许该动作                                  |
-| 409  | PATH_BUSY                                             | 活动Run正占用相关路径，operation resolve暂不可执行        |
 | 409  | URL_REVIEW_REQUIRED                                   | Webhook URL待复核（needsUrlReview=true）时请求启用channel |
 | 413  | PAYLOAD_TOO_LARGE                                     | 管理JSON/import上限                                       |
 | 429  | LOGIN_RATE_LIMITED                                    | 本服务登录限流，返回Retry-After秒                         |
@@ -62,28 +61,28 @@ Error={error:{code:string,message:string,details:FieldError[]},requestId:string}
 | DELETE_BLOCKED              | 扫描保护阻断的Target删除及依赖create；具体原因在RunTarget.blockReasons及scan_issues；不改变planned计数                                                                                                                |
 | DELETE_LIMIT                | 超过数量/比例阈值，或retry_cleanup超出剩余预算；相关delete及其依赖create跳过                                                                                                                                          |
 | PLAN_INVALID                | 计划内部断言失败（例如R>D）；按实现缺陷记录日志，只记录scan_issue；该Target的删除及依赖create以DELETE_BLOCKED跳过                                                                                                     |
-| PREVIOUS_OUTCOME_UNKNOWN    | 路径受未决unknown保护：隔离仍active，或到期/释放后的重新观察读取失败                                                                                                                                                  |
+| PREVIOUS_OUTCOME_UNKNOWN    | 旧版本因历史结果未知而跳过路径的记录；当前版本不再产生，旧结果保持原样                                                                                                                                                |
 
 ### 执行
 
-| code                        | 含义                                                                                                                                           |
-| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| PRECONDITION_CHANGED        | 删除提交前刷新发现目标大小/类型已变化，或待清理的空目录已非空；不提交该动作                                                                    |
-| PRECONDITION_UNVERIFIED     | 删除提交前的刷新无法确认（错误、403、suspect视图或父目录无法确认）；不提交该动作，依赖create记DEPENDENCY_FAILED                                |
-| PRECONDITION_ALREADY_ABSENT | 待删除的原路径已不存在；属于正常跳过，不阻断依赖create                                                                                         |
-| SOURCE_CHANGED              | 执行时源条目的名称/类型/大小与计划不符                                                                                                         |
-| SIZE_MISMATCH               | relay源实际字节数、下载长度或Content-Range与计划大小不符                                                                                       |
-| SPOOL_FULL                  | 写spool遇到ENOSPC/EDQUOT，或session落库后当前独占预算仍不足以容纳frontier实际payload；摘要区分insufficient spool capacity，主动abort后failed   |
-| SPOOL_IO_ERROR              | 写或读spool时遇到其他本地I/O错误；该文件按主动abort收尾记failed                                                                                |
-| DEPENDENCY_FAILED           | 依赖动作以非成功终态结束                                                                                                                       |
-| DELETE_NOT_EFFECTIVE        | delete确认期限内原名称仍存在；依赖create跳过，从不改用overwrite                                                                                |
-| OBSERVED_AFTER_ERROR        | OpenList对变更返回非成功码，但随后一次有界观察确认效果已出现；Operation记succeeded，message保留原错误摘要                                      |
-| REMOTE_TASK_CHANGED         | 已终态Operation的远程task被管理员在OpenList中重试并再次运行；维护循环新建unknown Operation（causedByOperationId指向原Operation）并隔离相关路径 |
-| AUTH_BLOCKED                | Instance处于auth_blocked，相关请求立即失败                                                                                                     |
-| OPENLIST_ERROR              | 未被专用原因码覆盖的上游失败；响应错误码或网络事实只进入脱敏摘要，不按message猜测业务状态                                                      |
-| UPSTREAM_REDIRECT           | 管理API、multipart或put收到重定向；不跟随，也不重放上传body                                                                                    |
-| UPSTREAM_JSON_TOO_LARGE     | 上游JSON响应实际字节超限的客户端事实；扫描映射Run RESOURCE_LIMIT，浏览HTTP仍为502 UPSTREAM_PROTOCOL_ERROR                                      |
-| UPSTREAM_PROTOCOL_ERROR     | OpenList响应结构未知或不符合协议                                                                                                               |
+| code                        | 含义                                                                                                                                         |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| PRECONDITION_CHANGED        | 删除提交前刷新发现目标大小/类型已变化，或待清理的空目录已非空；不提交该动作                                                                  |
+| PRECONDITION_UNVERIFIED     | 删除提交前的刷新无法确认（错误、403、suspect视图或父目录无法确认）；不提交该动作，依赖create记DEPENDENCY_FAILED                              |
+| PRECONDITION_ALREADY_ABSENT | 待删除的原路径已不存在；属于正常跳过，不阻断依赖create                                                                                       |
+| SOURCE_CHANGED              | 执行时源条目的名称/类型/大小与计划不符                                                                                                       |
+| SIZE_MISMATCH               | relay源实际字节数、下载长度或Content-Range与计划大小不符                                                                                     |
+| SPOOL_FULL                  | 写spool遇到ENOSPC/EDQUOT，或session落库后当前独占预算仍不足以容纳frontier实际payload；摘要区分insufficient spool capacity，主动abort后failed |
+| SPOOL_IO_ERROR              | 写或读spool时遇到其他本地I/O错误；该文件按主动abort收尾记failed                                                                              |
+| DEPENDENCY_FAILED           | 依赖动作以非成功终态结束                                                                                                                     |
+| DELETE_NOT_EFFECTIVE        | delete确认期限内原名称仍存在；依赖create跳过，从不改用overwrite                                                                              |
+| OBSERVED_AFTER_ERROR        | OpenList对变更返回非成功码，但随后一次有界观察确认效果已出现；Operation记succeeded，message保留原错误摘要                                    |
+| REMOTE_TASK_CHANGED         | 旧版本记录远程任务重新启动的历史行；当前维护只更新原 task 状态并记录日志，不新增操作                                                         |
+| AUTH_BLOCKED                | Instance处于auth_blocked，相关请求立即失败                                                                                                   |
+| OPENLIST_ERROR              | 未被专用原因码覆盖的上游失败；响应错误码或网络事实只进入脱敏摘要，不按message猜测业务状态                                                    |
+| UPSTREAM_REDIRECT           | 管理API、multipart或put收到重定向；不跟随，也不重放上传body                                                                                  |
+| UPSTREAM_JSON_TOO_LARGE     | 上游JSON响应实际字节超限的客户端事实；扫描映射Run RESOURCE_LIMIT，浏览HTTP仍为502 UPSTREAM_PROTOCOL_ERROR                                    |
+| UPSTREAM_PROTOCOL_ERROR     | OpenList响应结构未知或不符合协议                                                                                                             |
 
 ### Run、实例、通知与启动
 

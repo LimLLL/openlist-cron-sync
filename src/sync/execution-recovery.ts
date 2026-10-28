@@ -12,10 +12,8 @@ import { OpenListMultipart } from '../openlist/multipart.service.js';
 import { aborted } from '../common/abort.js';
 import { OpenListError } from '../openlist/errors.js';
 import { Readiness } from '../coordination/readiness.js';
-import { Quarantine } from '../coordination/quarantine.js';
 import { ExecutionContext, runSecrets } from './execution-context.js';
 import { OperationStore } from './operation-store.js';
-import { QuarantineObserver } from './quarantine-observer.js';
 import { Mutations } from './mutations.js';
 import { CopyTracker } from './copy-tracker.js';
 /** 已提交动作恢复服务。
@@ -32,7 +30,6 @@ export class ExecutionRecovery {
    * @param client 文件观察。
    * @param multipart session收尾。
    * @param readiness 关闭状态。
-   * @param quarantine 旧责任。
    * @param copies task跟踪。
    * @returns 不适用。
    * @throws 不适用。
@@ -43,7 +40,6 @@ export class ExecutionRecovery {
     @Inject(OpenListClient) private readonly client: OpenListClient,
     @Inject(OpenListMultipart) private readonly multipart: OpenListMultipart,
     @Inject(Readiness) private readonly readiness: Readiness,
-    @Inject(Quarantine) private readonly quarantine: Quarantine,
     @Inject(CopyTracker) private readonly copies: CopyTracker,
   ) {}
   /** 启动全部已知task的独立跟踪；非task按批收尾。
@@ -131,11 +127,7 @@ export class ExecutionRecovery {
          */
         () => this.readiness.stopping,
       );
-      const mutations = new Mutations(
-        local,
-        store,
-        new QuarantineObserver(local, this.quarantine),
-      );
+      const mutations = new Mutations(local, store);
       after = 0;
       for (;;) {
         const batch = context.db

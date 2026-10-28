@@ -141,7 +141,6 @@ describe('live run statistics', () => {
                   ? 'DELETE_NOT_EFFECTIVE'
                   : null,
             unknownSince: status === 'unknown' ? now : null,
-            unknownUntil: status === 'unknown' ? now + 1000 : null,
           })
           .run();
       }
@@ -152,11 +151,9 @@ describe('live run statistics', () => {
         id: randomUUID(),
         retryOf: null,
         seq: seq++,
-        causedByOperationId: retryId,
         errorCode: 'REMOTE_TASK_CHANGED',
         status: 'unknown',
         unknownSince: now,
-        unknownUntil: now + 1000,
         bytesDownloaded: 1000,
         bytesTransferred: 1000,
       })

@@ -59,7 +59,7 @@ export class HistoryRetention {
           const group = await historyClosure(db, row.id, cutoff, signal);
           for (const id of group.members) visited.add(id);
           if (!group.eligible) continue;
-          // 最后一次资格检查与第一笔删除之间没有异步窗口；后续资格稳定由终态、resolution及owner契约保证。
+          // 最后一次资格检查与第一笔删除之间没有异步窗口；后续资格稳定由终态及 task owner 契约保证。
           let eligible = true;
           for (const id of group.members)
             if (!eligibleRun(db, id, cutoff)) {
@@ -82,7 +82,7 @@ export class HistoryRetention {
       if (!aborted(error, signal)) throw error;
     }
   }
-  /** CHECK-aware顺序删除子记录，清除引用和删除行在同批事务完成。
+  /** 按外键依赖顺序删除子记录，清除引用和删除行在同批事务完成。
    * @param group 已确认资格的完整组。
    * @param signal 关机停止。
    * @returns 本组物理清理结束。
@@ -91,53 +91,53 @@ export class HistoryRetention {
   private async remove(group: string[], signal: AbortSignal): Promise<void> {
     const db = this.database.db;
     for (const id of group) {
-      // 所有自引用先分批清retry；cause保留，维护子记录先删。
+      // 先分批清除组内 retry 自引用，再删除操作与依赖。
       for (;;) {
         signal.throwIfAborted();
         const rows = db.all<{ id: string }>(
-          sql`SELECT id FROM operations WHERE run_id=${id} AND (retry_of IS NOT NULL OR resolved_by_run_id IS NOT NULL OR reobserved_by_run_id IS NOT NULL) LIMIT ${CHILD_BATCH}`,
+          sql`SELECT id FROM operations WHERE run_id=${id} AND retry_of IS NOT NULL LIMIT ${CHILD_BATCH}`,
         );
         if (!rows.length) break;
         db.run(
-          sql`UPDATE operations SET retry_of=NULL,resolved_by_run_id=NULL,reobserved_by_run_id=NULL WHERE id IN (${idList(rows.map(recordId))})`,
+          sql`UPDATE operations SET retry_of=NULL WHERE id IN (${idList(rows.map(recordId))})`,
         );
         await yieldLoop(undefined, { signal });
       }
     }
-    for (const maintenance of [true, false])
-      for (const id of group) {
+    for (const id of group) {
+      for (;;) {
+        signal.throwIfAborted();
+        const rows = db.all<{
+          id: string;
+        }>(
+          sql`SELECT id FROM operations WHERE run_id=${id} LIMIT ${CHILD_BATCH}`,
+        );
+        if (!rows.length) break;
+        const ids = rows.map(recordId);
+        // 删除边数量同样分批，避免单个目录顶点带大量下游造成长事务。
         for (;;) {
-          signal.throwIfAborted();
-          const rows = db.all<{
-            id: string;
-          }>(sql`SELECT id FROM operations WHERE run_id=${id}
-          AND caused_by_operation_id IS ${maintenance ? sql`NOT NULL` : sql`NULL`} LIMIT ${CHILD_BATCH}`);
-          if (!rows.length) break;
-          const ids = rows.map(recordId);
-          // 删除边数量同样分批，避免单个目录顶点带大量下游造成长事务。
-          for (;;) {
-            const edges = db.all<{ rowid: number }>(
-              sql`SELECT rowid FROM operation_dependencies WHERE operation_id IN (${idList(ids)}) OR depends_on_id IN (${idList(ids)}) LIMIT ${CHILD_BATCH}`,
-            );
-            if (!edges.length) break;
-            db.run(
-              sql`DELETE FROM operation_dependencies WHERE rowid IN (${sql.join(edges.map(edgeId), sql`, `)})`,
-            );
-            await yieldLoop(undefined, { signal });
-          }
-          db.transaction(
-            /** 单批只删除已经无依赖的操作，不放宽cause CHECK。
-             * @param 不适用。
-             * @returns 不适用。
-             * @throws Error FK或数据库失败。
-             */
-            () => {
-              db.run(sql`DELETE FROM operations WHERE id IN (${idList(ids)})`);
-            },
+          const edges = db.all<{ rowid: number }>(
+            sql`SELECT rowid FROM operation_dependencies WHERE operation_id IN (${idList(ids)}) OR depends_on_id IN (${idList(ids)}) LIMIT ${CHILD_BATCH}`,
+          );
+          if (!edges.length) break;
+          db.run(
+            sql`DELETE FROM operation_dependencies WHERE rowid IN (${sql.join(edges.map(edgeId), sql`, `)})`,
           );
           await yieldLoop(undefined, { signal });
         }
+        db.transaction(
+          /** 单批只删除已经无依赖的操作。
+           * @param 不适用。
+           * @returns 不适用。
+           * @throws Error FK或数据库失败。
+           */
+          () => {
+            db.run(sql`DELETE FROM operations WHERE id IN (${idList(ids)})`);
+          },
+        );
+        await yieldLoop(undefined, { signal });
       }
+    }
     for (const table of ['scan_issues', 'run_targets'] as const)
       for (const id of group) {
         for (;;) {

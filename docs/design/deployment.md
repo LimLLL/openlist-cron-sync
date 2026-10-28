@@ -43,7 +43,7 @@ health/live只判断进程存活；ready在迁移/恢复责任重建后成功，
 
 MVP提供最简单的停机一致备份流程：
 
-1. 通过POST /jobs/:id/disable禁用每个Job并记录原本启用的Job，取消或等待运行结束，确认没有queued Run；查看unknown责任。这样备份里的Job都是禁用状态。
+1. 通过POST /jobs/:id/disable禁用每个Job并记录原本启用的Job，取消或等待运行结束，确认没有queued Run；查看 unknown 历史及待删除的远程任务记录。这样备份里的Job都是禁用状态。
 2. 正常停止进程，确认没有另一个进程使用/data。
 3. 整体复制/data（包括仍存在的SQLite sidecar文件，spool目录除外）到受保护备份位置；环境提供的两种key另行安全保存。
 4. 记录应用版本、schema版本、OpenList地址及备份时间；加密备份介质并限制权限。

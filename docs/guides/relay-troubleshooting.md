@@ -40,7 +40,7 @@ relay 从源实例下载文件，写入本地 spool（1 MiB 块），再用目�
 | OPENLIST_ERROR / Relay total deadline exceeded              | failed 或 unknown | 单个文件超过 `RELAY_TOTAL_TIMEOUT_SECONDS`                                                           | 见下文“低带宽”                                                                                                                                |
 | OPENLIST_ERROR / OpenList application code 403              | failed            | 目标 OpenList 拒绝上传：账号没有写权限，或文件是被忽略的系统文件（如 `.DS_Store`、`Thumbs.db`）      | 检查账号权限；系统文件在任务的排除规则中排除 `.DS_Store`、`Thumbs.db`、`@eaDir`、`._*` 等，否则每次运行都会失败并阻断该 Target 的 mirror 删除 |
 
-结果为 failed 的路径不会被隔离，在重试预算内可能以新的操作再次尝试；结果为 unknown 的路径会被隔离。
+明确 failed 可在预算内创建新操作重试；unknown 在本 Run 不自动重试，后续 Run 按自己的扫描规划。
 
 ## 302 跳转与地址可达性
 
@@ -126,7 +126,7 @@ relay 的期限分别计时：
 目标 OpenList 前有反向代理或 CDN 时，需要满足：
 
 - **请求体大小**：允许至少一个分片大小的请求体。分片大小由目标 OpenList 的 `multipart_chunk_size` 设置决定（默认 10 MiB），操作详情中的“分片大小”显示实际值。CDN 有请求体上限时，应把该设置调到上限以下。被拒绝时（例如 nginx 返回 413），分片请求反复失败，最终记 Multipart chunk retries exhausted。
-- **读取超时**：complete 请求要等驱动把文件写入云端后才返回，期间没有任何响应字节，可能持续很久。代理的读取超时必须长于这段时间，否则 complete 的响应被截断，该文件通常记为 unknown（Multipart completion outcome unknown）并隔离。低带宽下单个分片请求本身也可能持续较久。
+- **读取超时**：complete 请求要等驱动把文件写入云端后才返回，期间没有任何响应字节，可能持续很久。代理的读取超时必须长于这段时间，否则 complete 的响应被截断，该文件通常记为 unknown（Multipart completion outcome unknown）。低带宽下单个分片请求本身也可能持续较久。
 - **不要重定向 API 请求**：API、分片和上传请求收到重定向一律失败（UPSTREAM_REDIRECT）。实例地址应直接写最终地址，带子路径的反代要写上子路径。
 
 nginx 示例（数值按实际分片大小和文件规模调整）：

@@ -6,7 +6,6 @@ import {
   parseDashboardRunPage,
   parseDashboardInstancePage,
   parseDashboardJobPage,
-  parseDashboardOperationPage,
   parseNextFireTimes,
   parseHealth,
 } from './dashboard-contract';
@@ -14,7 +13,6 @@ import type {
   DashboardRun,
   DashboardInstance,
   DashboardJob,
-  DashboardOperation,
   NextFireTimes,
   HealthView,
 } from './dashboard-contract';
@@ -88,23 +86,6 @@ export function useActiveRuns() {
         error: results.find((result) => result.isError)?.error ?? null,
       };
     },
-  });
-}
-
-/** 未解决 unknown 操作，10 秒轮询。
- * @returns TanStack Query 结果。
- * @throws 不适用。
- */
-export function useUnresolvedOperations() {
-  const { request } = useAuth();
-  return useQuery<Page<DashboardOperation>>({
-    queryKey: ['dashboard', 'unresolved-operations'],
-    queryFn: ({ signal }) =>
-      request('/operations?unresolved=true&pageSize=10', {
-        signal,
-        parse: parseDashboardOperationPage,
-      }),
-    refetchInterval: 10_000,
   });
 }
 

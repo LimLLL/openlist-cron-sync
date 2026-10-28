@@ -164,10 +164,6 @@ export class OperationStore {
           updatedAt: now,
           remoteCleanupPending: sql`CASE WHEN openlist_task_id IS NOT NULL THEN 1 ELSE 0 END`,
           unknownSince: outcome.status === 'unknown' ? now : null,
-          unknownUntil:
-            outcome.status === 'unknown'
-              ? now + this.run.config.settings.quarantineSeconds * 1000
-              : null,
         })
         .where(
           and(

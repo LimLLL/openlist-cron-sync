@@ -16,7 +16,6 @@ import { PlanWriter } from './plan-writer.js';
 import { ScanReader } from './scan-reader.js';
 import { Scanner } from './scanner.js';
 import { deletionSafety } from './safety.js';
-import { Executor } from './executor.service.js';
 import { objectInput } from '../jobs/validation.js';
 
 /** 完整计划与安全边界，真实文件写入由Executor执行。
@@ -31,7 +30,6 @@ export class SyncService {
    * @param database 数据库。
    * @param client 扫描协议客户端。
    * @param keys 路径密码解密。
-   * @param executor 真实执行和隔离观察依赖。
    * @returns 不适用。
    * @throws 不适用。
    */
@@ -39,7 +37,6 @@ export class SyncService {
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(OpenListClient) private readonly client: OpenListClient,
     @Inject(KeysService) private readonly keys: KeysService,
-    @Inject(Executor) private readonly executor: Executor,
   ) {}
   /** 执行一次扫描、固定完整计划，再完成安全计算和预览终态。
    * @param run 已取得执行位的 Run。
@@ -74,15 +71,13 @@ export class SyncService {
        */
       (a, b) => a.row.config.target.position - b.row.config.target.position,
     );
-    const observer = this.executor.observer(run, signal);
-    const writer = new PlanWriter(db, run, targets, signal, observer);
+    const writer = new PlanWriter(db, run, targets, signal);
     const reader = new ScanReader(
       db,
       this.client,
       writer,
       this.secrets(run),
       signal,
-      observer,
     );
     await new Scanner(reader, writer, signal).scan();
     signal.throwIfAborted();

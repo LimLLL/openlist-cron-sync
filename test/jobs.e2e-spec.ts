@@ -415,7 +415,7 @@ describe('M2 Jobs and Runs API', () => {
     });
     expect(response.text).toContain('DELETE_BLOCKED');
     expect(response.text).toContain('snapshotVersion');
-    expect(response.text).toContain('quarantineSeconds');
+    expect(response.text).not.toContain('quarantineSeconds');
     expect(response.text).toContain('/api/v1/runs/{id}/operations');
     expect(response.text).not.toMatch(
       /secret_snapshot_enc|source_password_enc|password_enc/,

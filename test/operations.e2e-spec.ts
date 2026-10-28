@@ -1,4 +1,4 @@
-// 通过真实HTTP验证M3路由、输入契约和unknown管理，不绕过Guard。
+// 通过真实HTTP验证M3路由、输入契约和 unknown 历史，不绕过Guard。
 import request from 'supertest';
 import { relayFixture } from './relay-fixture.js';
 import type { RelayFixture } from './relay-fixture.js';
@@ -66,14 +66,14 @@ describe('M3 operations and execution API', () => {
       .send({})
       .expect(200);
   });
-  /** 管理动作必须独立记录、幂等且保持unknown历史。
+  /** 未知结果可按状态查询，旧管理端点和过滤参数不再存在。
    * @param 不适用。
    * @returns 验证完成。
    * @throws Error 断言失败。
    */
-  it('lists, releases and abandons unknown without rewriting its outcome', async () => {
+  it('lists immutable unknown history without exposing retired administrative actions', async () => {
     f.fault =
-      /** 保留init副作用但丢弃响应以创建真实unknown责任。
+      /** 保留init副作用但丢弃响应以创建真实 unknown 历史。
        * @param call 真实HTTP请求及其捕获头。
        * @param response 正常响应；stream回调时为测试HTTP响应。
        * @returns 本故障窗口对应的响应；其它请求保持原响应。
@@ -88,58 +88,35 @@ describe('M3 operations and execution API', () => {
     const op = plan(f, result.id)[0];
     await request(base).get(`/api/v1/operations/${op.id}`).expect(401);
     const list = await request(base)
-      .get('/api/v1/operations?status=unknown&unresolved=true')
+      .get('/api/v1/operations?status=unknown')
       .auth(token, { type: 'bearer' })
       .expect(200);
     expect(list.body.total).toBe(1);
-    for (const reason of ['', '   ', null])
+    expect(list.body.items[0]).toMatchObject({ id: op.id, status: 'unknown' });
+    for (const field of [
+      'unknownUntil',
+      'quarantineReleasedAt',
+      'quarantineReleaseReason',
+      'reobservedAt',
+      'resolution',
+      'causedByOperationId',
+    ])
+      expect(list.body.items[0]).not.toHaveProperty(field);
+    for (const action of ['quarantine-release', 'resolve'])
       await request(base)
-        .post(`/api/v1/operations/${op.id}/quarantine-release`)
+        .post(`/api/v1/operations/${op.id}/${action}`)
         .auth(token, { type: 'bearer' })
-        .send({ reason })
-        .expect(400);
-    const release = await request(base)
-      .post(`/api/v1/operations/${op.id}/quarantine-release`)
-      .auth(token, { type: 'bearer' })
-      .send({ reason: 'Reviewed' })
-      .expect(200);
-    const repeat = await request(base)
-      .post(`/api/v1/operations/${op.id}/quarantine-release`)
-      .auth(token, { type: 'bearer' })
-      .send({ reason: 'Different' })
-      .expect(200);
-    expect(repeat.body.quarantineReleasedAt).toBe(
-      release.body.quarantineReleasedAt,
-    );
-    const resolved = await request(base)
-      .post(`/api/v1/operations/${op.id}/resolve`)
-      .auth(token, { type: 'bearer' })
-      .send({ kind: 'abandoned', reason: 'Done' })
-      .expect(200);
-    expect(resolved.body.status).toBe('unknown');
-    expect(resolved.body.resolution.note).toBe('Done');
-    const again = await request(base)
-      .post(`/api/v1/operations/${op.id}/resolve`)
-      .auth(token, { type: 'bearer' })
-      .send({ kind: 'abandoned', reason: 'Changed' })
-      .expect(200);
-    expect(again.body.resolution.note).toBe('Done');
-    const remaining = await request(base)
+        .send({})
+        .expect(404);
+    await request(base)
       .get('/api/v1/operations?unresolved=true')
       .auth(token, { type: 'bearer' })
-      .expect(200);
-    expect(remaining.body.total).toBe(0);
-    const settled = await request(base)
-      .get('/api/v1/operations?status=unknown&unresolved=false')
+      .expect(400);
+    const detail = await request(base)
+      .get(`/api/v1/operations/${op.id}`)
       .auth(token, { type: 'bearer' })
       .expect(200);
-    expect(settled.body.total).toBe(1);
-    expect(settled.body.items[0].id).toBe(op.id);
-    await request(base)
-      .post(`/api/v1/operations/${op.id}/quarantine-release`)
-      .auth(token, { type: 'bearer' })
-      .send({ reason: 'Too late' })
-      .expect(409);
+    expect(detail.body).toEqual(op);
   });
   /** 公共OpenAPI应反映新路由和默认真实执行。
    * @param 不适用。
@@ -153,11 +130,18 @@ describe('M3 operations and execution API', () => {
     for (const path of [
       '/api/v1/operations',
       '/api/v1/operations/{id}',
-      '/api/v1/operations/{id}/quarantine-release',
-      '/api/v1/operations/{id}/resolve',
       '/api/v1/runs/{id}/cancel',
     ])
       expect(document.body.paths[path]).toBeDefined();
+    for (const path of [
+      '/api/v1/operations/{id}/quarantine-release',
+      '/api/v1/operations/{id}/resolve',
+    ])
+      expect(document.body.paths[path]).toBeUndefined();
+    expect(document.text).not.toMatch(
+      /quarantineSeconds|quarantineReleasedAt|reobservedAt|resolutionKind/,
+    );
+
     expect(
       document.body.components.schemas.TriggerRunDto.properties.dryRun.default,
     ).toBe(false);

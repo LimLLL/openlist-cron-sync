@@ -50,12 +50,10 @@ export default {
   },
   attention: {
     title: 'Needs attention',
-    scope:
-      'Failed or partial runs among the latest 50, plus {{shown}} of {{total}} unresolved operations.',
+    scope: 'Failed or partial runs among the latest 50.',
     empty: 'All clear. Nothing in the latest 50 runs needs you.',
     columns: { item: 'Item', kind: 'Kind', when: 'When', state: 'State' },
     kindRun: 'Run',
-    kindOperation: 'Operation',
   },
   activity: {
     title: 'Activity',

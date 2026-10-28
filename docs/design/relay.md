@@ -67,7 +67,7 @@ Job 源配额只覆盖未完成的源读取，Target 文件配额覆盖准备、
 - 响应丢失先按 upload_id 查 status：已在 received 区间则视为确认；仍 receiving 且明确缺失才重发。
 - 429（窗口满）和 409（同块在途）是流控：250 ms 起、最高 2 秒的抖动等待，不消耗重试预算，仍受总期限约束。其他瞬时错误使用 RETRY\_\* 有界预算。
 - 每次响应都检查 session 的 state 与 attempt，不能只看 code 200。attempt 意外变化或 state 不再是 receiving 时停止发送，按下表收尾。
-- 出现 failed_retriable 时不发送 chunk 0 触发 OpenList 自动重填；文件级重试一律新建 Operation 和新 session。
+- 出现 failed_retriable 时不发送 chunk 0 触发 OpenList 自动重填；文件级重试创建新 Operation。init 若返回旧 failed_retriable session 的同一 upload ID，先将本次尝试记录为 failed 并尝试 abort，再由下一尝试 init 新 session；不同历史尝试允许记录同一 ID，不续传旧 session。
 - session 活跃期间（含下载暂停和 complete 等待）每 60 秒查询一次 status，防止 OpenList 的 30 分钟闲置 TTL 到期；进入 abort 或 unknown 收尾后停止心跳。
 - 不用 path+size 查询结果接管或续传 session，只用于诊断。
 
@@ -104,7 +104,7 @@ Agent 按 origin 分池；下载最多跟随 5 次跳转，每跳仅 http(s)，�
 
 | 证据                                                                                                  | Operation 结果                                                                                                    |
 | ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| 准入、打开源或读首块失败（尚未提交当前create）                                                        | failed，可按读取规则重试，不隔离；SOURCE_CHANGED在此窗口为skipped，不回滚先前已成功的mkdir/delete                 |
+| 准入、打开源或读首块失败（尚未提交当前create）                                                        | failed，可按读取规则重试；SOURCE_CHANGED在此窗口为skipped，不回滚先前已成功的mkdir/delete                         |
 | init 执行前明确拒绝：400（请求头无效）、403（已存在、无权限、IgnoredSystemFile、分片上传被关闭）、405 | failed，无需观察                                                                                                  |
 | init 返回其他非成功 code                                                                              | 一次有界 refresh 观察：目标名缺失→failed，否则 unknown                                                            |
 | init 响应丢失、超时或进程在 submitting 崩溃                                                           | unknown（init 一旦执行就已启动驱动写入）                                                                          |
@@ -116,7 +116,7 @@ Agent 按 origin 分池；下载最多跟随 5 次跳转，每跳仅 http(s)，�
 | IgnoredSystemFile                                                                                     | failed，后续 Run 同样失败；阻断该 Target 的 extras，建议用排除规则排除 .DS_Store、Thumbs.db、@eaDir、.\_\* 等名字 |
 
 abort 成功或随后 status 404 都不证明驱动已停止：OpenList 取消上下文后不等待驱动退出。主动 abort 记 failed 是已接受风险——目标端可能迟到清理（例如 Local 驱动在请求取消时删除已写的部分文件），该清理可能晚于重试而删掉重试写入的文件；下一次 Run 会发现缺失并重新创建，源文件不受影响。
-同一 Run 内的文件级重试先 refresh 观察目标路径；有残留则按[替换链](sync-engine.md#替换链)的 retry_cleanup 清理并确认缺失后，才用新 Operation 和新 session 重新创建。unknown 的路径进入[隔离](scheduling-recovery.md#unknown隔离)，不立即清理或重试。
+同一 Run 内的文件级重试先 refresh 观察目标路径；有残留则按[替换链](sync-engine.md#替换链)的 retry_cleanup 清理并确认缺失后，才用新 Operation 和新 session 重新创建。unknown 在同一 Run 不重试；后续 Run 按自己的扫描规划，旧结果保持不变，见[未知历史](scheduling-recovery.md#unknown历史)。
 上传失败可能留下同名同大小的错误文件，名称+大小比较会将其视为 unchanged；不为此引入 hash 或修复索引，这是已接受的比较能力边界。
 
 ## 超时

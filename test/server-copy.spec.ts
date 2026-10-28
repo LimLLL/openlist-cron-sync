@@ -127,7 +127,7 @@ describe('M6 server copy execution', () => {
    * @returns 验证完成。
    * @throws Error 断言失败。
    */
-  it('quarantines a missing task without retaining quota', async () => {
+  it('records a missing task as unknown without retaining quota', async () => {
     f.initialState = 0;
     f.fault =
       /** 任务查询不可见。

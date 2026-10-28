@@ -44,7 +44,6 @@
 | RELAY_TOTAL_TIMEOUT_SECONDS    | 21600          | 60–604800；单文件relay总期限（含chunk请求与complete等待），6小时，受Run剩余期限限制                         |
 | SPOOL_DIR                      | DATA_DIR/spool | 绝对可写本地路径；可放到独立卷                                                                              |
 | SPOOL_RESERVE_BYTES            | 536870912      | 0–安全整数；spool预算扣除的保留空间（默认512MiB），保证同卷SQLite/WAL可写；spool在独立卷时可设0             |
-| QUARANTINE_SECONDS             | 86400          | 2100–2592000；默认24h风险策略；下限35分钟覆盖OpenList分片session的闲置TTL与GC间隔                           |
 | RECOVERY_TIMEOUT_SECONDS       | 600            | 10–86400；有界收尾而非续跑                                                                                  |
 | CANCEL_GRACE_SECONDS           | 60             | 1–600                                                                                                       |
 | SHUTDOWN_GRACE_SECONDS         | 30             | 1–600；SIGTERM后中止本地工作并持久化已收结果的时限，见[优雅停止](../design/scheduling-recovery.md#优雅停止) |
@@ -125,19 +124,19 @@ keys.json={version:1,jwtSecret?:base64,encryptionMasterKey?:base64}，两个字�
 
 Run.snapshot.settings包含下列全部字段，值取接受Run时的有效环境配置：
 
-| 字段                                                            | 环境来源                                                                      |
-| --------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| queueTimeoutSeconds                                             | QUEUE_TIMEOUT_SECONDS                                                         |
-| connectTimeoutMs / apiTimeoutMs / taskPollMs                    | OPENLIST_CONNECT_TIMEOUT_MS / OPENLIST_API_TIMEOUT_MS / OPENLIST_TASK_POLL_MS |
-| retryMaxAttempts / retryBaseMs / retryMaxMs                     | RETRY_MAX_ATTEMPTS / RETRY_BASE_MS / RETRY_MAX_MS                             |
-| authCooldownSeconds                                             | OPENLIST_AUTH_COOLDOWN_SECONDS                                                |
-| deleteConfirmTimeoutSeconds / deleteConfirmIntervalMs           | DELETE_CONFIRM_TIMEOUT_SECONDS / DELETE_CONFIRM_INTERVAL_MS                   |
-| relayIdleTimeoutSeconds / relayTotalTimeoutSeconds              | RELAY_IDLE_TIMEOUT_SECONDS / RELAY_TOTAL_TIMEOUT_SECONDS                      |
-| quarantineSeconds / recoveryTimeoutSeconds / cancelGraceSeconds | QUARANTINE_SECONDS / RECOVERY_TIMEOUT_SECONDS / CANCEL_GRACE_SECONDS          |
-| scanMaxDepth / scanMaxDirectoryEntries / maxJsonBytes           | SCAN_MAX_DEPTH / SCAN_MAX_DIRECTORY_ENTRIES / OPENLIST_MAX_JSON_BYTES         |
-| maxOperationsPerRun / maxScanIssuesPerRun / planBatchSize       | MAX_OPERATIONS_PER_RUN / MAX_SCAN_ISSUES_PER_RUN / PLAN_BATCH_SIZE            |
+| 字段                                                      | 环境来源                                                                      |
+| --------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| queueTimeoutSeconds                                       | QUEUE_TIMEOUT_SECONDS                                                         |
+| connectTimeoutMs / apiTimeoutMs / taskPollMs              | OPENLIST_CONNECT_TIMEOUT_MS / OPENLIST_API_TIMEOUT_MS / OPENLIST_TASK_POLL_MS |
+| retryMaxAttempts / retryBaseMs / retryMaxMs               | RETRY_MAX_ATTEMPTS / RETRY_BASE_MS / RETRY_MAX_MS                             |
+| authCooldownSeconds                                       | OPENLIST_AUTH_COOLDOWN_SECONDS                                                |
+| deleteConfirmTimeoutSeconds / deleteConfirmIntervalMs     | DELETE_CONFIRM_TIMEOUT_SECONDS / DELETE_CONFIRM_INTERVAL_MS                   |
+| relayIdleTimeoutSeconds / relayTotalTimeoutSeconds        | RELAY_IDLE_TIMEOUT_SECONDS / RELAY_TOTAL_TIMEOUT_SECONDS                      |
+| recoveryTimeoutSeconds / cancelGraceSeconds               | RECOVERY_TIMEOUT_SECONDS / CANCEL_GRACE_SECONDS                               |
+| scanMaxDepth / scanMaxDirectoryEntries / maxJsonBytes     | SCAN_MAX_DEPTH / SCAN_MAX_DIRECTORY_ENTRIES / OPENLIST_MAX_JSON_BYTES         |
+| maxOperationsPerRun / maxScanIssuesPerRun / planBatchSize | MAX_OPERATIONS_PER_RUN / MAX_SCAN_ISSUES_PER_RUN / PLAN_BATCH_SIZE            |
 
 全部是已验证整数，无NULL。进程全局并发、登录安全参数、服务监听、日志、历史清理和通知投递使用进程当前有效配置，不为每Run复制资源池或安全策略。
-维护循环创建的REMOTE_TASK_CHANGED隔离记录不属于新的Run执行，使用进程当前有效配置的quarantineSeconds、retry*、apiTimeoutMs与taskPollMs，不读取原Run快照。
+维护遗留 task 使用进程当前有效的 retry*、apiTimeoutMs 与 taskPollMs，不读取原 Run 的重试快照；不创建新 Operation。
 
 M3开始消费SPOOL_RESERVE_BYTES与SHUTDOWN_GRACE_SECONDS，均为进程级参数，不加入ExecutionSettings。执行期新增attempt及cleanup行由重试和清理规则有界限制；MAX_OPERATIONS_PER_RUN不重新限制这些执行行。Job源配额和Target文件/分片配额保存在Job配置及Run快照中；不同Job同时运行时额度相加。

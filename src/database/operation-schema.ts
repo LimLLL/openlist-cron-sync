@@ -90,15 +90,6 @@ export const operations = sqliteTable(
         onDelete: 'restrict',
       },
     ),
-    causedByOperationId: text('caused_by_operation_id').references(
-      /** 提供外键关联列，延迟解析避免表声明顺序依赖。
-       * @param 不适用。
-       * @returns 关联列。
-       * @throws 不适用。
-       */
-      (): AnySQLiteColumn => operations.id,
-      { onDelete: 'restrict' },
-    ),
     attemptNo: integer('attempt_no').notNull().default(1),
     openlistTaskId: text('openlist_task_id'),
     remoteState: integer('remote_state'),
@@ -120,37 +111,6 @@ export const operations = sqliteTable(
     endedAt: integer('ended_at'),
     nextAttemptAt: integer('next_attempt_at'),
     unknownSince: integer('unknown_since'),
-    unknownUntil: integer('unknown_until'),
-    quarantineReleasedAt: integer('quarantine_released_at'),
-    quarantineReleaseReason: text('quarantine_release_reason'),
-    reobservedAt: integer('reobserved_at'),
-    reobservedByRunId: text('reobserved_by_run_id').references(
-      /** 提供外键关联列，延迟解析避免表声明顺序依赖。
-       * @param 不适用。
-       * @returns 关联列。
-       * @throws 不适用。
-       */
-      () => runs.id,
-      {
-        onDelete: 'restrict',
-      },
-    ),
-    resolutionKind: text('resolution_kind', {
-      enum: ['observed', 'superseded', 'abandoned'],
-    }),
-    resolutionNote: text('resolution_note'),
-    resolvedAt: integer('resolved_at'),
-    resolvedByRunId: text('resolved_by_run_id').references(
-      /** 提供外键关联列，延迟解析避免表声明顺序依赖。
-       * @param 不适用。
-       * @returns 关联列。
-       * @throws 不适用。
-       */
-      () => runs.id,
-      {
-        onDelete: 'restrict',
-      },
-    ),
   },
   /** 生成操作组合、状态、大小及责任字段约束。
    * @param t 表字段。
@@ -162,33 +122,15 @@ export const operations = sqliteTable(
     uniqueIndex('operations_task')
       .on(t.targetInstanceId, t.openlistTaskId)
       .where(sql`${t.openlistTaskId} IS NOT NULL`),
-    uniqueIndex('operations_upload')
-      .on(t.targetInstanceId, t.multipartUploadId)
-      .where(sql`${t.multipartUploadId} IS NOT NULL`),
     index('operations_target_status_seq').on(t.runTargetId, t.status, t.seq),
     index('operations_retry').on(t.status, t.nextAttemptAt),
     index('operations_path').on(t.targetInstanceId, t.targetPath),
-    index('operations_unknown').on(t.status, t.unknownUntil),
+    index('operations_status').on(t.status),
     index('operations_cleanup').on(t.remoteCleanupPending, t.id),
     index('operations_responsibility_run')
       .on(t.runId)
-      .where(
-        sql`(${t.status} = 'unknown' AND ${t.resolutionKind} IS NULL) OR ${t.remoteCleanupPending} = 1`,
-      ),
+      .where(sql`${t.remoteCleanupPending} = 1`),
     index('operations_retry_of').on(t.retryOf),
-    index('operations_cause_seq').on(t.causedByOperationId, t.seq),
-    index('operations_resolved_run').on(t.resolvedByRunId, t.id),
-    index('operations_reobserved_run').on(t.reobservedByRunId, t.id),
-    index('operations_run_clearable')
-      .on(t.runId, t.id)
-      .where(
-        sql`${t.retryOf} IS NOT NULL OR ${t.resolvedByRunId} IS NOT NULL OR ${t.reobservedByRunId} IS NOT NULL`,
-      ),
-    index('operations_run_references')
-      .on(t.runId, t.id)
-      .where(
-        sql`${t.retryOf} IS NOT NULL OR ${t.causedByOperationId} IS NOT NULL OR ${t.resolvedByRunId} IS NOT NULL OR ${t.reobservedByRunId} IS NOT NULL`,
-      ),
     check(
       'operations_method',
       sql`(${t.action} = 'mkdir' AND ${t.method} = 'mkdir') OR (${t.action} = 'create' AND ${t.method} IN ('relay','server_copy')) OR (${t.action} = 'delete' AND ${t.method} = 'remove')`,
@@ -216,11 +158,7 @@ export const operations = sqliteTable(
     ),
     check(
       'operations_unknown_fields',
-      sql`${t.status} != 'unknown' OR (${t.unknownSince} IS NOT NULL AND ${t.unknownUntil} IS NOT NULL AND ${t.unknownUntil} >= ${t.unknownSince})`,
-    ),
-    check(
-      'operations_resolution',
-      sql`${t.resolutionKind} IS NULL OR (${t.resolutionKind} IN ('observed','superseded','abandoned') AND ${t.resolvedAt} IS NOT NULL AND (${t.resolutionKind} != 'abandoned' OR ${t.resolutionNote} IS NOT NULL))`,
+      sql`${t.status} != 'unknown' OR ${t.unknownSince} IS NOT NULL`,
     ),
     check(
       'operations_task_method',
@@ -233,10 +171,6 @@ export const operations = sqliteTable(
     check(
       'operations_multipart_method',
       sql`${t.method} = 'relay' OR (${t.multipartUploadId} IS NULL AND ${t.multipartChunkSize} IS NULL AND ${t.multipartState} IS NULL AND ${t.multipartAttempt} IS NULL AND ${t.sourceStreamCompletedAt} IS NULL)`,
-    ),
-    check(
-      'operations_cause',
-      sql`(${t.causedByOperationId} IS NULL AND (${t.errorCode} IS NULL OR ${t.errorCode} != 'REMOTE_TASK_CHANGED')) OR (${t.causedByOperationId} IS NOT NULL AND ${t.errorCode} = 'REMOTE_TASK_CHANGED' AND ${t.openlistTaskId} IS NULL)`,
     ),
   ],
 );

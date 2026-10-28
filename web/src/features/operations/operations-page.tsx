@@ -1,9 +1,8 @@
-// 全局操作列表：编辑式页头、筛选工具条与编号行列表，支持状态与未解决筛选。
+// 全局操作列表：编辑式页头、筛选工具条与编号行列表，支持状态筛选。
 import { ChevronDown } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Badge } from '../../components/ui/badge';
 import { Pagination } from '../../components/ui/pagination';
-import { Segmented } from '../../components/ui/segmented';
 import { IndexHead, IndexList, IndexRow } from '../../components/ui/index-list';
 import { PageHeader } from '../../components/page-header';
 import { ErrorState, LoadingState, EmptyState } from '../../components/states';
@@ -14,9 +13,6 @@ import { OPERATION_STATUSES } from './operation-contract';
 import type { OperationView } from './operation-contract';
 import { ACTION_ICONS, splitPath, statusBadge } from './operation-status';
 
-/** 未解决筛选的 URL 取值：空为全部，true 仅未解决，false 排除未解决。 */
-type UnresolvedFilter = '' | 'true' | 'false';
-
 /** 渲染全局操作列表页。
  * @returns 操作列表页面。
  * @throws 不适用。
@@ -24,12 +20,8 @@ type UnresolvedFilter = '' | 'true' | 'false';
 export function OperationsPage() {
   const { page, pageSize, setPage } = usePageParams();
   const [status, setStatus] = useFilterParam('status');
-  const [unresolved, setUnresolved] = useFilterParam('unresolved');
-  const ops = useOperations({ page, pageSize, status, unresolved });
+  const ops = useOperations({ page, pageSize, status });
   const { t } = useTranslation(['operations', 'common']);
-  const unresolvedValue: UnresolvedFilter =
-    unresolved === 'true' || unresolved === 'false' ? unresolved : '';
-
   return (
     <section>
       <PageHeader
@@ -40,16 +32,6 @@ export function OperationsPage() {
       />
 
       <div className="mb-8 flex flex-wrap items-center justify-between gap-3">
-        <Segmented<UnresolvedFilter>
-          label={t('list.unresolvedFilter')}
-          value={unresolvedValue}
-          onChange={(value) => setUnresolved(value || undefined)}
-          options={[
-            { value: '', label: t('list.unresolvedAll') },
-            { value: 'true', label: t('list.unresolvedOnly') },
-            { value: 'false', label: t('list.unresolvedExclude') },
-          ]}
-        />
         <label className="relative inline-flex items-center">
           <span className="sr-only">{t('list.statusFilter')}</span>
           <select

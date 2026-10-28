@@ -9,7 +9,6 @@ import { runs } from '../database/run-schema.js';
 import { taskFact, updateTaskFact } from '../database/task-records.js';
 import { TaskResources } from '../coordination/task-resources.js';
 import { Readiness } from '../coordination/readiness.js';
-import { AppConfig } from '../configuration/app-config.js';
 import { OpenListTasks } from '../openlist/tasks.service.js';
 import type { TaskInfo } from '../openlist/tasks.service.js';
 import { aborted } from '../common/abort.js';
@@ -36,7 +35,6 @@ export class CopyTracker {
    * @param tasks task协议。
    * @param resources 共享task额度及owner。
    * @param readiness 关闭广播。
-   * @param config 维护事件当前配置。
    * @returns 不适用。
    * @throws 不适用。
    */
@@ -45,7 +43,6 @@ export class CopyTracker {
     @Inject(OpenListTasks) readonly tasks: OpenListTasks,
     @Inject(TaskResources) readonly resources: TaskResources,
     @Inject(Readiness) private readonly readiness: Readiness,
-    @Inject(AppConfig) private readonly config: AppConfig,
   ) {}
   /** 将copy响应保存为已知任务，终态也先保留tid再统一分类。
    * @param id 当前submitting尝试。
@@ -173,7 +170,7 @@ export class CopyTracker {
             if (!aborted(error, signal)) throw error;
           } else if (taskGone(error)) {
             context.db.transaction(
-              /** 丢失tid保留unknown隔离，结束远程记录跟踪。
+              /** 丢失 tid 保留 unknown 历史，结束远程记录跟踪。
                * @param 不适用。
                * @returns 不适用。
                * @throws Error 数据库失败。
@@ -299,7 +296,7 @@ export class CopyTracker {
   ): Promise<void> {
     if (!op.openlistTaskId) return;
     const fact = taskFact(context.db, op.id);
-    if (!fact?.operation.remoteCleanupPending) return;
+    if (!fact?.remoteCleanupPending) return;
     try {
       const result = await cleanupTask(
         this.tasks,
@@ -321,15 +318,7 @@ export class CopyTracker {
         return;
       }
       const state = result.kind === 'observed' ? result.state : undefined;
-      if (
-        updateTaskFact(
-          context.db,
-          fact,
-          state,
-          result.kind === 'gone',
-          this.config.execution.quarantineSeconds,
-        )
-      ) {
+      if (updateTaskFact(context.db, fact, state, result.kind === 'gone')) {
         if (result.kind === 'observed')
           this.resources.hold(op.id, op.runTargetId);
         else this.resources.release(op.id);

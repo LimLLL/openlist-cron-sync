@@ -53,12 +53,10 @@ export default {
   },
   attention: {
     title: '需要关注',
-    scope:
-      '最近 50 次运行中的失败与部分成功，以及 {{shown}} / {{total}} 个未解决操作。',
+    scope: '最近 50 次运行中的失败与部分成功。',
     empty: '一切正常，最近 50 次运行没有需要你处理的事项。',
     columns: { item: '事项', kind: '类型', when: '时间', state: '状态' },
     kindRun: '运行',
-    kindOperation: '操作',
   },
   activity: {
     title: '动态',

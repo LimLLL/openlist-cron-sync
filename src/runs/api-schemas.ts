@@ -146,7 +146,6 @@ export const operationViewSchema = objectSchema({
   affectedFileCount: sizeSchema,
   affectedBytes: sizeSchema,
   retryOf: nullable(idSchema),
-  causedByOperationId: nullable(idSchema),
   attemptNo: { type: 'integer', minimum: 1 },
   task: nullable(
     objectSchema({ id: stringSchema, state: nullable({ type: 'integer' }) }),
@@ -165,25 +164,13 @@ export const operationViewSchema = objectSchema({
   error: {
     ...errorSchema,
     description:
-      'DELETE_BLOCKED：删除保护；DELETE_LIMIT：数值/清理预算拒绝；PREVIOUS_OUTCOME_UNKNOWN：隔离或重新观察失败；SPOOL_FULL：真实ENOSPC/EDQUOT或session落库后独占容量不足，摘要区分insufficient spool capacity；PLAN_INTERRUPTED：旧计划失效',
+      'DELETE_BLOCKED：删除保护；DELETE_LIMIT：数值/清理预算拒绝；SPOOL_FULL：真实ENOSPC/EDQUOT或session落库后独占容量不足，摘要区分insufficient spool capacity；PLAN_INTERRUPTED：旧计划失效',
   },
   createdAt: timeSchema,
   updatedAt: timeSchema,
   submittedAt: nullable(timeSchema),
   endedAt: nullable(timeSchema),
   unknownSince: nullable(timeSchema),
-  unknownUntil: nullable(timeSchema),
-  quarantineReleasedAt: nullable(timeSchema),
-  quarantineReleaseReason: nullable(stringSchema),
-  reobservedAt: nullable(timeSchema),
-  resolution: nullable(
-    objectSchema({
-      kind: { type: 'string', enum: ['observed', 'superseded', 'abandoned'] },
-      note: nullable(stringSchema),
-      resolvedAt: timeSchema,
-      runId: nullable(idSchema),
-    }),
-  ),
 });
 export const issueViewSchema = objectSchema({
   id: idSchema,

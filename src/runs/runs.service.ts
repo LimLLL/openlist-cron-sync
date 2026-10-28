@@ -1,7 +1,7 @@
 // 原子接受运行并提供分页历史视图，不依赖 Jobs 或 Instances 模块。
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import { and, asc, count, desc, eq, isNull } from 'drizzle-orm';
+import { and, asc, count, desc, eq, sql } from 'drizzle-orm';
 import { DatabaseService } from '../database/database.service.js';
 import { runs, runTargets, scanIssues } from '../database/run-schema.js';
 import type { RunRecord } from '../database/run-schema.js';
@@ -339,7 +339,7 @@ export class RunsService {
         : eq(operations.action, query.action),
       query.includeMaintenance
         ? undefined
-        : isNull(operations.causedByOperationId),
+        : sql`${operations.errorCode} IS NOT 'REMOTE_TASK_CHANGED'`,
     );
     return {
       items: operationViews(

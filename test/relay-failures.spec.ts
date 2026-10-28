@@ -341,15 +341,15 @@ describe('M3 mutation and relay failure windows', () => {
         ),
     ).toBe(true);
   });
-  /** 空put的非符合协议任务只隔离，不伪装成server_copy记录。
+  /** 空put的非符合协议任务只记unknown，不伪装成server_copy记录。
    * @param 不适用。
    * @returns 验证完成。
    * @throws Error 断言失败。
    */
-  it('quarantines an unexpected zero-byte put task without saving a tid', async () => {
+  it('records an unexpected zero-byte put task as unknown without saving a tid', async () => {
     f.files.set('/source/new.txt', Buffer.alloc(0));
     f.fault =
-      /** 在同步空put后返回意外task以检验隔离。
+      /** 在同步空put后返回意外task以检验unknown记录。
        * @param call 真实HTTP请求及其捕获头。
        * @param response 正常响应；stream回调时为测试HTTP响应。
        * @returns 本故障窗口对应的响应；其它请求保持原响应。

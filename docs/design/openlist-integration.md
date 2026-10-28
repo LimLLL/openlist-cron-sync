@@ -32,7 +32,7 @@ token模式使用管理员静态token，Authorization直接传token，不加Bear
 
 M1 尚无 jobs/runs/operations，身份比较后允许覆盖。M2 已接入非归档Job引用检查和真实未决责任查询（三项谓词完整）：Instances PATCH/DELETE执行ENDPOINT_IN_USE，Security在同一事务核对责任和保存身份，冲突持久化ACCOUNT_CHANGED且保留旧身份。downloadMode有非终态Run引用时不可改；limits已删除，创建或PATCH携带该字段（包括{}）返回400 VALIDATION_ERROR；同身份凭据可修复。PATCH仍不访问上游，不提供恒false占位函数。
 
-M1 客户端只返回协议事实；不执行 observe-after-500、unknown/quarantine、任务状态推进或 relay。`putEmpty` 若意外收到 `data.task`，属于协议异常，M3将其记为unknown并隔离，错误摘要UPSTREAM_PROTOCOL_ERROR；不持久化tid或引入上传task跟踪。chunk/complete 必须由调用方传入截止信号，不使用普通 API 的短超时；init/status/abort 使用每次尝试独立的普通请求期限。全部 multipart 请求均不受扫描间隔约束；实例 API 配额及控制请求优先级已删除。人工重试（retryAuth=true）只越过持久阻断尝试一次，阻断在该次尝试成功前保持不变，网络失败不会解除。
+M1 客户端只返回协议事实；不执行 observe-after-500、unknown 历史、任务状态推进或 relay。`putEmpty` 若意外收到 `data.task`，属于协议异常，M3将其记为unknown，错误摘要UPSTREAM_PROTOCOL_ERROR；不持久化tid或引入上传task跟踪。chunk/complete 必须由调用方传入截止信号，不使用普通 API 的短超时；init/status/abort 使用每次尝试独立的普通请求期限。全部 multipart 请求均不受扫描间隔约束；实例 API 配额及控制请求优先级已删除。人工重试（retryAuth=true）只越过持久阻断尝试一次，阻断在该次尝试成功前保持不变，网络失败不会解除。
 
 ## 路径与URL
 
@@ -62,16 +62,15 @@ HTTP层自动重放只用于读取和明确尚未执行的认证拒绝（JSON401
 ## 任务跟踪
 
 OpenList任务只来自server_copy（同storage驱动未实现Copy时的回退，或跨storage复制）。按(instanceId,tid)逐个POST copy任务的info，每个任务按taskPollMs带抖动轮询；不使用undone/done列表，避免历史无界响应。
-单次info的瞬时失败（网络、HTTP 5xx、JSON500）按`RETRY_*`有界重试；重试耗尽不改变Operation状态，下一周期继续轮询，直到Run deadlineAt（之后走取消流程：cancel、等待cancelGrace、仍无终态则unknown），恢复期间则直到recoveryDeadlineAt。info返回JSON404 task not found（OpenList重启且未持久化任务、任务被管理员删除或不可见）时立即unknown并隔离。不另设info失败次数配置。
+单次info的瞬时失败（网络、HTTP 5xx、JSON500）按`RETRY_*`有界重试；重试耗尽不改变Operation状态，下一周期继续轮询，直到Run deadlineAt（之后走取消流程：cancel、等待cancelGrace、仍无终态则unknown），恢复期间则直到recoveryDeadlineAt。info返回JSON404 task not found（OpenList重启且未持久化任务、任务被管理员删除或不可见）时立即unknown。不另设info失败次数配置。
 state0/5/8/9保持submitted；1/3/6保持running；2为成功、4取消、7失败。未知数值为协议错误，有界查询后仍无法分类则unknown。远程progress只展示，不驱动状态。
 
 先持久化本地结果，再确认remote_state为2/4/7，才POST delete_some数组id。Operation本地unknown也是终态，但不是远程已停止的证据，不能据此delete。解析data逐id错误；非空map不直接按message判断task是否丢失，而是对该id再info：404表示已不存在，其他情况按下面的清理规则处理。只清理本服务的远程终态id，不delete运行任务，不retry、不clear_*。
-清理时逐id返回task not found，或info返回JSON404，表示远端记录已不存在：清除remoteCleanupPending，绝不改动Operation结果。其他失败保留remoteCleanupPending交维护；维护先info，按下文“维护责任分类”决定读取失败时保留或放弃。确认终态后按`RETRY_*`有界重试删除，耗尽清标志warn；删除失败后的info仍按责任分类处理。记录清理本身不修改目标文件。
-维护器info发现任务已回到非终态（管理员在OpenList手动重试，超出[目标独占前提](requirements.md#部署前提)）时不删除，而是：
+删除时逐 id 返回 task not found，或 info 返回 JSON404，表示远程记录已不存在：清除 remoteCleanupPending，绝不改动 Operation 结果。实时执行中的其他删除失败保留标志交维护。
 
-- 仅在原remote_state从2/4/7变为非终态时，在原run/run_target下插入新Operation：action、method、target_path与原行相同，status=unknown，error_code=REMOTE_TASK_CHANGED，unknown_since=now，unknown_until=now+QUARANTINE_SECONDS（取进程当前有效配置，与维护器创建的其他Operation一致），tid列为NULL，caused_by_operation_id指向原行；同事务更新原remote_state，使持续轮询不重复建隔离记录。本地unknown而远程一直未结束的任务只继续观察，不适用此分支。
-- 原行保持终态和remoteCleanupPending=1；维护器继续轮询原tid，只更新原始remote_state（不是结果状态），任务再次终态后执行delete_some。
-- 隔离路径为target_path；该unknown按[Unknown隔离](scheduling-recovery.md#unknown隔离)再观察和解决。
+遗留任务维护统一使用进程当前有效的 RETRY_* 预算。先 info，非终态继续占用 Target 文件额度；终态才删除任务记录。观察或删除在预算内失败时记录日志、清除本地标志并释放额度，不因原结果 unknown 永久保留责任。远程任务记录删除不修改目标文件。
+
+维护 info 发现任务从 2/4/7 回到非终态时，只更新原 remote_state 并记录一次日志。原 Operation status 和 Run 统计保持不变，不新增操作；任务仍非终态时不删除，后续终态后再 delete_some。旧 REMOTE_TASK_CHANGED 行仅保留为历史，并从执行统计排除。不存在按历史任务状态阻止同路径新计划的规则；实际任务并发额度仍适用。
 
 取消先调用cancel再观察；取消响应不是任务已停止。删除API记录不代表终止后台动作。
 
@@ -85,20 +84,20 @@ state0/5/8/9保持submitted；1/3/6保持running；2为成功、4取消、7失�
 | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 执行前明确拒绝：JSON400；JSON401（先按认证表重新登录并重放一次，上传body不重放）；JSON403（权限不足、`file [name] exists`/`file exists`、`system file upload ignored`）；JSON405；本地AUTH_BLOCKED | OpenList未执行             | failed，无需观察；AUTH_BLOCKED或通用OPENLIST_ERROR，不按403的message细分；不在本Run内重试。PRECONDITION_CHANGED仅用于本服务删除提交前刷新发现的变化 |
 | 其他非成功code（通常为JSON500）                                                                                                                                                                    | OpenList已处理完请求但报错 | 做一次有界观察，按下表判定                                                                                                                          |
-| 无响应、超时、连接中断（请求可能已到达OpenList）；非OpenList envelope的代理错误；已知tid查询task not found；submitting中进程崩溃                                                                   | 请求可能仍在途             | unknown并按[Unknown隔离](scheduling-recovery.md#unknown隔离)处理                                                                                    |
+| 无响应、超时、连接中断（请求可能已到达OpenList）；非OpenList envelope的代理错误；已知tid查询task not found；submitting中进程崩溃                                                                   | 请求可能仍在途             | unknown，保留[历史结果](scheduling-recovery.md#unknown历史)                                                                                         |
 | code200且无task                                                                                                                                                                                    | 明确成功                   | server_copy、0字节put与mkdir直接succeeded，所有驱动一致，包括异步受理、no-op与包装驱动，风险公开；delete进入确认刷新                                |
 | code200且返回task                                                                                                                                                                                  | 已受理                     | submitted，按[任务跟踪](#任务跟踪)逐tid跟踪                                                                                                         |
 
 一次有界观察：以refresh=true列出受影响的父目录；读取的瞬时错误按读取规则有界重试，403不重试。
 
-| 动作                            | 观察到效果 → succeeded               | 观察到原状态完好 → failed（attempt预算内可重试） | 其他 → unknown并隔离                                     |
+| 动作                            | 观察到效果 → succeeded               | 观察到原状态完好 → failed（attempt预算内可重试） | 其他 → unknown                                           |
 | ------------------------------- | ------------------------------------ | ------------------------------------------------ | -------------------------------------------------------- |
 | create（server_copy、0字节put） | 目标名存在、是文件且大小等于计划size | 目标名不存在                                     | 观察失败（含无refresh权限）、视图suspect、类型或大小不同 |
 | mkdir                           | 目录存在                             | 名称不存在                                       | 观察失败、视图suspect、同名对象是文件                    |
 | delete（remove）                | 原名不存在                           | 原名存在且类型/大小符合预期                      | 观察失败、视图suspect、类型或大小不同                    |
 | 空目录remove                    | 路径不存在                           | 路径仍存在                                       | 观察失败、视图suspect                                    |
 
-观察到效果时写error_code=OBSERVED_AFTER_ERROR，原OpenList错误摘要写入error_message；delete不再另做确认刷新。观察到原状态完好而记failed，接受一个小风险：云端可能在OpenList报错后仍迟到生效；这与隔离到期后的策略相同。
+观察到效果时写error_code=OBSERVED_AFTER_ERROR，原OpenList错误摘要写入error_message；delete不再另做确认刷新。观察到原状态完好而记failed，接受一个小风险：云端可能在OpenList报错后仍迟到生效，后续 Run 按自己的扫描独立规划。
 
 有task先submitted，直到终态。delete仍需[前提刷新](deletion.md)，因此remove成功不能直接开放create。
 mkdir明确成功即成功；已存在且确认为目录也作为正常已有前提，不吞掉其他mkdir错误。
@@ -106,7 +105,7 @@ relay以完整字节及complete结果为准，见[relay结果分类](relay.md#�
 
 ## 缓存和挂载
 
-source/target scan refresh默认分别关闭；删除前、删除确认、变更报错后的观察和隔离解除后的读取强制refresh=true，不受scan开关影响。权限不允许即阻断相关动作。
+source/target scan refresh默认分别关闭；删除前、删除确认和变更报错后的观察强制refresh=true，不受scan开关影响。权限不允许即阻断相关动作。
 管理员每Run读取完整storage/list（per_page=100，page递增直到覆盖total）；发现total变化或重复id时重取一次，仍不一致则本轮边界不可信，该Instance的视图按[挂载边界](deletion.md#挂载边界)的suspect规则处理。只提取id,mount_path,driver,disabled,status；立即丢弃addition等秘密。
 尚未覆盖total却返回空页、必要字段缺失、无效total或累计数量超过total同样视为分页不一致；整表重读最多一次后记MOUNT_BOUNDARY_UNKNOWN，不无限翻页或使用部分映射。全部请求受当前Run期限及响应大小限制。M2运行读取使用固定ExecutionSettings；普通浏览仍用进程配置。调用方可中止认证等待而不取消其他调用方共享的登录，发起共享登录的调用方提供该次认证的固定参数；关机等待已开始的认证结束后才关闭数据库。完整映射读取（含一次重读）的每页请求各自使用 OPENLIST_API_TIMEOUT_MS 与读取重试策略，整体受调用方期限约束，不再共享一个整表期限。
 有效mount按OpenList算法计算：mount_path在最后一次出现`.balance`处截断（strings.LastIndex语义，不是后缀判断：`/a.balance/b`得`/a`，`/x.balancesheet`得`/x`），再在候选storage中按路径段边界做最长匹配；同一有效mount有多个候选时不猜。测试包含`/a.balance1`与`/a.balance/b`。读取失败不降级到普通账号路径。
@@ -119,6 +118,6 @@ mount_details可因设置、超时、驱动能力和中间虚拟目录而缺失�
 
 ## 维护责任分类
 
-remote_cleanup_pending与有tid的本地终态同事务写入。其自身是未解决unknown，或按seq排序的最新REMOTE_TASK_CHANGED子记录是未解决unknown时，派生为safety跟踪；其余为housekeeping，不持久化分类。info失败后safety保留标志及已有额度；housekeeping在本轮有界尝试耗尽后清标志、释放额度并warn。AUTH_BLOCKED不重试登录。info404两类均清标志与额度；观察到非终态均继续跟踪，终态到非终态边沿原子建立新隔离。观察到终态后释放额度并有界delete_some，耗尽清标志warn；清理失败后的info仍按责任分类处理。关闭中止不算耗尽，SQL错误fail-fast。
+remote_cleanup_pending 与有 tid 的本地终态同事务写入。遗留任务统一使用有界 housekeeping；info 或删除失败耗尽预算时清标志、释放额度并记录日志，AUTH_BLOCKED 不重试登录。info404 同样结束责任；观察仍为非终态则继续占用额度。关闭中止不算耗尽，SQL 错误 fail-fast。
 
-abandon维持resolution-only行为；只结束unknown责任，task标志由后续维护处理，若仍能观察到非终态则继续跟踪。旧子记录不会替最新事件解除跟踪，旧未解决unknown仍独立保护路径。每次异步响应后事务复查标志、remote_state、自身及最新子记录resolution，过期响应不恢复责任。housekeeping放弃后不可见迟到动作属于已接受风险。
+每次异步响应后复查 remote_cleanup_pending 和 remote_state，迟到响应不恢复已结束的责任，也不覆盖较新的远程状态。停止跟踪后不可观察的迟到动作属于已接受风险。

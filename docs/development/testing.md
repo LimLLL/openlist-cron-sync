@@ -16,7 +16,7 @@
 | state/recovery   | 所有状态转换、提交前事务窗口、无task成功不是unknown、历史终态不改写、Operation按(run_id, seq)排序                                                                                                                                                                                                         |
 | mutation outcome | 明确的执行前拒绝（400、403含file exists与IgnoredSystemFile、405、认证阻断）→failed且不观察，IgnoredSystemFile不重试；JSON 500或其他未列出的非成功码→一次refresh=true观察后分类（见故障窗口第5项）；超时/断连/已知tid查询不到→unknown；明确成功无task→succeeded                                            |
 | relay pipeline   | 下载不等上传；spool预算与防死锁优先级；块拼chunk按init返回的chunk_size；最后一个chunk等源EOF；chunk重传读取原spool数据；429/409流控不耗重试预算；status心跳与停止条件                                                                                                                                     |
-| quarantine       | TTL/人工release先刷新，unknown不变，后续resolution独立；abandoned后不再要求重新观察，删除前refresh复查照常                                                                                                                                                                                                |
+| unknown 历史     | 后续 Run 按自己的扫描创建、替换、保持不变或删除；无历史刷新义务，旧结果不改写；同轮依赖和删除保护保留                                                                                                                                                                                                     |
 | token            | 同一失效token只登录一次、迟到401不重登、401/402阻断、429持久冷却                                                                                                                                                                                                                                          |
 | concurrency      | Job queued占位、写写/读写冲突、名额释放、A→B与B→A的relay名额无死锁、取消token等待                                                                                                                                                                                                                         |
 | crypto           | 错key/错AAD/篡改tag失败、随机nonce、改密撤销JWT、秘密导出/日志不泄露；主密钥错误时启动失败且不写入新ENC值                                                                                                                                                                                                 |
@@ -64,29 +64,29 @@ MVP兼容记录中只有Local相关操作在实际通过后可标integration-tes
 ## 必须覆盖的故障窗口
 
 1. server_copy的copy code200无task直接成功，包括模拟后台随后失败；不得创建accepted状态或relay fallback。
-2. 已知tid从pending到重试中再成功；progress100仍未终态；delete_some逐id失败；清理时task已不存在只清除remote_cleanup_pending，不改Operation结果；本地unknown而远程running时绝不delete；远程终态再转running时只建立一条REMOTE_TASK_CHANGED记录。
+2. 已知tid从pending到重试中再成功；progress100仍未终态；delete_some逐id失败；清理时task已不存在只清除remote_cleanup_pending，不改Operation结果；本地unknown而远程running时绝不delete；远程终态再转 running 时只更新原 task 状态并记录一次日志，不新增操作。
 3. submitting落库后，远端接受但响应丢失；重启产生unknown，不按任务名字或path+size匹配。
 4. OpenList重启：JWT失效后重登再查task得404；multipart session消失，chunk或status返回404且无完成证据→unknown；静态token路径也覆盖。
-5. 变更得到JSON 500后的观察（F1）：create的同名文件以预期大小出现、mkdir的目录出现、remove的路径消失→succeeded（OBSERVED_AFTER_ERROR）；create名称不存在或delete原路径仍以预期类型和大小存在→failed并在预算内重试；大小不同、观察读取失败、视图suspect→unknown并隔离。
+5. 变更得到JSON 500后的观察（F1）：create的同名文件以预期大小出现、mkdir的目录出现、remove的路径消失→succeeded（OBSERVED_AFTER_ERROR）；create名称不存在或delete原路径仍以预期类型和大小存在→failed并在预算内重试；大小不同、观察读取失败、视图suspect→unknown。
 6. relay分片：init已启动驱动写入但响应丢失→unknown；chunk响应丢失后按status补发；429/409退避；complete成功后响应丢失、status 404→unknown；session转为failed_retriable/failed_permanent→failed且不发chunk 0；abort立即返回而驱动稍后才退出（Local迟到删除）。
 7. relay源异常：源过长、过短、Content-Length不符、Range返回206/200/416、validator变化、/d 401重新取sign；源异常主动abort后记failed，同Run重试前先refresh观察并清理残留。
 8. relay空间：文件明显大于可用spool时仍持续推进，已开始上传的文件不被预读饿死；自身session临时争用只等待；持久化init后独占容量仍不足一个frontier payload则主动abort并failed SPOOL_FULL，同Run不反复init；真实ENOSPC/EDQUOT也记SPOOL_FULL并区分摘要；SPOOL_RESERVE_BYTES保护同卷SQLite；重启后spool被清空。
 9. 替换链，按[替换链](../design/sync-engine.md#替换链)记录：
    - relay打开源或读首块失败：旧文件不动，create failed。
    - 删除前重读父目录失败、403或视图suspect：不提交delete；delete跳过，create跳过（DEPENDENCY_FAILED），该Target extras禁止。
-   - remove超时或响应丢失：delete unknown，create跳过，原路径隔离。
+   - remove超时或响应丢失：delete unknown，依赖 create 跳过，本轮不重试。
    - 删除确认期内原名仍存在：有界等待后failed（DELETE_NOT_EFFECTIVE），不开始create，也不使用overwrite=true；确认时refresh失败或视图suspect：unknown。
    - delete已完成、create失败：目标暂缺该文件，下一次Run重新创建。
    - create重试发现部分目标文件：先refresh确认先前动作已结束，以retry_cleanup删除，重新检查剩余预算后再create；绝不overwrite=true；已成功的delete不重复提交，下一Run中原名缺失记PRECONDITION_ALREADY_ABSENT（正常skipped）。
-10. user cancel与Run timeout：停止新派发，对已记录的multipart session发abort、对已知tid发cancel，不delete运行中task；宽限内无终态证据的动作unknown并隔离。
+10. user cancel与Run timeout：停止新派发，对已记录的multipart session发abort、对已知tid发cancel，不delete运行中task；宽限内无终态证据的动作unknown。
 11. SIGTERM与强杀：SIGTERM后ready=false，停止新触发、派发、提交和维护，中止本地扫描与下载，宽限内尝试abort已记录的multipart session，保存已收到的结果，不cancel已知task，不写Run终态。下次启动queued重新入队，scanning/planned→interrupted，executing/cancelling/recovering→recovering→interrupted（PROCESS_RESTART）；recovery_deadline_at只在首次进入recovering时写入。强杀依赖恢复识别submitting窗口。
-12. TTL或人工release后刷新失败仍不能写；刷新通过按当前状态执行；允许模拟迟到写入，验证风险政策而非“绝不迟到”。重启后unknownUntil不变，active隔离持续到原到期时间；重复release返回已有结果，不重置期限。
+12. 后续 Run 立即按配置的扫描视图规划；同大小文件 unchanged、缺失 create、不同大小替换。旧 unknown 不变；覆盖跨 Job 别名、未知后代的额外文件与空目录删除、重复 upload ID 的失败/abort/新尝试流程。
 13. non-admin警告、admin storage分页改变、balanced/nested mounts、隐藏mount_details；admin storage列表读取失败或不完整时相关删除禁止，不降级为非管理员路径。
 14. source子树失败禁止所有删除；Target失败只影响该目标；纯新建仍按明确范围继续。
 15. Target根：缺失（父目录可列出且无该名称）时dry-run计划全部create并报告TARGET_ROOT_WILL_BE_CREATED，真实Run先prepare mkdir再create；父目录列表失败、权限错误或父列表仍有该名称时记TARGET_ROOT_UNAVAILABLE，无create和删除，Run partial；新建根在mkdir后无法刷新确认时不执行子动作。source根失败则Run failed。
 16. mirror且syncEmptyDirs=true：Target独有目录在其中extras删除后自底向上删除，每个先refresh=true确认为空，发现非空则skipped PRECONDITION_CHANGED、不递归清除；syncEmptyDirs=false时不删除任何Target目录。
 17. 0字节源须先确认EOF才发送put；无Content-Length但实际非空时不发put。覆盖非identity响应、跨origin剥离凭据、极低带宽且取消不卡死。
-18. 阈值禁用或confirmDeletes不能绕过冲突/挂载/隔离；受保护后代所在的祖先目录不被删除。
+18. 阈值禁用或confirmDeletes不能绕过冲突/挂载；受保护后代所在的祖先目录不被删除。
 19. import原子失败、缺secret禁用、update省略保留/null清除；needs_url_review=1的channel启用返回409 URL_REVIEW_REQUIRED；导入带needsUrlReview=true的origin URL后再次导出，标志仍为true。
 20. DB满/迁移错误/密钥缺失或错误：不继续产生未记账远程写入；已有密文的启动校验发生在打开数据库后、初始化或写入任何新ENC前。
 21. warning与重试收敛：仅Target单侧的碰撞/未知大小/非法名称保护规定范围，但不使Run降级、不阻断范围外extras；一次failed后安全重试成功不残留extras_blocked。有关联source的碰撞仍阻断该Target。
@@ -138,15 +138,15 @@ supertest验证真实Nest路由、Guard、ValidationPipe、DTO metadata、错误
 
 真实拓扑沿用v4.2.7的两个Local存储与维护者准备的v4.2.5实例，不创建或修改容器。除了M1变量，必须提供OPENLIST_IT_SECOND_LOCAL_PATH、OPENLIST_IT_PEER_BASE_URL、OPENLIST_IT_PEER_ADMIN_TOKEN、OPENLIST_IT_PEER_LOCAL_PATH；仍只从.env读取OPENLIST_IT_*并在缺失时立即失败。密码账号保留只读M1验收，真实写入使用管理员身份。
 
-relay.int-spec覆盖L1、L2-relay、L3两个方向，每例建立UUID命名的临时根，清理不越出自有根。F1覆盖真实执行链、错误session快照、chunk/complete丢响应、重试cleanup预算、remove/零字节put错误后的观察分类、删除无效确认、源长度与编码异常、Range 206/200/416及validator/总大小变化、签名401只重新读取一次、缺失根刷新、目录非空保护、容量不足和小spool多文件进展。relay-spool-errors在文件系统写入边界注入ENOSPC/EDQUOT，不实际填满宿主磁盘。execution-checkpoints在实际submitting、session、EOF、completed、Operation结果及remove确认检查点的提交前后注入故障，用当时已提交的SQLite页启动新应用，验证恢复不重放旧请求；这不是操作系统SIGKILL测试。execution-recovery补充历史状态组合；execution-lifecycle覆盖取消、SIGTERM、恢复期限、隔离释放和多目标隔离。operations.e2e覆盖新路由、输入验证、OpenAPI、release/abandon幂等及历史unknown不改写。
+relay.int-spec覆盖L1、L2-relay、L3两个方向，每例建立UUID命名的临时根，清理不越出自有根。F1覆盖真实执行链、错误session快照、chunk/complete丢响应、重试cleanup预算、remove/零字节put错误后的观察分类、删除无效确认、源长度与编码异常、Range 206/200/416及validator/总大小变化、签名401只重新读取一次、缺失根刷新、目录非空保护、容量不足和小spool多文件进展。relay-spool-errors在文件系统写入边界注入ENOSPC/EDQUOT，不实际填满宿主磁盘。execution-checkpoints在实际submitting、session、EOF、completed、Operation结果及remove确认检查点的提交前后注入故障，用当时已提交的SQLite页启动新应用，验证恢复不重放旧请求；这不是操作系统SIGKILL测试。execution-recovery补充历史状态组合；execution-lifecycle覆盖取消、SIGTERM、恢复期限和独立多目标执行。operations.e2e覆盖新路由、输入验证、OpenAPI、退役端点/参数拒绝及历史 unknown 不改写。
 
-Phase 5回归增加：取消后再SIGTERM采用较短关机期限；准备失败或等待worker时取消归还spool承诺和连接；部分块清理失败不重复扣额；完整frontier预留先于小额预读、同级FIFO；提前响应等待上传body退出；超长Retry-After不溢出为紧密重试；非法Location按单文件上游错误分类。隔离用例另覆盖无动作空目录的observed和后续mkdir的superseded，保持历史unknown不变。真实拓扑各含10 MiB+4097字节模式数据，并覆盖L3限速上传取消。
+Phase 5回归增加：取消后再SIGTERM采用较短关机期限；准备失败或等待worker时取消归还spool承诺和连接；部分块清理失败不重复扣额；完整frontier预留先于小额预读、同级FIFO；提前响应等待上传body退出；超长Retry-After不溢出为紧密重试；非法Location按单文件上游错误分类。unknown-outcomes 覆盖后续 Run 独立规划、本轮依赖保护和历史结果不改写。真实拓扑各含10 MiB+4097字节模式数据，并覆盖L3限速上传取消。
 
 ## M4–M6合并验收
 
-server-copy组件覆盖有/无task替换、源元数据变化与读取失败、tid404、额度、取消；copy-recovery覆盖恢复超容量、持久最终宽限、关机不cancel/delete及不重放copy。task-maintenance覆盖安全/housekeeping、abandon延迟交接、远程状态边沿、统计不变与异步resolution竞态；history-retention使用真实FK和跨多批数据验证闭包、未解决unknown保留、CHECK-aware删除、停止后重启接续、FK RESTRICT回滚及EXPLAIN查询计划。
+server-copy组件覆盖有/无task替换、源元数据变化与读取失败、tid404、额度、取消；copy-recovery覆盖恢复超容量、持久最终宽限、关机不cancel/delete及不重放copy。task-maintenance 覆盖有界 housekeeping、远程状态逆转不新增行、统计不变和迟到响应不覆盖新事实；history-retention 使用真实 FK 和跨批数据验证 retry 引用闭包、unknown 按期删除、停止后重启接续及 FK RESTRICT 回滚。
 
-copy-cleanup覆盖retry_cleanup中的源缺失、源不可读及目标刷新失败分类，并验证部分文件保留、delete未提交。task-restore覆盖两类责任跨128行分页、重叠候选去重、远程终态排除，以及abandon仍有flag时继续恢复额度。
+copy-cleanup覆盖retry_cleanup中的源缺失、源不可读及目标刷新失败分类，并验证部分文件保留、delete未提交。task-restore覆盖两类责任跨128行分页、重叠候选去重、远程终态排除，以及历史 unknown 仍有 task 标志时继续恢复额度。
 
 cron-scheduling/cron-delay锁定Berlin DST、稀疏count前缀、无下一日期、理论scheduledAt、迟到timer与库重挂时双回调合并、旧注册拒绝及重启无补跑。scheduling.e2e验证启停窄更新、活动Run例外、归档404、严格输入及OpenAPI。compiled-smoke包含background-fatal子进程验证cron/maintenance持久化异常以非零状态退出且不泄露原SQL参数。
 
@@ -158,3 +158,5 @@ server-copy.int-spec沿用现有v4.2.7的Local /a与/b，只创建UUID临时根�
 - API：混合Target、按稳定ID省略/修改/重排/新增、source-only PATCH、相同URL不同Instance ID、Target错误路径、旧顶层字段及null拒绝；multipart只检查relay Target，保留原启用/接受Run边界与JOB_BUSY。
 - 执行：混合新建/替换/mirror、copy同步或task成功、relay分片、两类操作同Run恢复；两个relay Target共用Job带宽，copy不伪造传输字节。
 - 前端：新形状解析、Target控制项和错误、保留无效选值、两个提交按钮及提交入口、中英文历史目标展示；OpenAPI包含必填Target响应字段，不含Job层字段。
+
+unknown-history-migration 从真实 0009 数据库升级，验证依赖、自引用、旧 REMOTE_TASK_CHANGED、queued/recovering/已删除子记录的终态快照、重复 upload ID，以及快照或外键损坏时整组迁移回滚。

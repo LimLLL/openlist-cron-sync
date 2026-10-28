@@ -28,8 +28,6 @@ export interface ExecutionSettings {
   relayIdleTimeoutSeconds: number;
   /** relay 总期限，秒。 */
   relayTotalTimeoutSeconds: number;
-  /** 隔离期限，秒。 */
-  quarantineSeconds: number;
   /** 恢复期限，秒。 */
   recoveryTimeoutSeconds: number;
   /** 取消宽限，秒。 */
@@ -114,13 +112,6 @@ export function executionSettings(env: Environment): ExecutionSettings {
       21600,
       60,
       604800,
-    ),
-    quarantineSeconds: integerSetting(
-      env,
-      'QUARANTINE_SECONDS',
-      86400,
-      2100,
-      2592000,
     ),
     recoveryTimeoutSeconds: integerSetting(
       env,

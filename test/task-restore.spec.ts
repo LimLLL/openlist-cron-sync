@@ -50,7 +50,6 @@ it('restores paged task responsibility once and excludes released occupancy', as
               status,
               endedAt: status === 'unknown' ? 1 : null,
               unknownSince: status === 'unknown' ? 1 : null,
-              unknownUntil: status === 'unknown' ? 2 : null,
               openlistTaskId: index === 394 ? null : id,
               remoteCleanupPending:
                 index < 260 || (index >= 390 && index < 394),
@@ -60,10 +59,6 @@ it('restores paged task responsibility once and excludes released occupancy', as
                   : index === 0
                     ? null
                     : 1,
-              // 已放弃unknown仍保留flag时必须恢复额度，resolution本身不释放。
-              resolutionKind: index === 393 ? 'abandoned' : null,
-              resolutionNote: index === 393 ? 'Accepted incident' : null,
-              resolvedAt: index === 393 ? 3 : null,
             })
             .run();
         }

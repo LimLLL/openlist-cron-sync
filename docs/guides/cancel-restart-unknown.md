@@ -26,18 +26,18 @@ curl -X POST http://localhost:3000/api/v1/runs/<runId>/cancel \
 | scanning、planned、executing | 进入 cancelling：停止派发新动作，尚未派发的 pending 变为 cancelled；中止本地扫描和下载；relay 对已建立的分片上传会话发一次有界 abort；server_copy 对已知任务发 cancel 并轮询。已发出的 mkdir、删除和 0 字节上传继续等待响应 |
 | recovering（重启后收尾中）   | 只记录取消请求，并对仍未结束的已知任务各尝试一次 cancel；Run 最终仍是 interrupted（stopReason=PROCESS_RESTART），不会变成 cancelled                                                                                         |
 
-cancelling 的收尾期限是 `CANCEL_GRACE_SECONDS`（默认 60 秒，取 Run 被接受时的配置）。期限内拿到结果的动作照常记录；期限结束仍没有结论的动作记为 unknown 并隔离。已经成功的动作保留，不回滚。最终 Run 为 cancelled，stopReason=USER_CANCEL。
+cancelling 的收尾期限是 `CANCEL_GRACE_SECONDS`（默认 60 秒，取 Run 被接受时的配置）。期限内拿到结果的动作照常记录；期限结束仍没有结论的动作记为 unknown。已经成功的动作保留，不回滚。最终 Run 为 cancelled，stopReason=USER_CANCEL。
 
 超过任务的超时（`timeoutSeconds`，默认 86400 秒）时走同样的收尾，stopReason=RUN_TIMEOUT。
 
-注意：在 relay 上传进行中取消，正在上传的文件通常会变成 unknown，因为 abort 请求返回不能证明目标驱动已经停止写入。这些路径会被隔离（默认 24 小时），处理方法见下文。如果不想产生 unknown，可以等正在传输的大文件结束后再取消。
+注意：在 relay 上传进行中取消，正在上传的文件通常会变成 unknown，因为 abort 请求返回不能证明目标驱动已经停止写入。后续运行仍会独立扫描和规划这些路径，处理方法见下文。如果不想产生 unknown，可以等正在传输的大文件结束后再取消。
 
 ## 计划内重启
 
 服务收到 SIGTERM（`docker stop`、`docker compose stop/restart/down` 发出）或 SIGINT（终端 Ctrl+C）时：
 
 1. 立即不再就绪：`/system/health/ready` 返回 503，手动触发返回 503 NOT_READY，定时触发、新的派发和维护循环停止。
-2. 中止本地扫描和下载。已建立分片上传会话的 relay 在关机宽限内尝试 abort，结果通常是 unknown 并隔离；尚未提交的动作保持原状。
+2. 中止本地扫描和下载。已建立分片上传会话的 relay 在关机宽限内尝试 abort，结果通常是 unknown；尚未提交的动作保持原状。
 3. 在 `SHUTDOWN_GRACE_SECONDS`（默认 30 秒）内保存已经收到的响应和任务结果。**不会**对 OpenList 中的已知任务发送 cancel，也不会删除远端任务记录。
 4. 关闭连接池和数据库后退出。宽限到期后还会额外给本地持久化固定 5 秒；仍未结束则以错误退出。
 
@@ -56,7 +56,7 @@ cancelling 的收尾期限是 `CANCEL_GRACE_SECONDS`（默认 60 秒，取 Run �
 1. 在控制台“运行”页确认没有进行中的运行（queued、scanning、planned、executing、cancelling、recovering）。也可以用 `GET /runs?status=executing` 等按状态逐一查询。
 2. 如果担心检查之后、停止之前又被定时触发，可以先停用相关任务：`POST /jobs/:id/disable`（不会取消已在运行的 Run），重启后再 `POST /jobs/:id/enable`。
 3. 停止或重启进程。使用容器时，平台给出的停止宽限应大于 `SHUTDOWN_GRACE_SECONDS` 加 5 秒；仓库中的 `docker-compose.yaml` 设为 60 秒。
-4. 启动后确认 `/system/health/ready` 返回 200；查看“操作”页是否出现新的未解决 unknown。
+4. 启动后确认 `/system/health/ready` 返回 200；查看“操作”页是否出现新的 unknown 历史。
 
 ## 什么是 unknown
 
@@ -70,58 +70,32 @@ unknown 表示请求可能已经到达 OpenList，但本服务得不到可靠结
 
 OpenList 明确拒绝执行（400、403、405 等）记为 failed，不是 unknown。完整分类见 [OperationStatus](../design/state-machines.md#operation-status)。
 
-unknown 是 Operation 的永久历史状态，之后的处理只追加“处置结果”（resolution），不改写原记录。每条 unknown 都会隔离它的目标路径：
+unknown 是 Operation 的历史终态，同一 Run 不自动重试，后续 Run 成功也不改写它。未知结果阻止本轮成功，按已有聚合规则为 partial 或 failed；取消和重启仍优先为 cancelled 或 interrupted。
 
-- 隔离期从 `unknownSince` 起算，到 `unknownUntil` 截止，长度为 `QUARANTINE_SECONDS`（默认 86400 秒；下限 2100 秒，覆盖 OpenList 分片会话 30 分钟的闲置过期）。期限持久化，重启不重新计时。
-- 隔离期内，任何 Job 都不会写该路径，也不会删除它的祖先目录；目录动作还保护其全部后代。同一 OpenList 的不同账号记录之间同样生效。
-- 被隔离挡住的动作记 skipped（PREVIOUS_OUTCOME_UNKNOWN），Run 为 partial，该 Target 本轮不执行 mirror 删除。其他路径照常同步。
-- 隔离不阻止其他 Job 把该路径当作源来读取。
+## 查看未知结果与继续同步
 
-隔离到期或被提前解除后，该记录进入“需要重新观察”：之后第一次要写这些路径的真实运行，必须先以 refresh=true 成功读取全部受影响的父目录才会写入；读取失败则本轮继续跳过。读取成功后按当前源和目标的状态重新规划：
+- 控制台“操作”页把状态筛选设为“结果未知”；操作详情显示请求、传输事实和结果时间。
+- API：`GET /operations?status=unknown`，可加 `instanceId=<id>` 过滤。
+- 需要继续同步时，正常触发新的 Run，或等待下次定时运行。它按照自己的配置和扫描结果规划：缺失创建，大小不同先删除再创建，同名同类型同大小保持不变。
+- 普通扫描遵守 Job/Target 的 refresh 设置，不会因为旧 unknown 增加刷新请求。删除前提与删除确认仍强制 refresh=true。
+- 本轮未知的替换删除不会放行后续创建，未知父目录创建不会放行子操作，本轮创建失败或未知仍阻止该目标的 mirror extras。
 
-- 目标已经符合当前源：记为“已观察确认”（observed）；
-- 目标缺失或大小不同：按普通计划创建或替换，新动作成功后旧记录记为“已被取代”（superseded）。
+历史 unknown 不阻止实例身份修改或历史保留期删除。活动 Run 和待删除的远程任务记录仍有独立责任。已知历史 copy 任务未结束时继续消耗 Target 的 concurrentFiles；因此新 Run 仍可能等待真实远程负载释放额度，但不会因旧结果按路径跳过。
 
-在出现处置结果之前，之后的每次运行都会重新做这次刷新读取。
+## 已接受的迟到副作用
 
-**已接受风险**（[ADR 0004](../adr/0004-quarantine-expiry.md)）：时间过去、提前解除、放弃或观察确认，都不能证明原请求已经停止。原请求仍可能迟到生效，覆盖或删除后来写入的新状态。分片会话被 abort、消失或过期，同样不证明驱动已停止写入。
+取消响应、分片 abort 成功或 session 消失都不能证明云端已经停止。旧请求可能覆盖或删除较新的目标，下一轮只能修复它能够观察且允许处理的差异：
 
-## 查看和处置 unknown
+- 同大小的不同内容视为 unchanged；文件/目录冲突记 TYPE_CONFLICT 并保护，可能需要人工处理。
+- 缓存可能隐藏变化；最后一次 Run 之后发生的删除，要有后续成功运行才可能修复。
+- incremental 保留迟到 extras；mirror 仍受过滤、扫描完整性和删除保护限制。
+- 目标用作另一 Job 的源时，迟到或临时缺失的状态可能传播到下游。
+- OneDrive 的迟到 mkdir 可能生成改名空目录。incremental 会保留；mirror 也只有在 syncEmptyDirs=true 且保护允许时才删除。
 
-查看：
+source 不作为本 Job 的写入目标，但跨地址、挂载或符号链接的底层别名不能全部识别。详情见[ADR 0004](../adr/0004-unknown-outcomes.md)。
 
-- 控制台概览的“需要关注”列出未解决操作；“操作”页把状态筛选设为“结果未知”、未解决筛选设为“未解决”。
-- API：`GET /operations?status=unknown&unresolved=true`，可加 `instanceId=<id>` 按实例过滤。已有处置结果的历史 unknown 仍可用 `status=unknown` 查到。
-- 操作详情页的“生命周期”显示结果未知起始、隔离截止、解除隔离和重新观察的时间。
+## OpenList 中手动重试任务
 
-三种处置方式：
+管理员手动重试本服务的旧 copy task 属于外部写入。维护观察到远程终态回到非终态时，只更新原记录的 task 状态并记录日志，不新增操作，也不改写原结果。任务未结束时不删除它的远程记录，仍计入 Target 额度；终态后再删除记录。
 
-| 方式         | 做什么                                                                                                                                                  | 何时使用                                                                                                                                          |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 等待到期     | 什么都不做；到期后由下一次真实运行自动重新观察                                                                                                          | 默认做法                                                                                                                                          |
-| 提前解除隔离 | 只写入解除时间和原因，隔离提前结束，路径进入“需要重新观察”。不改 Operation 状态，不写处置结果，不写远端文件；重复请求返回现有结果，不重置期限           | 已在 OpenList 中确认原请求不会再进行（例如任务已结束、分片会话已过期），希望该路径尽快恢复同步                                                    |
-| 放弃责任     | 写入 abandoned 处置结果并结束该记录：不再计入未决责任，也不再要求重新观察；若尚未解除隔离，同时写入解除时间。不修复或回滚目标，之后的运行按普通扫描处理 | 不需要再跟踪这条记录，例如路径已不再受管理；或者要修改实例的地址或账号，而这条 unknown 是阻止修改的未决责任之一（修改会返回 409 ENDPOINT_IN_USE） |
-
-控制台：在操作详情页的“结果未知”区域填写原因后提交“解除隔离”或“放弃操作”。“解除隔离”只在隔离尚未解除时显示，“放弃责任”在没有处置结果时显示。原因为 1–1000 个字符，不要填写凭据。
-
-API：
-
-```sh
-# 提前解除隔离
-curl -X POST http://localhost:3000/api/v1/operations/<operationId>/quarantine-release \
-  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d '{"reason":"已在 OpenList 中确认该分片上传会话已过期"}'
-
-# 放弃责任
-curl -X POST http://localhost:3000/api/v1/operations/<operationId>/resolve \
-  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d '{"kind":"abandoned","reason":"该目录已不再同步，不再跟踪这次未知结果"}'
-```
-
-两个接口只接受没有处置结果的 unknown，否则返回 409 INVALID_STATE；对已放弃的同一记录重复放弃返回 200 和现有记录，不覆盖原因。放弃时如有活动 Run 正在占用该路径，返回 409 PATH_BUSY，等该 Run 结束后再试。
-
-两种人工处置都接受与隔离到期相同的迟到写入风险，也都不是“文件已校验正确”的证明。处置之后建议先对相关任务做一次预览运行，确认计划符合预期再真实运行。
-
-## 不要在 OpenList 中手动重试本服务的任务
-
-如果在 OpenList 的任务页手动重试了本服务已经结束的复制任务，使它重新运行，维护循环会为同一路径新建一条 unknown（错误码 REMOTE_TASK_CHANGED，指向原记录）并隔离该路径。原记录的结果不变。这条新的 unknown 按本文同样的方法处理。
+旧版本产生的 REMOTE_TASK_CHANGED 行仍是可查询历史，不影响当前计划或执行统计。历史结果不需要通过管理表单“解决”。

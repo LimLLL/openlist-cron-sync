@@ -49,12 +49,10 @@ RunView={id,jobId,trigger:'manual'|'cron',scheduledAt:Time|null,dryRun:boolean,c
 RunDetail=RunView+{sourceInstanceName:string,config:不含秘密的固定Job/Instance配置,targets:RunTargetView[],issueCount:integer}；operations/issues另分页。
 RunTargetView={id,targetId,instanceName:string,config:{target:固定Target公共配置,instance:固定Instance配置},stats,sourceComplete,targetComplete,suspect,deleteBlocked,extrasBlocked,blockReasons:string[],observedTargetFileCount,plannedReplaceCount,plannedExtraCount,deleteBudgetCount:integer|null}。
 deleteBudgetCount是保护检查时固定的本Target删除预算（计算见[文件阈值](../design/deletion.md#文件阈值)）；扫描全目标删除阻断时为0；否则null表示数量/比例不限，即deleteLimits.enabled=false或本Run confirmDeletes=true。null不是删除许可，仍受局部保护及extrasBlocked等条件约束。
-OperationView={id,runId,runTargetId,seq:integer,action,method,reason,status:OperationStatus,sourceInstanceId:Id|null,sourceInstanceName:string|null,sourcePath:string|null,targetInstanceId:Id,targetInstanceName:string,targetPath:string,isDir:boolean,expectedSourceSize:Size|null,expectedTargetSize:Size|null,affectedFileCount:integer,affectedBytes:Size,retryOf:Id|null,causedByOperationId:Id|null,attemptNo:integer,task:{id,state:integer|null}|null,multipart:{uploadId:string,chunkSize:integer,state:string|null,attempt:integer|null,sourceStreamCompletedAt:Time|null}|null,bytesDownloaded:Size,bytesTransferred:Size,error:{code,message}|null,createdAt,updatedAt,submittedAt:Time|null,endedAt:Time|null,unknownSince:Time|null,unknownUntil:Time|null,quarantineReleasedAt:Time|null,quarantineReleaseReason:string|null,reobservedAt:Time|null,resolution:{kind:'observed'|'superseded'|'abandoned',note:string|null,resolvedAt:Time,runId:Id|null}|null}；名称优先Run冻结快照，其次当前（含归档）Instance，最后为8字符ID前缀。
+OperationView={id,runId,runTargetId,seq:integer,action,method,reason,status:OperationStatus,sourceInstanceId:Id|null,sourceInstanceName:string|null,sourcePath:string|null,targetInstanceId:Id,targetInstanceName:string,targetPath:string,isDir:boolean,expectedSourceSize:Size|null,expectedTargetSize:Size|null,affectedFileCount:integer,affectedBytes:Size,retryOf:Id|null,attemptNo:integer,task:{id,state:integer|null}|null,multipart:{uploadId:string,chunkSize:integer,state:string|null,attempt:integer|null,sourceStreamCompletedAt:Time|null}|null,bytesDownloaded:Size,bytesTransferred:Size,error:{code,message}|null,createdAt,updatedAt,submittedAt:Time|null,endedAt:Time|null,unknownSince:Time|null}；名称优先Run冻结快照，其次当前（含归档）Instance，最后为8字符ID前缀。
 action/method/reason枚举与SQL相同，见[执行表](../design/execution-tables.md)。task只在server_copy时非null，只公开本服务创建的id，不含任务原始名称；multipart只在relay收到有效init响应后非null，state与attempt为最近一次观察到的OpenList原始值。
-causedByOperationId只在error.code=REMOTE_TASK_CHANGED的维护Operation上非null，指向原Operation。reobservedAt是首个完成受影响父目录refresh=true读取的非dry-run Run写入的时间。resolution.note在kind=abandoned时为管理员reason，其他kind为null；幂等重复请求不覆盖已存note。
+unknownSince 是操作首次记为 unknown 的时间。后续 Run 不改写该历史结果；旧 error.code=REMOTE_TASK_CHANGED 行保留可读历史，不计入执行统计。
 ScanIssueView={id,runId,runTargetId:Id|null,endpointRole:'source'|'target',instanceId,path,code,message,protectSubtree:boolean,createdAt}。
-
-隔离状态（active / reobserve_required / clear）由status、unknownUntil、quarantineReleasedAt、resolution与reobservedAt派生，规则见[辅助状态](../design/state-machines.md#auxiliary-states)；不额外提供可写的quarantine.status。
 
 ## NotificationChannel与Delivery
 
@@ -67,7 +65,7 @@ DeliveryView={id,runId:Id|null,channelId,eventId,eventType,status:'pending'|'sen
 ## 系统
 
 Health={status:'ok'|'not_ready',database:'ok'|'error'}，不含秘密/路径。
-Info={version:string,schemaVersion:integer,nodeVersion:string,singleProcess:true,activeRuns:integer,queuedRuns:integer,unresolvedOperations:integer,oldestUnresolvedAt:Time|null,spool:{dir:string,usedBytes:Size,availableBytes:Size,reserveBytes:Size},defaults:非秘密有效服务配置}。
+Info={version:string,schemaVersion:integer,nodeVersion:string,singleProcess:true,activeRuns:integer,queuedRuns:integer,spool:{dir:string,usedBytes:Size,availableBytes:Size,reserveBytes:Size},defaults:非秘密有效服务配置}。
 导入导出形状见[配置传输](import-export.md)。
 
 运行详情的sourceInstanceName和每个targets[].instanceName按冻结名称、当前（含归档）名称、Instance ID的8字符前缀解析；Target ID不参与名称回退。操作详情和两种操作分页都返回名称及原始ID。扫描问题数量为issueCount，读取已提交的scan_issues；长单文件传输字节随现有约5秒的进度持久化更新，不等待attempt结束。聚合溢出返回HTTP 500 RESOURCE_LIMIT，查询本身不修改Run状态。

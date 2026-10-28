@@ -1,4 +1,4 @@
-// 验证实例变更与三项真实责任谓词，以及事务内 ACCOUNT_CHANGED 保护。
+// 验证实例变更与活动责任谓词，以及事务内 ACCOUNT_CHANGED 保护。
 import { eq } from 'drizzle-orm';
 import { m2Fixture, preview, plan, terminal } from './m2-fixture.js';
 import type { M2Fixture } from './m2-fixture.js';
@@ -9,7 +9,7 @@ import { operations } from '../src/database/operation-schema.js';
 import { hasResponsibility } from '../src/database/responsibility.js';
 import { object } from '../src/openlist/errors.js';
 
-/** 覆盖实例变更与三项真实责任谓词，以及责任期间的 ACCOUNT_CHANGED 保护。
+/** 覆盖实例变更与活动责任谓词，以及责任期间的 ACCOUNT_CHANGED 保护。
  * @param 不适用。
  * @returns 不适用。
  * @throws Error 断言失败。
@@ -129,12 +129,12 @@ describe('M2 instance responsibility', () => {
     release.release();
     await terminal(f, run.id);
   });
-  /** Job 归档后，未解决的 unknown 操作和待清理的远程任务仍构成实例责任并阻止归档实例。
+  /** Job 归档后，历史 unknown 不占用实例；待删除的远程任务记录仍保留责任。
    * @param 不适用。
    * @returns 完成 Promise。
    * @throws Error 断言或夹具失败。
    */
-  it('keeps unresolved unknown and pending remote cleanup as real responsibility after Job archive', async () => {
+  it('allows identity changes with unknown history but retains actual remote-task responsibility', async () => {
     f = await m2Fixture();
     const job = f.job();
     const run = await preview(f, job);
@@ -146,29 +146,15 @@ describe('M2 instance responsibility', () => {
         status: 'unknown',
         endedAt: now,
         unknownSince: now,
-        unknownUntil: now + 1000,
       })
       .where(eq(operations.id, op.id))
       .run();
     f.jobs().archive(job.id);
-    expect(hasResponsibility(db, f.id)).toBe(true);
-    expect(
-      /** 归档仍有责任的实例。
-       * @param 不适用。
-       * @returns 不适用。
-       * @throws Error 预期的 Instance is referenced。
-       */
-      () => f.app.get(InstancesService).archive(f.id),
-    ).toThrow('Instance is referenced');
-    db.update(operations)
-      .set({
-        resolutionKind: 'abandoned',
-        resolutionNote: 'fixture decision',
-        resolvedAt: now,
-      })
-      .where(eq(operations.id, op.id))
-      .run();
     expect(hasResponsibility(db, f.id)).toBe(false);
+    expect(
+      f.app.get(InstancesService).patch(f.id, { downloadMode: 'p' })
+        .downloadMode,
+    ).toBe('p');
     db.update(operations)
       .set({
         method: 'server_copy',
@@ -178,6 +164,14 @@ describe('M2 instance responsibility', () => {
       .where(eq(operations.id, op.id))
       .run();
     expect(hasResponsibility(db, f.id)).toBe(true);
+    expect(() =>
+      f.app
+        .get(InstancesService)
+        .patch(f.id, { baseUrl: f.server.baseUrl + '/changed' }),
+    ).toThrow('Instance has outstanding responsibility');
+    expect(() => f.app.get(InstancesService).archive(f.id)).toThrow(
+      'Instance is referenced',
+    );
     db.update(operations)
       .set({ remoteCleanupPending: false })
       .where(eq(operations.id, op.id))

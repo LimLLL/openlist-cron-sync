@@ -2,15 +2,11 @@
 export default {
   list: {
     description:
-      'Each file a run copied, created or removed, with its exact outcome. Unknown outcomes stay quarantined until you settle them.',
+      'Each file a run copied, created or deleted, with its recorded outcome. Later runs plan from their own scans; unknown outcomes remain in history.',
     total_one: '{{count}} operation',
     total_other: '{{count}} operations',
     statusFilter: 'Status',
     allStatuses: 'All statuses',
-    unresolvedFilter: 'Unresolved filter',
-    unresolvedAll: 'All',
-    unresolvedOnly: 'Unresolved',
-    unresolvedExclude: 'Excluding unresolved',
     directory: 'Folder',
     columns: {
       target: 'Target',
@@ -48,11 +44,6 @@ export default {
       submitted: 'Submitted',
       ended: 'Ended',
       unknownSince: 'Outcome unknown since',
-      unknownUntil: 'Quarantined until',
-      quarantineReleased: 'Quarantine released',
-      reobserved: 'Re-observed',
-      resolved: 'Resolved · {{kind}}',
-      releaseReason: 'Reason: {{reason}}',
     },
     record: {
       title: 'Record',
@@ -64,7 +55,6 @@ export default {
       expectedTarget: 'Expected target size',
       affectedBytes: 'Affected size',
       retryOf: 'Retry of',
-      causedBy: 'Caused by',
       remoteTask: 'Remote task',
       taskState: 'State {{state}}',
       multipart: 'Multipart upload',
@@ -74,42 +64,6 @@ export default {
       streamCompleted: 'Source stream completed',
       sourceInstance: 'Source instance',
       targetInstance: 'Target instance',
-    },
-    resolution: {
-      title: 'Resolution',
-      description: 'How responsibility for this outcome ended.',
-      kind: {
-        observed: 'Observed',
-        superseded: 'Superseded',
-        abandoned: 'Abandoned',
-      },
-      note: 'Note',
-      at: 'Resolved at',
-      byRun: 'Settled by run',
-    },
-  },
-  manage: {
-    title: 'Unknown outcome',
-    description:
-      'The outcome of this operation is unknown, so the target path may be partly written. Releasing quarantine lets later real runs re-observe this path; abandoning ends responsibility without checking the remote state.',
-    reasonLabel: 'Reason',
-    reasonHint: 'Up to 1000 characters. Never include credentials.',
-    reasonRequired: 'A reason is required.',
-    release: {
-      title: 'Release quarantine',
-      description:
-        'Lets later runs write to this path again after re-observing it. It does not stop or undo a remote request that is still in flight — that request may still land.',
-      placeholder: 'Why is it safe to release quarantine?',
-      submit: 'Release quarantine',
-      submitting: 'Releasing…',
-    },
-    abandon: {
-      title: 'Abandon responsibility',
-      description:
-        'Ends tracking and refresh obligations for this unknown outcome. It does not repair files, and it does not prove the remote operation has stopped.',
-      placeholder: 'Why is it acceptable to abandon this operation?',
-      submit: 'Abandon operation',
-      submitting: 'Abandoning…',
     },
   },
 } as const;

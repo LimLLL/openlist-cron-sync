@@ -43,7 +43,6 @@ describe('M2 configuration and persistence', () => {
     ['DELETE_CONFIRM_INTERVAL_MS', '499'],
     ['RELAY_IDLE_TIMEOUT_SECONDS', '4'],
     ['RELAY_TOTAL_TIMEOUT_SECONDS', '59'],
-    ['QUARANTINE_SECONDS', '2099'],
     ['RECOVERY_TIMEOUT_SECONDS', '9'],
     ['CANCEL_GRACE_SECONDS', '0'],
     ['SCAN_MAX_DEPTH', '0'],
@@ -89,7 +88,6 @@ describe('M2 configuration and persistence', () => {
     );
     expect(config.execution).toMatchObject({
       taskPollMs: 3000,
-      quarantineSeconds: 86400,
       relayTotalTimeoutSeconds: 21600,
       deleteConfirmTimeoutSeconds: 60,
     });

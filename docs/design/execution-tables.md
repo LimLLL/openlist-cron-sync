@@ -1,4 +1,4 @@
-用途：定义运行计划、操作结果、隔离及保留责任的持久化结构。
+用途：定义运行计划、操作结果、远程任务及保留责任的持久化结构。
 
 范围：继承[数据模型](data-model.md)的类型和NOT NULL规则；全部状态取自[状态机](state-machines.md)。
 
@@ -45,44 +45,38 @@ suspect与扫描产生的delete_blocked在本Run内只从0变1；delete_blocked�
 
 ## operations
 
-| 字段                                               | 类型                     | 约束/含义                                                                     |
-| -------------------------------------------------- | ------------------------ | ----------------------------------------------------------------------------- |
-| id                                                 | ID                       | 唯一逻辑尝试                                                                  |
-| run_id / run_target_id                             | FK runs / FK run_targets | 所属Run；维护器新增的REMOTE_TASK_CHANGED记录引用原Run及Target，不改变其终态   |
-| seq                                                | INT                      | 本Run内计划顺序，从1递增；维护新增的Operation取该Run下一个值                  |
-| action                                             | ENUM                     | mkdir / create / delete                                                       |
-| method                                             | ENUM                     | mkdir / server_copy / relay / remove                                          |
-| reason                                             | ENUM                     | prepare / new / replace / extra / retry_cleanup                               |
-| status                                             | ENUM OperationStatus     | pending                                                                       |
-| source_instance_id / source_path                   | ID? FK instances / STR?  | create才指Job source；其他为NULL                                              |
-| target_instance_id / target_path                   | FK instances / STR       | 实际目标路径                                                                  |
-| is_dir                                             | BOOL                     | 目录动作                                                                      |
-| expected_source_size / expected_target_size        | INT?                     | 文件前提；目录NULL                                                            |
-| expected_source_modified                           | STR?                     | 原样RFC3339，仅用于Last-Modified尽力传递                                      |
-| affected_file_count / affected_bytes               | INT                      | 文件动作为1及文件大小；mkdir和已确认空目录删除为0/0                           |
-| retry_of                                           | ID? FK operations        | 首次尝试id；同run、同动作，所有后续attempt指同一个根                          |
-| caused_by_operation_id                             | ID? FK operations        | REMOTE_TASK_CHANGED新建unknown时指向原记录                                    |
-| attempt_no                                         | INT                      | 初始1；最大见配置                                                             |
-| openlist_task_id                                   | STR?                     | 仅server_copy的copy task id                                                   |
-| remote_state                                       | INTEGER?                 | 原始tache值，非本地enum；仅server_copy                                        |
-| remote_cleanup_pending                             | BOOL                     | 0；有tid的本地终态持久化后置1，先确认远程终态再清理；无tid恒为0               |
-| bytes_downloaded / bytes_transferred               | INT                      | 0；本次尝试的下载字节与已上传字节（relay含chunk重传）                         |
-| multipart_upload_id / multipart_chunk_size         | STR? / INT?              | 仅relay；收到有效init响应后、发送任何chunk前写入                              |
-| multipart_state / multipart_attempt                | STR? / INTEGER?          | 最近一次观察到的OpenList session原始state与attempt（远端从0开始），非本地enum |
-| source_stream_completed_at                         | TS?                      | 仅relay；源正常EOF且字节数等于size后、发布最后一个chunk前写入                 |
-| error_code / error_message                         | STR?                     | 原因码（见[分类](state-machines.md#code-classification)）及脱敏摘要           |
-| created_at / updated_at                            | TS                       | 通用                                                                          |
-| submitted_at / ended_at / next_attempt_at          | TS?                      | 尝试时钟                                                                      |
-| unknown_since / unknown_until                      | TS?                      | status=unknown时必填，until≥since                                             |
-| quarantine_released_at / quarantine_release_reason | TS? / STR?               | 提前释放事实（abandon也写入），不是结果                                       |
-| reobserved_at / reobserved_by_run_id               | TS? / ID? FK runs        | 释放/到期后首次完成refresh重新观察的Run                                       |
-| resolution_kind                                    | ENUM?                    | observed / superseded / abandoned                                             |
-| resolution_note                                    | STR?                     | abandoned时必填的管理员原因；重复请求不覆盖                                   |
-| resolved_at / resolved_by_run_id                   | TS? / ID? FK runs        | 后续事实，绝不改unknown结果                                                   |
+| 字段                                        | 类型                     | 约束/含义                                                                     |
+| ------------------------------------------- | ------------------------ | ----------------------------------------------------------------------------- |
+| id                                          | ID                       | 唯一逻辑尝试                                                                  |
+| run_id / run_target_id                      | FK runs / FK run_targets | 所属 Run；旧版维护记录保持原归属和历史结果                                    |
+| seq                                         | INT                      | 本 Run 内计划顺序，从 1 递增                                                  |
+| action                                      | ENUM                     | mkdir / create / delete                                                       |
+| method                                      | ENUM                     | mkdir / server_copy / relay / remove                                          |
+| reason                                      | ENUM                     | prepare / new / replace / extra / retry_cleanup                               |
+| status                                      | ENUM OperationStatus     | pending                                                                       |
+| source_instance_id / source_path            | ID? FK instances / STR?  | create才指Job source；其他为NULL                                              |
+| target_instance_id / target_path            | FK instances / STR       | 实际目标路径                                                                  |
+| is_dir                                      | BOOL                     | 目录动作                                                                      |
+| expected_source_size / expected_target_size | INT?                     | 文件前提；目录NULL                                                            |
+| expected_source_modified                    | STR?                     | 原样RFC3339，仅用于Last-Modified尽力传递                                      |
+| affected_file_count / affected_bytes        | INT                      | 文件动作为1及文件大小；mkdir和已确认空目录删除为0/0                           |
+| retry_of                                    | ID? FK operations        | 首次尝试id；同run、同动作，所有后续attempt指同一个根                          |
+| attempt_no                                  | INT                      | 初始1；最大见配置                                                             |
+| openlist_task_id                            | STR?                     | 仅server_copy的copy task id                                                   |
+| remote_state                                | INTEGER?                 | 原始tache值，非本地enum；仅server_copy                                        |
+| remote_cleanup_pending                      | BOOL                     | 0；有tid的本地终态持久化后置1，先确认远程终态再清理；无tid恒为0               |
+| bytes_downloaded / bytes_transferred        | INT                      | 0；本次尝试的下载字节与已上传字节（relay含chunk重传）                         |
+| multipart_upload_id / multipart_chunk_size  | STR? / INT?              | 仅relay；收到有效init响应后、发送任何chunk前写入                              |
+| multipart_state / multipart_attempt         | STR? / INTEGER?          | 最近一次观察到的OpenList session原始state与attempt（远端从0开始），非本地enum |
+| source_stream_completed_at                  | TS?                      | 仅relay；源正常EOF且字节数等于size后、发布最后一个chunk前写入                 |
+| error_code / error_message                  | STR?                     | 原因码（见[分类](state-machines.md#code-classification)）及脱敏摘要           |
+| created_at / updated_at                     | TS                       | 通用                                                                          |
+| submitted_at / ended_at / next_attempt_at   | TS?                      | 尝试时钟                                                                      |
+| unknown_since                               | TS?                      | status=unknown 时必填，记录首次判定结果未知的时间                             |
 
 action/method合法组合：mkdir/mkdir，create/server_copy或relay，delete/remove。应用校验及SQL CHECK共同约束。openlist_task_id与remote_state只允许method=server_copy非NULL；multipart_*与source_stream_completed_at只允许method=relay非NULL。
-UNIQUE(run_id,seq)；UNIQUE(target_instance_id,openlist_task_id) WHERE openlist_task_id IS NOT NULL；UNIQUE(target_instance_id,multipart_upload_id) WHERE multipart_upload_id IS NOT NULL。
-索引(run_target_id,status,seq)、(status,next_attempt_at)、(target_instance_id,target_path)、(status,unknown_until)、(remote_cleanup_pending,id)。保留清理另有retry_of、(caused_by_operation_id,seq)、(resolved_by_run_id,id)、(reobserved_by_run_id,id)，及run_id上的未决责任/引用稀疏索引；Runs有(ended_at,id)。
+UNIQUE(run_id,seq)；UNIQUE(target_instance_id,openlist_task_id) WHERE openlist_task_id IS NOT NULL；multipart_upload_id 不设历史唯一约束。
+索引 (run_target_id,status,seq)、(status,next_attempt_at)、(target_instance_id,target_path)、status、(remote_cleanup_pending,id)、retry_of，以及 run_id 上待删除 task 责任的稀疏索引；Runs 有 (ended_at,id)。
 相同路径不同尝试不加全局唯一约束；路径占用在应用调度器统一管理。
 
 ## operation_dependencies
@@ -105,8 +99,10 @@ UNIQUE(event_id,channel_id)，索引(status,next_attempt_at)。attemptCount是�
 ## 交叉约束
 
 FK创建时允许SQLite表间前向引用；Drizzle迁移最终必须校验外键。
-CHECK约束补充：Run终态须ended_at非NULL；Operation终态须ended_at非NULL；unknown须unknown_since/unknown_until非NULL；resolution_kind非NULL须resolved_at非NULL；resolution_kind='abandoned'须resolution_note非NULL。大小、计数均≥0。跨表身份一致性在仓储事务中校验，不能以DTO校验代替FK。
-seq、attempt_no必须≥1；caused_by_operation_id仅在error_code=REMOTE_TASK_CHANGED时非NULL，且此类行必须引用原Operation，tid为NULL。reobserved_by_run_id写实际完成重新观察的Run。
+CHECK 约束：Run 与 Operation 终态须 ended_at 非 NULL；unknown 须 unknown_since 非 NULL。大小、计数均非负；跨表身份一致性由仓储事务验证，外键始终保留。
+seq、attempt_no 必须大于等于 1。旧 error_code=REMOTE_TASK_CHANGED 行保留为历史，执行统计和默认运行操作列表排除这些行。
 Stats和公共JSON形状见[API schemas](../reference/api-schemas.md)。枚举、数据约束与DTO均需行为测试，不能只测试SQL字符串。
 
 MAX_OPERATIONS_PER_RUN只限制初始计划。每个逻辑动作最多Run快照中retryMaxAttempts次；每个额外create attempt最多引入一个retry_cleanup逻辑动作，该清理自身有同样的attempt上限且不生成其它清理。chunk、下载、读取、完成和task-info循环也分别使用该预算，因此不同循环的总请求次数可能相乘。清理预算按逻辑动作累计预留，同一清理的重试不重复占额。
+
+OpenList 可能返回旧 failed_retriable session 的 upload ID，允许多个历史尝试记录同一 ID；每次尝试的会话 ID、attempt 和 chunk layout 一致性仍在上传/恢复时校验。迁移删除退役的路径管理字段，但保留原 status、error_code、unknown_since 及其他操作事实。

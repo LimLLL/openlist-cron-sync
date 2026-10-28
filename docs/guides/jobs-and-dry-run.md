@@ -155,7 +155,7 @@
 - 列表可疑（嵌套挂载等）或管理员挂载列表不可用：相关范围禁止删除，见[挂载解析](openlist-accounts.md#挂载解析管理员与普通用户)。
 - 源完整扫描后为空且 `allowEmptySource=false`：所有删除禁止（`EMPTY_SOURCE`）。只有确实要清空目标时才开启 `allowEmptySource`；它不能放行读取失败或可疑列表。
 - 名称碰撞、类型冲突、大小未知、被过滤的条目及其路径受保护。
-- 之前结果未知的操作所涉及的路径处于隔离期，不写入，也不删除其上级目录。
+- 历史 unknown 不参与本轮规划；本轮未知的父目录创建或替换删除仍阻止依赖动作。
 
 ## 运行 dry-run
 
@@ -179,7 +179,7 @@ curl -X POST "$BASE/jobs/$JOB_ID/runs" \
 | 状态        | dry-run 中的含义                                                                                          |
 | ----------- | --------------------------------------------------------------------------------------------------------- |
 | `succeeded` | 扫描完整，没有降级类问题；计划就是真实运行将要做的改动                                                    |
-| `partial`   | 有保护、冲突、隔离或子树读取失败，部分改动会被跳过，需查看原因                                            |
+| `partial`   | 有保护、冲突或子树读取失败，部分改动会被跳过，需查看原因                                                  |
 | `failed`    | 源根目录读不出来（`SOURCE_ROOT_UNAVAILABLE`）或扫描超出资源上限（`RESOURCE_LIMIT`），没有生成可执行的计划 |
 
 ### 每个目标
@@ -203,7 +203,7 @@ curl -X POST "$BASE/jobs/$JOB_ID/runs" \
 
 - `action` / `method`：`mkdir`，`create`（`relay` 或 `server_copy`），`delete`（`remove`）。
 - `reason`：`prepare`（目标根目录）、`new`（新建）、`replace`（替换）、`extra`（多余文件或目录）。
-- dry-run 中 `status` 为 `pending`（真实运行会执行）或 `skipped`。跳过的原因在 `error.code`，常见的有 `DELETE_LIMIT`（超出阈值）、`DELETE_BLOCKED`（扫描保护，具体原因见该目标的 `blockReasons` 和扫描问题）、`PREVIOUS_OUTCOME_UNKNOWN`（路径在隔离中）。
+- dry-run 中 `status` 为 `pending`（真实运行会执行）或 `skipped`。跳过的原因在 `error.code`，常见的有 `DELETE_LIMIT`（超出阈值）、`DELETE_BLOCKED`（扫描保护，具体原因见该目标的 `blockReasons` 和扫描问题）。
 
 ### 扫描问题
 
@@ -229,7 +229,7 @@ curl -X POST "$BASE/jobs/$JOB_ID/runs" \
 1. 对照 dry-run 确认计划符合预期，尤其是 mirror 目标的 `plannedExtraCount` 和替换数量。
 2. 触发真实运行：控制台“立即运行”选择“真实运行”，或 `POST /api/v1/jobs/:id/runs` 传 `{"dryRun":false}`（默认值）。确认要越过阈值时再加 `"confirmDeletes":true`。
 3. dry-run 不是可以批准执行的计划快照，真实运行会重新扫描；两次之间目录有变化时，实际改动会随之不同。
-4. 需要停止时调用 `POST /api/v1/runs/:id/cancel`（请求体 `{}`），或在运行详情页点击“取消运行”。已提交的动作会在宽限期内收尾，结果无法确认的操作记为 `unknown` 并隔离相关路径。
+4. 需要停止时调用 `POST /api/v1/runs/:id/cancel`（请求体 `{}`），或在运行详情页点击“取消运行”。已提交的动作会在宽限期内收尾，结果无法确认的操作记为 `unknown`，后续 Run 按自己的扫描规划。
 5. 结果为 `succeeded` 或可以接受的 `partial` 后，再启用定时。
 
 重复提交触发请求没有幂等保护：前一个运行未结束时第二个返回 409，前一个已结束时第二个就是一次新的运行。

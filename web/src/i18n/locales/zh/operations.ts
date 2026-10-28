@@ -5,15 +5,11 @@ import type { Translation } from '../../types';
 export default {
   list: {
     description:
-      '运行复制、创建或删除的每个文件，以及它的确切结果。结果未知的路径会一直保持隔离，直到你作出处置。',
+      '记录运行复制、创建或删除的每个文件及其结果。之后的运行按各自扫描结果规划，未知结果保留为历史。',
     total_one: '共 {{count}} 个操作',
     total_other: '共 {{count}} 个操作',
     statusFilter: '状态',
     allStatuses: '全部状态',
-    unresolvedFilter: '未解决筛选',
-    unresolvedAll: '全部',
-    unresolvedOnly: '未解决',
-    unresolvedExclude: '排除未解决',
     directory: '目录',
     columns: {
       target: '目标',
@@ -51,11 +47,6 @@ export default {
       submitted: '提交',
       ended: '结束',
       unknownSince: '结果未知起始',
-      unknownUntil: '隔离截止',
-      quarantineReleased: '解除隔离',
-      reobserved: '重新观察',
-      resolved: '已处置 · {{kind}}',
-      releaseReason: '原因：{{reason}}',
     },
     record: {
       title: '记录',
@@ -67,7 +58,6 @@ export default {
       expectedTarget: '预期目标大小',
       affectedBytes: '影响大小',
       retryOf: '重试自',
-      causedBy: '触发自',
       remoteTask: '远端任务',
       taskState: '状态 {{state}}',
       multipart: '分片上传',
@@ -77,42 +67,6 @@ export default {
       streamCompleted: '源数据流完成',
       sourceInstance: '源实例',
       targetInstance: '目标实例',
-    },
-    resolution: {
-      title: '处置结果',
-      description: '这个结果的责任是如何结束的。',
-      kind: {
-        observed: '已观察确认',
-        superseded: '已被取代',
-        abandoned: '已放弃',
-      },
-      note: '备注',
-      at: '处置时间',
-      byRun: '由运行确认',
-    },
-  },
-  manage: {
-    title: '结果未知',
-    description:
-      '该操作的结果未知，目标路径可能只写入了一部分。解除隔离后，之后的真实运行会重新观察该路径；放弃则直接结束责任，不会检查远端状态。',
-    reasonLabel: '原因',
-    reasonHint: '最多 1000 个字符，切勿填写任何凭据。',
-    reasonRequired: '请填写原因。',
-    release: {
-      title: '解除隔离',
-      description:
-        '之后的运行会在重新观察后再次写入该路径。这不会停止或撤销仍在进行的远端请求，该请求仍可能迟到写入。',
-      placeholder: '为什么现在可以安全地解除隔离？',
-      submit: '解除隔离',
-      submitting: '解除中…',
-    },
-    abandon: {
-      title: '放弃责任',
-      description:
-        '结束对该未知结果的追踪和刷新义务。这不会修复文件，也不能证明远端操作已经停止。',
-      placeholder: '为什么可以放弃这个操作？',
-      submit: '放弃操作',
-      submitting: '放弃中…',
     },
   },
 } satisfies Translation<typeof en>;

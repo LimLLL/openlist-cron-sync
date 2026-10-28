@@ -14,9 +14,7 @@ import { OpenListError } from '../openlist/errors.js';
 import { RelayService } from '../relay/relay.service.js';
 import { RelayResources } from '../coordination/relay-resources.js';
 import { Readiness } from '../coordination/coordination.module.js';
-import { Quarantine } from '../coordination/quarantine.js';
 import { ExecutionContext, runSecrets } from './execution-context.js';
-import { QuarantineObserver } from './quarantine-observer.js';
 import { OperationStore } from './operation-store.js';
 import { Mutations } from './mutations.js';
 import { FileCoordinator } from './file-coordinator.js';
@@ -56,7 +54,6 @@ export class Executor {
    * @param copies copy任务生命周期。
    * @param relay 具体传输实现。
    * @param resources 共享relay资源。
-   * @param quarantine 持久未知责任。
    * @param readiness 进程停止状态和独立的关闭清理期限。
    * @returns 不适用。
    * @throws 不适用。
@@ -69,7 +66,6 @@ export class Executor {
     @Inject(CopyTracker) private readonly copies: CopyTracker,
     @Inject(RelayService) private readonly relay: RelayService,
     @Inject(RelayResources) private readonly resources: RelayResources,
-    @Inject(Quarantine) private readonly quarantine: Quarantine,
     @Inject(Readiness) private readonly readiness: Readiness,
   ) {}
   /** 为扫描、执行或恢复构造当前Run的观察能力。
@@ -152,15 +148,6 @@ export class Executor {
       },
     };
   }
-  /** 为扫描复用相同隔离观察策略。
-   * @param run 固定Run。
-   * @param signal 扫描停止信号。
-   * @returns 当前Run观察器。
-   * @throws Error 快照解密失败。
-   */
-  observer(run: RunRecord, signal: AbortSignal): QuarantineObserver {
-    return new QuarantineObserver(this.context(run, signal), this.quarantine);
-  }
   /** 完整执行各Target，单Target的已分类失败不取消其它Target。
    * @param run executing Run。
    * @param signal Run停止信号。
@@ -173,14 +160,12 @@ export class Executor {
     const grace = this.grace(run, stopping);
     const context = this.context(run, stopping, false, grace.signal);
     const store = new OperationStore(this.database.db, run);
-    const observer = new QuarantineObserver(context, this.quarantine);
-    const mutations = new Mutations(context, store, observer);
+    const mutations = new Mutations(context, store);
     const files = new FileCoordinator(
       context,
       store,
       this.relay,
       mutations,
-      observer,
       stop.abort.bind(stop),
       this.copies,
     );

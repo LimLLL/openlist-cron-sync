@@ -57,7 +57,7 @@ Job 编辑在存在非终态Run时409；无活动Run时可编辑，但旧target�
 1. 触发事务：检查Job状态、非终态唯一约束、队列上限，插入Run+run_targets。
 2. 规划事务：按配置批量插入operations（含按计划顺序递增的seq）/dependencies/issues；最后事务将Run改planned并记录scanCompletedAt。dry-run不创建任何远程责任。
 3. 提交事务：pending→submitting，写attemptNo/开始时间；事务提交成功后才发网络请求。relay收到有效init响应后先写upload_id等session信息，再发送chunk；源EOF验证后先写source_stream_completed_at，再发布最后一个chunk。
-4. 响应事务：保存task id或结果；unknown同时写unknownSince/unknownUntil及受影响路径。
+4. 响应事务：保存task id或结果；unknown同时写unknownSince及受影响路径。
 5. delete成功事务：标记delete成功、开放依赖create。
 6. Run终态事务：聚合计数、写结束时间、创建本次best-effort投递记录。通知发送在事务之外。
 
@@ -75,16 +75,15 @@ Job 编辑在存在非终态Run时409；无活动Run时可编辑，但旧target�
 
 Instance 编辑/归档、Job 归档后的引用保留、历史清理都使用同一个“未决责任”判断。一条记录在满足以下任一条件时承担责任：
 
-| 条件             | 说明                                                                                      |
-| ---------------- | ----------------------------------------------------------------------------------------- |
-| 非终态 Run       | status 不在终态集合                                                                       |
-| 未解决的 unknown | Operation.status=unknown 且 resolution_kind 为空（含 REMOTE_TASK_CHANGED 新建的 unknown） |
-| 待清理远程任务   | remote_cleanup_pending=1                                                                  |
+| 条件           | 说明                     |
+| -------------- | ------------------------ |
+| 非终态 Run     | status 不在终态集合      |
+| 待清理远程任务 | remote_cleanup_pending=1 |
 
-历史清理在此基础上额外要求整条引用闭包（后续 Run/Operation 的 retry_of、resolved_by 等引用）全部超期且无责任，见 [维护与历史保留](retention.md#sqlite历史)。
+历史清理在此基础上额外要求整条引用闭包（后续 Run/Operation 的 retry_of 引用）全部超期且无责任，见 [维护与历史保留](retention.md#sqlite历史)。
 
-Run路径密码仅服务当前Run扫描、执行和恢复；在终态事务清除，包括interrupted。后续重新观察由新Run使用自己的快照，不回借旧Run密码。M3沿用现有schema，不建立spool表、额外checkpoint列或持久化路径锁。
+Run路径密码仅服务当前Run扫描、执行和恢复；在终态事务清除，包括interrupted。后续 Run 使用自己的快照，不回借旧Run密码。M3沿用现有schema，不建立spool表、额外checkpoint列或持久化路径锁。
 
-M4–M6：Run.trigger=cron时scheduled_at为注册记住的理论发生时刻。task本地终态与remote_cleanup_pending同事务写入；维护的安全/housekeeping分类不持久化。abandon只结束unknown责任，flag仍由维护按当前事实处理。历史资格按整组判断，物理删除按有界事务提交，过期历史可暂时不完整。新增expiry、反向引用及责任稀疏索引用于闭包及FK检查，不增加持久锁或cancel字段。
+M4–M6：Run.trigger=cron 时 scheduled_at 保存理论发生时刻。task 本地终态与 remote_cleanup_pending 同事务写入；遗留任务统一使用有界 housekeeping，原结果不改写。unknown 历史不承担永久责任。历史资格按引用组判断，物理删除分批提交，过期历史可暂时不完整；不增加持久锁或 cancel 字段。
 
 逐目标创建方式的前向迁移保留已应用SQL及元数据：所有Target行（含已移出成员集合或父Job已归档的行）继承其Job当前值；Run的两份Target快照均取该Run自己的历史值，保留数组顺序和其它配置，然后移除历史Job层字段。非规范快照中止迁移，不补默认值。终态历史清理可能已移除run_targets而尚未删除Run；迁移仍转换其完整Job快照，并只转换剩余子记录，不重建已清理记录。snapshotVersion仍为1，运行期只读取迁移后的单一形状。

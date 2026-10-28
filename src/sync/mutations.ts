@@ -8,7 +8,6 @@ import type { FileEntry } from '../openlist/protocol.js';
 import { splitPath } from './execution-context.js';
 import type { ExecutionContext } from './execution-context.js';
 import type { OperationStore, Outcome } from './operation-store.js';
-import type { QuarantineObserver } from './quarantine-observer.js';
 
 /** 明确未执行的拒绝，不按上游message细分。
  * @param error 上游协议错误。
@@ -97,17 +96,15 @@ export class Mutations {
   /** 保存当前Run的具体依赖。
    * @param context 固定观察配置。
    * @param store 事务存取。
-   * @param quarantine 强制重新观察。
    * @returns 不适用。
    * @throws 不适用。
    */
   constructor(
     readonly context: ExecutionContext,
     readonly store: OperationStore,
-    private readonly quarantine: QuarantineObserver,
   ) {}
   /** 执行一次mkdir或delete；仅明确观察到未生效的失败可重试。
-   * 停止信号只阻止新的提交；已派发请求及删除确认在收尾期限内继续，以取得明确结果而不是直接隔离。
+   * 停止信号只阻止新的提交；已派发请求及删除确认在收尾期限内继续，以取得明确结果。
    * @param target 当前目标。
    * @param initial 当前逻辑动作的pending尝试。
    * @param beforeDelete 源准备检查，每次删除尝试执行。
@@ -134,13 +131,6 @@ export class Mutations {
         await delay(Math.max(0, op.nextAttemptAt - Date.now()), undefined, {
           signal: stop,
         });
-      if (!(await this.quarantine.allows(target, op.targetPath, op.action))) {
-        this.store.end(op.id, {
-          status: 'skipped',
-          code: 'PREVIOUS_OUTCOME_UNKNOWN',
-        });
-        return this.store.get(op.id);
-      }
       if (
         op.action === 'delete' &&
         !(await this.precondition(target, op, stop))
@@ -192,24 +182,6 @@ export class Mutations {
         retryable = outcome.status === 'failed' && !rejected(error);
       }
       const result = this.store.get(op.id);
-      if (result.action === 'mkdir' && result.status === 'succeeded') {
-        for (const fact of this.quarantine.quarantine.matching(
-          target.config.instance,
-          result.targetPath,
-          'mkdir',
-        ))
-          if (
-            fact.operation.action === 'mkdir' &&
-            fact.operation.targetInstanceId === result.targetInstanceId &&
-            fact.operation.targetPath === result.targetPath &&
-            !this.quarantine.quarantine.active(fact.operation)
-          )
-            this.quarantine.quarantine.resolve(
-              fact.operation.id,
-              this.context.run.id,
-              'superseded',
-            );
-      }
       if (!retryable) return result;
       const retry = this.store.retry(result);
       if (!retry) return result;

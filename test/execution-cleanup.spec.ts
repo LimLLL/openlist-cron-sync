@@ -61,7 +61,7 @@ describe('M3 in-flight cleanup after stop', () => {
    * @returns 验证完成。
    * @throws Error 断言失败。
    */
-  it('finishes a delete confirmation within the cancel grace instead of quarantining it', async () => {
+  it('finishes a delete confirmation within the cancel grace instead of recording an unknown outcome', async () => {
     const fixture = await relayFixture();
     f = fixture;
     fixture.files.set('/target/new.txt', Buffer.from('old'));
@@ -160,7 +160,7 @@ describe('M3 in-flight cleanup after stop', () => {
       hold.release();
     }
   }, 10000);
-  /** 取消时0字节put已派发：在CANCEL_GRACE内取得响应并记succeeded，不隔离。
+  /** 取消时0字节put已派发：在CANCEL_GRACE内取得响应并记succeeded，不记unknown。
    * @param 不适用。
    * @returns 验证完成。
    * @throws Error 断言失败。

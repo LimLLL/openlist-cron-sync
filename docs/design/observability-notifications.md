@@ -7,8 +7,8 @@
 ## 日志
 
 Nest ConsoleLogger JSON模式，记录timestamp、level、context、message及params中的requestId/runId/operationId/instanceId、decision、errorCode。
-入口仅记录脱敏后的参数，分支记录保护/重试/隔离原因，异常记录一次归属明确的上下文。文件循环和传输chunk不打印；每5s最多聚合一次进度，SQLite进度更新最多每5s一次且终态强制保存。
-不开debug也应看到Run接受、扫描结束、保护阻断、终态、认证阻断、隔离到期观察、spool写盘失败。缺少空间等不可恢复错误退出前记录原因。
+入口仅记录脱敏后的参数，分支记录保护/重试/未知结果原因，异常记录一次归属明确的上下文。文件循环和传输chunk不打印；每5s最多聚合一次进度，SQLite进度更新最多每5s一次且终态强制保存。
+不开debug也应看到Run接受、扫描结束、保护阻断、终态、认证阻断、远程 task 重新启动、spool写盘失败。缺少空间等不可恢复错误退出前记录原因。
 webhook URL按秘密处理（Bark、ServerChan等把key放在path中）：日志只记录其origin（scheme://host[:port]），从不记录path或query。
 统计形状见[API schemas](../reference/api-schemas.md)；操作详情分页，维护动作不改变旧Run同步Stats。
 
@@ -84,6 +84,6 @@ DeliveryView、错误信息和日志都不包含URL的path或query。同步任�
 
 ## 用户可见风险
 
-OpenList成功但云端稍后失败时，不撤销旧通知；后续扫描可能产生另一Run结果。管理员release或resolution不重发历史终态事件。
+OpenList成功但云端稍后失败时，不撤销旧通知；后续扫描可能产生另一Run结果。后续 Run 或 task 维护不重发历史终态事件。
 
 M3定期持久化relay字节并在本地收尾强制保存；强杀可能丢失最近一个进度周期，interrupted统计不承诺逐字节精确。没有每chunk数据库日志，也不据此增加续传索引。通知仍在M7实现。

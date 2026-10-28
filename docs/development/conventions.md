@@ -42,7 +42,7 @@ tsconfig.build.json排除test/与`*spec.ts`，Vitest只转译不做类型检查�
 
 不加本地文件索引、hash指纹、跨Run目录快照、持久化锁、审批签名、通用规则引擎。run_config副本服务历史与运行一致性；unknown记录服务已知提交窗口，不能扩张成任意后台对账系统。
 只实现已有模式；不为单一实现造interface/factory。测试验证行为，不测试私有类名、颜色或代码镜像。不要为覆盖率添加无价值测试。
-Nest模块依赖按[架构](../design/architecture.md)保持无环：不使用forwardRef，不建AppModule级协调器；执行位、队列、路径占用、隔离检查、扫描间隔、Job带宽桶只由CoordinationModule持有。
+Nest模块依赖按[架构](../design/architecture.md)保持无环：不使用forwardRef，不建AppModule级协调器；执行位、队列、路径占用、扫描间隔、Job带宽桶只由CoordinationModule持有。
 
 ## 验证与修改纪律
 

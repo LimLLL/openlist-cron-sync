@@ -210,7 +210,7 @@ describe('M3 combined relay execution', () => {
       ),
     ).toBe(true);
   });
-  /** 明确500只观察一次，已生效mkdir不会误隔离。
+  /** 明确500只观察一次，已生效mkdir不会误记unknown。
    * @param 不适用。
    * @returns 验证完成。
    * @throws Error 断言失败。
@@ -235,54 +235,6 @@ describe('M3 combined relay execution', () => {
       status: 'succeeded',
       error: { code: 'OBSERVED_AFTER_ERROR' },
     });
-  });
-  /** init丢响应保留未知责任，下一Run不能绕过隔离。
-   * @param 不适用。
-   * @returns 验证完成。
-   * @throws Error 断言失败。
-   */
-  it('quarantines lost init and blocks a later Run without resubmission', async () => {
-    f.fault =
-      /** 使init副作用已发生但响应丢失。
-       * @param call 真实HTTP请求及其捕获头。
-       * @param response 正常响应；stream回调时为测试HTTP响应。
-       * @returns 本故障窗口对应的响应；其它请求保持原响应。
-       * @throws 不适用。
-       */
-      (call, response) =>
-        call.url.endsWith('/multipart/init') ? { disconnect: true } : response;
-    const job = f.job();
-    const first = await terminal(
-      f,
-      f.runs().trigger(job.id, { dryRun: false, confirmDeletes: false }).id,
-    );
-    expect(first.stats.unknownOperations).toBe(1);
-    f.fault = undefined;
-    const second = await terminal(
-      f,
-      f.runs().trigger(job.id, { dryRun: false, confirmDeletes: true }).id,
-    );
-    expect(second.status).toBe('partial');
-    expect(
-      plan(f, second.id).every(
-        /** 验证后续Run的动作均受旧unknown隔离。
-         * @param op 当前操作视图。
-         * @returns 满足上述请求或操作条件时返回true。
-         * @throws 不适用。
-         */
-        (op) => op.error?.code === 'PREVIOUS_OUTCOME_UNKNOWN',
-      ),
-    ).toBe(true);
-    expect(
-      f.server.calls.filter(
-        /** 筛选init以核对没有重复提交。
-         * @param call 真实HTTP请求及其捕获头。
-         * @returns 满足上述请求或操作条件时返回true。
-         * @throws 不适用。
-         */
-        (call) => call.url.endsWith('/multipart/init'),
-      ),
-    ).toHaveLength(1);
   });
   /** complete响应丢失且session被移除不能按文件大小推断成功。
    * @param 不适用。

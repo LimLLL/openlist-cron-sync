@@ -1,4 +1,4 @@
-// 维护遗留copy记录，按当前未知责任决定保留或放弃不可观察的task。
+// 有界维护遗留 copy 任务记录，未知历史不延长删除责任。
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { and, asc, eq, gt } from 'drizzle-orm';
 import { DatabaseService } from '../database/database.service.js';
@@ -6,10 +6,9 @@ import { operations } from '../database/operation-schema.js';
 import {
   taskFact,
   taskInstance,
-  safetyTracked,
   updateTaskFact,
 } from '../database/task-records.js';
-import type { TaskFact } from '../database/task-records.js';
+import type { OperationRecord } from '../database/operation-schema.js';
 import { AppConfig } from '../configuration/app-config.js';
 import { Readiness } from '../coordination/readiness.js';
 import { TaskResources } from '../coordination/task-resources.js';
@@ -83,31 +82,28 @@ export class RemoteTaskMaintenance {
     const db = this.database.db;
     let fact = taskFact(db, id);
     if (
-      !fact?.operation.remoteCleanupPending ||
-      !fact.operation.openlistTaskId ||
+      !fact?.remoteCleanupPending ||
+      !fact.openlistTaskId ||
       this.readiness.stopping
     )
       return;
-    const tid = fact.operation.openlistTaskId;
-    const release = this.resources.own(fact.operation.targetInstanceId, tid);
+    const tid = fact.openlistTaskId;
+    const release = this.resources.own(fact.targetInstanceId, tid);
     if (!release) return;
     const settings = this.config.execution;
     const request = { settings, signal: this.readiness.shutdown.signal };
     try {
-      const instance = taskInstance(db, fact.operation);
+      const instance = taskInstance(db, fact);
       const info = await this.tasks.info(instance, tid, request);
       if (this.readiness.stopping) return;
-      if (
-        !updateTaskFact(db, fact, info.state, false, settings.quarantineSeconds)
-      )
-        return;
+      if (!updateTaskFact(db, fact, info.state, false)) return;
       if (!taskTerminal(info.state)) {
-        this.resources.hold(id, fact.operation.runTargetId);
+        this.resources.hold(id, fact.runTargetId);
         return;
       }
       this.resources.release(id);
       fact = taskFact(db, id);
-      if (!fact?.operation.remoteCleanupPending) return;
+      if (!fact?.remoteCleanupPending) return;
       const outcome = await cleanupTask(
         this.tasks,
         instance,
@@ -118,16 +114,8 @@ export class RemoteTaskMaintenance {
       );
       if (this.readiness.stopping) return;
       if (outcome.kind === 'observed') {
-        if (
-          updateTaskFact(
-            db,
-            fact,
-            outcome.state,
-            false,
-            settings.quarantineSeconds,
-          )
-        )
-          this.resources.hold(id, fact.operation.runTargetId);
+        if (updateTaskFact(db, fact, outcome.state, false))
+          this.resources.hold(id, fact.runTargetId);
       } else {
         this.clear(fact, outcome.kind === 'failed');
       }
@@ -136,38 +124,23 @@ export class RemoteTaskMaintenance {
         throw error;
       if (this.readiness.stopping) return;
       if (!(error instanceof OpenListError)) throw error;
-      if (fact && (taskGone(error) || !safetyTracked(fact)))
-        this.clear(fact, !taskGone(error));
-      else
-        this.logger.warn('Task observation retained', {
-          operationId: id,
-          errorCode: error.code,
-        });
+      if (fact) this.clear(fact, !taskGone(error));
     } finally {
       release();
     }
   }
-  /** 清标志提交后才释放额度，变化中的resolution使提交失效。
+  /** 清标志提交后才释放额度，变化中的远程事实使提交失效。
    * @param fact 请求前事实。
    * @param abandoned 是否有界放弃。
    * @returns 不适用。
    * @throws Error 数据库失败。
    */
-  private clear(fact: TaskFact, abandoned: boolean): void {
-    if (
-      !updateTaskFact(
-        this.database.db,
-        fact,
-        undefined,
-        true,
-        this.config.execution.quarantineSeconds,
-      )
-    )
-      return;
-    this.resources.release(fact.operation.id);
+  private clear(fact: OperationRecord, abandoned: boolean): void {
+    if (!updateTaskFact(this.database.db, fact, undefined, true)) return;
+    this.resources.release(fact.id);
     if (abandoned)
       this.logger.warn('Task housekeeping abandoned', {
-        operationId: fact.operation.id,
+        operationId: fact.id,
       });
   }
 }

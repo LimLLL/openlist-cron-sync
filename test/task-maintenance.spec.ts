@@ -7,7 +7,6 @@ import { envelope } from './openlist-fixture.js';
 import { DatabaseService } from '../src/database/database.service.js';
 import { operations } from '../src/database/operation-schema.js';
 import { RemoteTaskMaintenance } from '../src/maintenance/remote-tasks.js';
-import { OperationsService } from '../src/runs/operations.service.js';
 import { TaskResources } from '../src/coordination/task-resources.js';
 
 /** 注册维护行为。
@@ -49,7 +48,6 @@ describe('M6 task maintenance responsibility', () => {
         status: unknown ? 'unknown' : 'succeeded',
         endedAt: Date.now(),
         unknownSince: unknown ? Date.now() : null,
-        unknownUntil: unknown ? Date.now() + 86400000 : null,
         openlistTaskId: id,
         remoteState: state,
         remoteCleanupPending: true,
@@ -89,12 +87,12 @@ describe('M6 task maintenance responsibility', () => {
     ).toHaveLength(1);
     expect(record(id).remoteCleanupPending).toBe(false);
   });
-  /** 安全未知不可因网络错误清理，abandon只改resolution，下轮才可放弃housekeeping。
+  /** 未知历史使用相同的有界 task 删除策略，观察失败后释放本地责任。
    * @param 不适用。
    * @returns 验证完成。
    * @throws Error 断言失败。
    */
-  it('retains safety tracking, then gives up resolved housekeeping after failed info', async () => {
+  it('ends detached housekeeping after failed observation without changing unknown history', async () => {
     const { id } = await flagged(true, 1);
     f.fault =
       /** 不可读取远程task。
@@ -107,22 +105,18 @@ describe('M6 task maintenance responsibility', () => {
         call.url.includes('/copy/info') ? envelope(null, 403) : response;
     const maintenance = f.app.get(RemoteTaskMaintenance);
     await maintenance.one(id);
-    expect(record(id).remoteCleanupPending).toBe(true);
-    f.app.get(OperationsService).abandon(id, 'Operator accepts unknown');
-    expect(record(id).remoteCleanupPending).toBe(true);
-    expect(f.app.get(TaskResources).count(record(id).runTargetId)).toBe(1);
-    await maintenance.one(id);
+    expect(record(id).status).toBe('unknown');
     expect(record(id).remoteCleanupPending).toBe(false);
     expect(f.app.get(TaskResources).count(record(id).runTargetId)).toBe(0);
     await f.restart();
     expect(f.app.get(TaskResources).count(record(id).runTargetId)).toBe(0);
   });
-  /** 同一远端边沿只有一条维护行，历史统计及默认查询不改变。
+  /** 远端终态逆转只更新状态并继续占用额度，不新增操作或改写历史统计。
    * @param 不适用。
    * @returns 验证完成。
    * @throws Error 断言失败。
    */
-  it('creates one unknown per terminal-to-nonterminal edge and preserves stats', async () => {
+  it('tracks restarted tasks without creating operations or changing historical outcomes', async () => {
     const { id, run } = await flagged(false, 2);
     const task = f.tasks.get(id);
     if (!task) throw new Error('Missing task');
@@ -136,16 +130,18 @@ describe('M6 task maintenance responsibility', () => {
       pageSize: 200,
       includeMaintenance: true,
     }).items;
-    expect(all).toHaveLength(2);
-    expect(all[1]).toMatchObject({
-      status: 'unknown',
-      causedByOperationId: id,
-      task: null,
+    expect(all).toHaveLength(1);
+    expect(all[0]).toMatchObject({
+      id,
+      status: 'succeeded',
+      task: { id, state: 1 },
     });
+    expect(
+      f.server.calls.some((call) => call.url.includes('/copy/delete_some')),
+    ).toBe(false);
     expect(f.runs().get(run.id).stats).toEqual(run.stats);
     expect(record(id).remoteState).toBe(1);
     expect(f.app.get(TaskResources).count(record(id).runTargetId)).toBe(1);
-    f.app.get(OperationsService).abandon(all[1].id, 'Accept incident');
     await maintenance.one(id);
     expect(record(id).remoteCleanupPending).toBe(true);
     task.state = 2;
@@ -154,28 +150,34 @@ describe('M6 task maintenance responsibility', () => {
     expect(record(id).status).toBe('succeeded');
     expect(f.app.get(TaskResources).count(record(id).runTargetId)).toBe(0);
   });
-  /** 异步info期间resolution变化必须使旧条件写入失效。
+  /** 异步 info 期间远程事实变化必须使旧条件写入失效。
    * @param 不适用。
    * @returns 验证完成。
    * @throws Error 断言失败。
    */
-  it('does not apply a stale response after resolution changes', async () => {
+  it('does not apply a stale response after a newer remote state is committed', async () => {
     const { id } = await flagged(true, 1);
     f.fault =
-      /** 在已发起的info响应前插入管理动作。
+      /** 在已发起的 info 响应前提交较新的远程事实。
        * @param call 请求。
        * @param response 原响应。
        * @returns 404或原响应。
-       * @throws Error 管理动作失败。
+       * @throws Error 数据库失败。
        */
       (call, response) => {
         if (!call.url.includes('/copy/info')) return response;
-        f.app.get(OperationsService).abandon(id, 'Concurrent decision');
+        f.app
+          .get(DatabaseService)
+          .db.update(operations)
+          .set({ remoteState: 2 })
+          .where(eq(operations.id, id))
+          .run();
         return envelope(null, 404);
       };
     await f.app.get(RemoteTaskMaintenance).one(id);
     expect(record(id).remoteCleanupPending).toBe(true);
-    expect(record(id).resolutionKind).toBe('abandoned');
+    expect(record(id).remoteState).toBe(2);
+    expect(record(id).status).toBe('unknown');
   });
   /** 取得原始持久行。
    * @param id 操作ID。

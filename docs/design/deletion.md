@@ -18,7 +18,6 @@
 | Target删除范围内视图可疑（含嵌套挂载）              | 该范围删除禁止                                                     |
 | 账号/路径权限不满足                                 | 相关动作失败，不将403当缺失                                        |
 | protected后代、名称/类型冲突                        | 相关路径及祖先删除禁止                                             |
-| active或待重新观察的隔离涉及路径                    | 禁止写该路径及删除其祖先                                           |
 | effectiveSourceEntryCount=0且allowEmptySource=false | 所有删除禁止（EMPTY_SOURCE），partial                              |
 | create阶段failed/unknown/cancelled/阻断类skipped    | 该Target的extras禁止；不撤回已完成replace                          |
 
@@ -52,11 +51,11 @@ planned计数与D/R保留全部已识别候选，不随skipped减少；实例级
 - 删除预算 budget 的定义与 retry_cleanup 的余量规则见[执行数据表](execution-tables.md#run_targets)。
 
 阈值失败：该Target全部delete及其依赖create标skipped DELETE_LIMIT；纯新建可以继续，Run partial。禁止先执行部分删除到上限再停止。
-整目录不是“一次删除”；MVP按文件与空目录执行。空目录删除数量单列，不参与R/D，但完整性、隔离、空源保护仍适用。
+整目录不是“一次删除”；MVP按文件与空目录执行。空目录删除数量单列，不参与R/D，但完整性、空源保护仍适用。
 
 ## 执行时复查
 
-scan refresh开关只控制通常扫描。delete前、delete确认、隔离到期或释放后的观察，以及写操作返回错误后的观察，必须refresh=true；403/500/超限/可疑视图都不能解释为空。
+scan refresh开关只控制通常扫描。delete 前、delete 确认以及写操作返回错误后的观察，必须refresh=true；403/500/超限/可疑视图都不能解释为空。
 create提交前不另行刷新目标父目录：overwrite=false由OpenList按其目录缓存检查，本服务的扫描刷新与delete确认刷新都会更新该缓存；只有绕过OpenList的外部写入才可能使检查漏判，属于目标独占前提之外的已接受风险。
 delete前刷新目标父目录可发现大小/类型变化；变化就跳过（PRECONDITION_CHANGED），不把后来对象按旧计划删除。刷新读取失败、403、视图可疑或父目录无法确认时，按读取重试规则重试后仍无法确认则不提交：delete skipped PRECONDITION_UNVERIFIED，依赖create skipped DEPENDENCY_FAILED，阻断该Target的extras。同大小外部变化无法识别，目标独占为前提。
 新发现extra不加入本轮删除计划；等待下一轮重新计算。原extra消失则skipped PRECONDITION_ALREADY_ABSENT，不算异常也不重复累计删除成功。
@@ -81,6 +80,6 @@ OpenList 在某目录下挂有其他 storage 时，底层列表失败会被吞�
 可疑视图的效果：记 scan_issue SUSPECT_VIEW；该目录范围内不建立“目标目录缺失”的快速路径、不允许空源授权、不允许任何删除；新建仍可按已确认的范围执行。
 非管理员缺少admin读取能力按部署前提警告，要求用户保证范围无嵌套/平衡/别名并同存储；不能把此警告记成“已验证”。管理员读取失败不能自动进入非管理员宽松路径。source列表异常被吞没的风险不能靠挂载字段完全消除。
 
-M3文件协调器在源准备成功之后才调用替换及retry_cleanup删除。删除前仍检查全部既有保护；confirmDeletes不解除隔离、挂载、源完整性或空源保护。未知责任查询包括待删目录的后代，即使缓存列表没有显示这些路径。
+M3文件协调器在源准备成功之后才调用替换及retry_cleanup删除。删除前仍检查全部既有保护；confirmDeletes 不解除挂载、源完整性或空源保护。历史 unknown 不参与删除准入；本轮的依赖、创建结果保护和空目录新鲜检查仍适用。
 
 server_copy替换与retry_cleanup沿用全部删除保护；在每次remove尝试前先refresh源父目录，要求原名、文件类型、已知大小与计划一致。元数据不可读或变化时不提交该delete。该前提不保证后续copy内容可读，也不是源版本锁；纯新建不增加源探测。

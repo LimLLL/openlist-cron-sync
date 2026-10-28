@@ -64,7 +64,7 @@ OpenList先取得全目录再分页；per_page=0减少不一致翻页，仍受�
 ## 阶段二：Safety
 
 先运行[删除规则](deletion.md)，再执行任何远程文件写入。该检查不是通用规则引擎，只是固定业务条件。
-dryRun=true停止于此：不mkdir、copy、put、multipart、remove，不释放隔离。允许认证、list及按配置refresh，写本地预览记录。
+dryRun=true停止于此：不mkdir、copy、put、multipart、remove。允许认证、list及按配置refresh，写本地预览记录。
 dry-run显示planned动作、blocked原因、预算及受保护项；不是可随后批准执行的不可变远程快照。手动实跑重新扫描；不存在execute-preview API或审批签名。
 
 ## 阶段三：Execute
@@ -74,7 +74,7 @@ dry-run显示planned动作、blocked原因、预算及受保护项；不是可�
 3. 每个远程请求只提交一个name。relay按[relay结果分类](relay.md#结果分类)判定；server_copy明确成功且无task直接计成功，有task则逐id跟踪；mkdir、remove和copy返回错误时按[写操作结果分类](openlist-integration.md#完成分类)处理。
 4. Target全部创建/替换阶段达到成功条件且没有failed/unknown/cancelled/阻断类skipped，才开放extras。
 5. extras按文件删除；syncEmptyDirs=true时，目标单侧的空目录在其extras删除后自底向上清理，根始终保留。
-6. 聚合Run终态，创建通知投递；释放本轮执行位，保留未决Operation隔离。
+6. 聚合Run终态，创建通知投递；释放本轮执行位，保留 Operation 历史及实际 task 责任。
 
 一个Target失败不取消其他Target。Run总超时或用户取消停止全部新派发。资源瞬时失败按重试预算处理；认证阻断不持续重试。
 
@@ -86,10 +86,10 @@ dry-run显示planned动作、blocked原因、预算及受保护项；不是可�
 | ----------------------- | ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
 | relay准备源             | 打开源GET并写入首块（见[Relay](relay.md#单文件流程)） | 源不可用→create failed，旧文件不动                                                                                               |
 | 重新读取目标父目录      | 原文件类型/大小符合计划，继续                         | 已改变→PRECONDITION_CHANGED；已缺失→跳过删除，转当前观察的新建；读取失败/403/可疑/父目录无法确认→PRECONDITION_UNVERIFIED，不提交 |
-| 删除预算及路径检查      | 通过，进入提交                                        | 阈值/隔离/挂载/过滤拒绝→删除及create skipped                                                                                     |
+| 删除预算及路径检查      | 通过，进入提交                                        | 阈值/挂载/过滤拒绝→删除及create skipped                                                                                          |
 | 提交remove              | 明确返回，进入确认                                    | 执行前拒绝→failed；JSON 500→一次观察后决定；无响应→unknown，create skipped                                                       |
 | refresh确认原名称消失   | delete succeeded，开放create                          | 仍在：有界等待后failed DELETE_NOT_EFFECTIVE；无法确认→unknown                                                                    |
-| create，overwrite=false | relay完成/无task成功/任务成功                         | 明确失败可有界重试；请求未知则隔离；不回滚                                                                                       |
+| create，overwrite=false | relay完成/无task成功/任务成功                         | 明确失败可有界重试；请求未知则记录 unknown，本轮不重试；不回滚                                                                   |
 
 刷新后原文件已缺失时，对应delete标skipped PRECONDITION_ALREADY_ABSENT，作为正常前提变化不阻断依赖create，执行器显式重连依赖。
 纯新建server_copy不额外列出源目录；替换和retry_cleanup的每次删除前，先refresh=true读取source父目录并核对原名、文件类型及计划大小。缺失/变化使create skipped SOURCE_CHANGED，读取失败/可疑视图使源准备失败，伴随delete不提交。该元数据前提不锁定后续内容，也不能证明驱动能读完整文件。relay额外依据下载响应（长度不符为SIZE_MISMATCH，见[relay结果分类](relay.md#结果分类)）和/d 401后的重新list（名称/类型/大小变化为SOURCE_CHANGED并跳过本次create）；server_copy以OpenList执行时的源内容为准。不存在源版本锁。
@@ -104,7 +104,7 @@ unchanged是扫描事实，不逐个持久化Operation。扫描错误保留scan_
 
 ## M3执行细化
 
-M3a/M3b作为一个变更实现relay、替换、Mirror和Run生命周期。server_copy与relay共用文件依赖、预算及隔离工作流。执行器查询当前pending集合，按依赖选择准备动作；不能只向前扫描seq，因为重试可能使更早的下游重新就绪。替换和retry_cleanup的delete只能由文件协调器在relay源首块准备或server_copy源元数据前提成立后调用，不能独立派发。父mkdir失败会阻断子操作；新根mkdir成功后的刷新失败保留mkdir成功，并记TARGET_ROOT_UNAVAILABLE。
+M3a/M3b作为一个变更实现relay、替换、Mirror和Run生命周期。server_copy与relay共用文件依赖、预算及同轮依赖工作流。执行器查询当前pending集合，按依赖选择准备动作；不能只向前扫描seq，因为重试可能使更早的下游重新就绪。替换和retry_cleanup的delete只能由文件协调器在relay源首块准备或server_copy源元数据前提成立后调用，不能独立派发。父mkdir失败会阻断子操作；新根mkdir成功后的刷新失败保留mkdir成功，并记TARGET_ROOT_UNAVAILABLE。
 
 每个Target的创建阶段包含延迟重试和retry_cleanup。阶段之间保持mkdir → create → file extras → directory extras的屏障；同一阶段内执行器增量补派：任一Operation结束即补位，派发时复查依赖。读取按seq向后翻页并在内存中跳过已认领的逻辑动作（含其重试行），补位开销不随在途数量增长；mkdir结束可能放行seq更早的子目录，因此从头重扫，在途清空后再从头确认没有遗留pending。同时派发数取用户配额：mkdir、create与文件extras均使用Target concurrentFiles，目录extras在各Target内串行；0表示不限。批量读取只限制一次读取的内存，不限制执行并发。relay每Target最多一个首次源准入未完成的协调器；取得源位及首块空间后先记录准入状态再唤醒派发器，允许继续补派，EOF归还源位；等待complete的文件不再堵住后续下载。准入不移除claimed或inFlight，只有完整协调器收尾释放Target派发容量；其重试退避期间不持源位，仍由同一协调器重新排队。取消时撤销等待并收敛全部已启动工作，不遍历全部在途Promise来等待任一完成。取消、deadline、shutdown或本地失败会停止新的查询并等待已开始工作收敛。最后attempt收敛后重算extras_blocked，再执行文件extras；目录extras按计划后序逐个刷新为空再删除。目录成功不计入deletedAsExtra等文件计数，其结果从Operations查询。PRECONDITION_ALREADY_ABSENT是正常收敛；只有这类跳过而无异常时Run仍可succeeded。
 

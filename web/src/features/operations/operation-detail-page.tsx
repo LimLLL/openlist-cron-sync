@@ -1,4 +1,4 @@
-// 操作详情页：编辑式页头、路径档案与统计、生命周期、记录、处置结果，以及未知结果的处置表单。
+// 操作详情页：页头、路径与统计、生命周期及不可改写的历史结果。
 import { ArrowLeft, ArrowUpRight, Folder } from 'lucide-react';
 import { Link, useParams } from 'react-router';
 import { useTranslation } from 'react-i18next';
@@ -10,12 +10,10 @@ import { ErrorState, LoadingState } from '../../components/states';
 import { useOperationDetail } from './operation-queries';
 import type { OperationView } from './operation-contract';
 import { OperationStats, PathDossier } from './operation-dossier';
-import { UnknownManagement } from './operation-manage';
 import {
   OperationError,
   OperationFacts,
   OperationTimeline,
-  ResolutionBlock,
 } from './operation-record';
 import { splitPath, statusBadge } from './operation-status';
 
@@ -65,13 +63,6 @@ export function OperationDetailPage() {
 
   const detail = op.data;
   const { name } = splitPath(detail.targetPath);
-  const showManage = detail.status === 'unknown' && !detail.resolution;
-  // 分节编号随可选分节顺延：生命周期、记录固定为 01、02。
-  let next = 3;
-  const resolutionIndex = detail.resolution
-    ? String(next++).padStart(2, '0')
-    : null;
-
   return (
     <section>
       <PageHeader
@@ -114,16 +105,6 @@ export function OperationDetailPage() {
       >
         <OperationFacts op={detail} />
       </EditorialSection>
-      {detail.resolution && resolutionIndex && (
-        <EditorialSection
-          index={resolutionIndex}
-          title={t('detail.resolution.title')}
-          description={t('detail.resolution.description')}
-        >
-          <ResolutionBlock resolution={detail.resolution} />
-        </EditorialSection>
-      )}
-      {showManage && <UnknownManagement op={detail} firstIndex={next} />}
     </section>
   );
 }

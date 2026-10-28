@@ -14,7 +14,6 @@ import { RelayOutcome } from './relay-outcome.js';
 import { CopyFile } from './copy-file.js';
 import type { CopyTracker } from './copy-tracker.js';
 import { Mutations, observeError, rejected } from './mutations.js';
-import type { QuarantineObserver } from './quarantine-observer.js';
 
 /** 一个Run的具体文件执行协调器。
  * @param 不适用。
@@ -28,7 +27,6 @@ export class FileCoordinator {
    * @param store 原子操作存取。
    * @param relay 传输实现。
    * @param mutations 删除执行与确认。
-   * @param quarantine 提交前隔离检查。
    * @param failRun 持久化失败时立即停止整个Run的回调。
    * @param copies server_copy生命周期。
    * @returns 不适用。
@@ -39,7 +37,6 @@ export class FileCoordinator {
     private readonly store: OperationStore,
     private readonly relay: RelayService,
     private readonly mutations: Mutations,
-    private readonly quarantine: QuarantineObserver,
     private readonly failRun: (error: unknown) => void,
     private readonly copies: CopyTracker,
   ) {}
@@ -65,14 +62,6 @@ export class FileCoordinator {
         await delay(Math.max(0, op.nextAttemptAt - Date.now()), undefined, {
           signal: this.context.signal,
         });
-      if (!(await this.quarantine.allows(target, op.targetPath, 'create'))) {
-        this.store.end(op.id, {
-          status: 'skipped',
-          code: 'PREVIOUS_OUTCOME_UNKNOWN',
-        });
-        this.settleDeletes(op);
-        return;
-      }
       const dependencies = this.store.dependencies(op.id);
       if (
         dependencies.some(
@@ -209,13 +198,6 @@ export class FileCoordinator {
           !(await this.cleanRetry(target, op, deadline, beforeDelete))
         )
           return;
-        if (!(await this.quarantine.allows(target, op.targetPath, 'create'))) {
-          this.store.end(op.id, {
-            status: 'skipped',
-            code: 'PREVIOUS_OUTCOME_UNKNOWN',
-          });
-          return;
-        }
         if (serverCopy) {
           const result = await copy.submit(op);
           retryable = result.status === 'failed';
@@ -258,8 +240,6 @@ export class FileCoordinator {
           });
           this.store.end(op.id, { status: 'succeeded' });
         }
-        if (this.store.get(op.id).status === 'succeeded')
-          this.supersede(target, op);
       } catch (error) {
         // 在远端abort、结果观察和spool清理之前停止源，不能让这些等待占住下载配额。
         if (transfer) await transfer.closeSource();
@@ -444,29 +424,5 @@ export class FileCoordinator {
           status: 'skipped',
           code: 'DEPENDENCY_FAILED',
         });
-  }
-  /** 新成功只解决同身份同路径且完整覆盖的旧责任。
-   * @param target 当前目标。
-   * @param op 成功create。
-   * @returns 不适用。
-   * @throws Error 数据库失败。
-   */
-  private supersede(target: RunTargetRecord, op: OperationRecord): void {
-    for (const fact of this.quarantine.quarantine.matching(
-      target.config.instance,
-      op.targetPath,
-      'create',
-    ))
-      if (
-        !fact.operation.isDir &&
-        fact.operation.targetInstanceId === op.targetInstanceId &&
-        fact.operation.targetPath === op.targetPath &&
-        !this.quarantine.quarantine.active(fact.operation)
-      )
-        this.quarantine.quarantine.resolve(
-          fact.operation.id,
-          this.context.run.id,
-          'superseded',
-        );
   }
 }

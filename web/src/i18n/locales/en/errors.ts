@@ -20,7 +20,6 @@ export default {
   JOB_BUSY:
     'This job has an active run. Wait for it to finish or cancel it first.',
   PATH_OVERLAP: 'Another active run is using overlapping paths.',
-  PATH_BUSY: 'This path is in use by an active run.',
   QUEUE_FULL: 'The run queue is full. Try again once current runs finish.',
   QUEUE_TIMEOUT: 'The run waited too long in the queue.',
   RUN_TIMEOUT: 'The run exceeded its time limit.',
@@ -68,7 +67,7 @@ export default {
   DELETE_NOT_EFFECTIVE: 'The file still exists after deletion.',
   DEPENDENCY_FAILED: 'A step this operation depends on failed.',
   PREVIOUS_OUTCOME_UNKNOWN:
-    'An earlier attempt has an unknown outcome, so this path is quarantined.',
+    'An older version skipped this path because an earlier outcome was unknown. Later runs plan independently.',
   PRECONDITION_UNVERIFIED:
     'The target state couldn’t be verified before writing.',
   PRECONDITION_CHANGED: 'The target changed after it was scanned.',
@@ -77,7 +76,7 @@ export default {
     'The request reported an error, but the result was observed afterwards.',
   PLAN_INTERRUPTED: 'The plan was interrupted and is no longer valid.',
   PLAN_INVALID: 'The plan is invalid.',
-  REMOTE_TASK_CHANGED: 'The OpenList task changed unexpectedly.',
+  REMOTE_TASK_CHANGED: 'An older version recorded an OpenList task restarting.',
   SPOOL_FULL: 'Not enough local spool space to relay files.',
   SPOOL_IO_ERROR: 'A local spool disk error occurred.',
 } as const;

@@ -87,22 +87,6 @@ export interface HealthView {
   database: 'ok' | 'error';
 }
 
-/** 面板所需的 Operation 摘要。 */
-export interface DashboardOperation {
-  /** Operation UUID。 */
-  id: string;
-  /** Run UUID。 */
-  runId: string;
-  /** 逻辑动作。 */
-  action: string;
-  /** 操作状态。 */
-  status: string;
-  /** 目标路径。 */
-  targetPath: string;
-  /** unknown 起始 ISO 或 null。 */
-  unknownSince: string | null;
-}
-
 /** 解析 Run 摘要。
  * @param value 未信任 JSON。
  * @returns 面板用 Run。
@@ -252,33 +236,4 @@ export function parseHealth(value: unknown): HealthView {
     status: expectEnum(value.status, ['ok', 'not_ready'], 'status'),
     database: expectEnum(value.database, ['ok', 'error'], 'database'),
   };
-}
-
-/** 解析 Operation 摘要。
- * @param value 未信任 JSON。
- * @returns 面板用 Operation。
- * @throws ApiError 契约不符。
- */
-export function parseDashboardOperation(value: unknown): DashboardOperation {
-  if (!isRecord(value) || typeof value.id !== 'string')
-    throw new ApiError(0, 'INVALID_RESPONSE', 'Invalid operation.');
-  return {
-    id: value.id,
-    runId: expectString(value.runId, 'runId'),
-    action: expectString(value.action, 'action'),
-    status: expectString(value.status, 'status'),
-    targetPath: expectString(value.targetPath, 'targetPath'),
-    unknownSince: nullableString(value.unknownSince, 'unknownSince'),
-  };
-}
-
-/** 解析 Operation 分页。
- * @param value 未信任 JSON。
- * @returns 分页 Operation 列表。
- * @throws ApiError 契约不符。
- */
-export function parseDashboardOperationPage(
-  value: unknown,
-): Page<DashboardOperation> {
-  return parsePage(value, parseDashboardOperation, 'operation');
 }

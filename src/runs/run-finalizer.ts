@@ -62,7 +62,6 @@ export function finishRun(
             endedAt: now,
             updatedAt: now,
             unknownSince: now,
-            unknownUntil: now + run.config.settings.quarantineSeconds * 1000,
           })
           .where(
             and(

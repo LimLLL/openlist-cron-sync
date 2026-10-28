@@ -1,6 +1,6 @@
-// 保存copy任务事实及维护边沿；异步响应提交时复查责任，历史结果不重写。
-import { randomUUID } from 'node:crypto';
-import { and, desc, eq, max } from 'drizzle-orm';
+// 保存已知 copy 任务的远程事实；历史操作结果不因维护观察而改写。
+import { Logger } from '@nestjs/common';
+import { and, eq } from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { operations } from './operation-schema.js';
 import type { OperationRecord } from './operation-schema.js';
@@ -8,47 +8,19 @@ import { runTargets } from './run-schema.js';
 import { instances } from './schema.js';
 import { taskTerminal } from '../openlist/task-protocol.js';
 
-/** 一次维护异步调用前读取的责任事实。 */
-export interface TaskFact {
-  /** tid所属原始记录。 */ operation: OperationRecord;
-  /** 最新远程状态变化事件。 */ child: OperationRecord | undefined;
-}
-/** 读取当前原行及最新维护子记录。
+const logger = new Logger('RemoteTaskFacts');
+
+/** 读取一次异步任务请求所依据的操作事实。
  * @param db 共享连接或事务。
- * @param id 原Operation ID。
- * @returns 当前事实；被历史清理时undefined。
+ * @param id 原 Operation ID。
+ * @returns 当前操作；历史已删除时为 undefined。
  * @throws Error 数据库失败。
  */
 export function taskFact(
   db: BetterSQLite3Database,
   id: string,
-): TaskFact | undefined {
-  const operation = db
-    .select()
-    .from(operations)
-    .where(eq(operations.id, id))
-    .get();
-  if (!operation) return undefined;
-  const child = db
-    .select()
-    .from(operations)
-    .where(eq(operations.causedByOperationId, id))
-    .orderBy(desc(operations.seq))
-    .limit(1)
-    .get();
-  return { operation, child };
-}
-/** 判断当前任务是否仍为未知副作用提供跟踪。
- * @param fact 当前数据库事实。
- * @returns 是否safety跟踪。
- * @throws 不适用。
- */
-export function safetyTracked(fact: TaskFact): boolean {
-  return (
-    (fact.operation.status === 'unknown' &&
-      fact.operation.resolutionKind === null) ||
-    (fact.child?.status === 'unknown' && fact.child.resolutionKind === null)
-  );
+): OperationRecord | undefined {
+  return db.select().from(operations).where(eq(operations.id, id)).get();
 }
 /** 为终态历史取得固定身份与当前凭据。
  * @param db 共享连接。
@@ -80,95 +52,43 @@ export function taskInstance(db: BetterSQLite3Database, op: OperationRecord) {
     accountPermissions: fixed.accountPermissions,
   };
 }
-/** 对异步结果做条件提交，维护只修改remote事实或新增unknown。
+/** 条件提交远程状态或结束任务记录删除责任，不新增操作、不改历史结果。
  * @param db 共享连接。
- * @param before 请求前事实。
- * @param state 新remote状态，undefined保持。
- * @param clear 是否终止记录清理责任。
- * @param quarantineSeconds 当前进程隔离秒数。
- * @returns 是否事实未变化且已提交。
+ * @param before 请求前读取的操作事实。
+ * @param state 新远程状态；undefined 保持原状态。
+ * @param clear 是否结束任务记录删除责任。
+ * @returns 事实未变化且已提交时为 true。
  * @throws Error 数据库失败。
  */
 export function updateTaskFact(
   db: BetterSQLite3Database,
-  before: TaskFact,
+  before: OperationRecord,
   state: number | undefined,
   clear: boolean,
-  quarantineSeconds: number,
 ): boolean {
-  return db.transaction(
-    /** 复核flag及两类resolution，避免响应覆盖新的管理决定。
+  const changed = db.transaction(
+    /** 异步请求返回后复核责任和状态，避免迟到响应覆盖已提交的新事实。
      * @param 不适用。
-     * @returns 是否应用结果。
+     * @returns 是否应用响应。
      * @throws Error 数据库失败。
      */
     () => {
-      const current = taskFact(db, before.operation.id);
+      const current = taskFact(db, before.id);
       if (
         !current ||
-        !current.operation.remoteCleanupPending ||
-        current.operation.remoteState !== before.operation.remoteState ||
-        current.operation.resolutionKind !== before.operation.resolutionKind ||
-        current.child?.id !== before.child?.id ||
-        current.child?.resolutionKind !== before.child?.resolutionKind
+        !current.remoteCleanupPending ||
+        current.remoteState !== before.remoteState
       )
         return false;
-      const now = Date.now();
-      if (
-        state !== undefined &&
-        !taskTerminal(state) &&
-        taskTerminal(current.operation.remoteState)
-      ) {
-        const original = current.operation;
-        const seq =
-          (db
-            .select({ n: max(operations.seq) })
-            .from(operations)
-            .where(eq(operations.runId, original.runId))
-            .get()?.n ?? 0) + 1;
-        db.insert(operations)
-          .values({
-            ...original,
-            id: randomUUID(),
-            seq,
-            status: 'unknown',
-            retryOf: null,
-            attemptNo: 1,
-            causedByOperationId: original.id,
-            openlistTaskId: null,
-            remoteState: null,
-            remoteCleanupPending: false,
-            bytesDownloaded: 0,
-            bytesTransferred: 0,
-            errorCode: 'REMOTE_TASK_CHANGED',
-            errorMessage: 'Remote copy task restarted',
-            createdAt: now,
-            updatedAt: now,
-            submittedAt: null,
-            endedAt: now,
-            nextAttemptAt: null,
-            unknownSince: now,
-            unknownUntil: now + quarantineSeconds * 1000,
-            quarantineReleasedAt: null,
-            quarantineReleaseReason: null,
-            reobservedAt: null,
-            reobservedByRunId: null,
-            resolutionKind: null,
-            resolutionNote: null,
-            resolvedAt: null,
-            resolvedByRunId: null,
-          })
-          .run();
-      }
       db.update(operations)
         .set({
-          remoteState: state ?? current.operation.remoteState,
+          remoteState: state ?? current.remoteState,
           remoteCleanupPending: !clear,
-          updatedAt: now,
+          updatedAt: Date.now(),
         })
         .where(
           and(
-            eq(operations.id, before.operation.id),
+            eq(operations.id, before.id),
             eq(operations.remoteCleanupPending, true),
           ),
         )
@@ -176,4 +96,18 @@ export function updateTaskFact(
       return true;
     },
   );
+  // 仅记录实际提交的终态逆转；持续运行的常规轮询不重复产生日志。
+  if (
+    changed &&
+    state !== undefined &&
+    !taskTerminal(state) &&
+    taskTerminal(before.remoteState)
+  )
+    logger.warn('Remote copy task restarted', {
+      operationId: before.id,
+      taskId: before.openlistTaskId,
+      previousState: before.remoteState,
+      remoteState: state,
+    });
+  return changed;
 }
