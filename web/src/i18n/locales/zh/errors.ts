@@ -23,6 +23,8 @@ export default {
   NO_NEXT_OCCURRENCE: '在可计算的时间范围内，这个定时没有下一次执行时间。',
   JOB_BUSY: '该任务有正在进行的运行，请等待完成或先取消。',
   PATH_OVERLAP: '另一个进行中的运行正在使用重叠的路径。',
+  RETRY_NOT_ALLOWED:
+    '这次运行现在不能重试，可能已有更新的运行或任务配置已修改。',
   QUEUE_FULL: '运行队列已满，请等当前运行结束后重试。',
   QUEUE_TIMEOUT: '运行在队列中等待过久。',
   RUN_TIMEOUT: '运行超出了时间限制。',
@@ -53,6 +55,8 @@ export default {
   NAME_COLLISION: '多个条目对应到了同一个名称。',
   INVALID_NAME: '名称包含无法同步的字符。',
   TYPE_CONFLICT: '同一路径上同时存在文件和目录。',
+  RETRY_TYPE_CHANGED:
+    '重试项目在源上的类型已改变（文件与目录互换），或其祖先目录已变成文件，请完整运行一次。',
   UNKNOWN_SIZE: '源文件大小未知。',
   TARGET_UNKNOWN_SIZE: '目标文件大小未知。',
   SIZE_MISMATCH: '复制后的文件大小与源文件不一致。',

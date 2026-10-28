@@ -25,6 +25,7 @@ Error={error:{code:string,message:string,details:FieldError[]},requestId:string}
 | 409  | PATH_OVERLAP                                          | 同Job的source与targets、或targets之间路径重叠             |
 | 409  | AUTH_COOLDOWN                                         | OpenList登录429冷却期内的人工重试                         |
 | 409  | INVALID_STATE                                         | 对象当前状态不允许该动作                                  |
+| 409  | RETRY_NOT_ALLOWED                                     | 该Run不能重试；details[0].reason同retryEligibility.reason |
 | 409  | URL_REVIEW_REQUIRED                                   | Webhook URL待复核（needsUrlReview=true）时请求启用channel |
 | 413  | PAYLOAD_TOO_LARGE                                     | 管理JSON/import上限                                       |
 | 429  | LOGIN_RATE_LIMITED                                    | 本服务登录限流，返回Retry-After秒                         |
@@ -62,6 +63,7 @@ Error={error:{code:string,message:string,details:FieldError[]},requestId:string}
 | DELETE_LIMIT                | 超过数量/比例阈值，或retry_cleanup超出剩余预算；相关delete及其依赖create跳过                                                                                                                                          |
 | PLAN_INVALID                | 计划内部断言失败（例如R>D）；按实现缺陷记录日志，只记录scan_issue；该Target的删除及依赖create以DELETE_BLOCKED跳过                                                                                                     |
 | PREVIOUS_OUTCOME_UNKNOWN    | 旧版本因历史结果未知而跳过路径的记录；当前版本不再产生，旧结果保持原样                                                                                                                                                |
+| RETRY_TYPE_CHANGED          | 重试运行中，选中项在源上已变成另一种类型（文件与目录互换），或到达它所需的祖先已变成文件；该项受保护、不扩展重试范围，需完整运行                                                                                     |
 
 ### 执行
 

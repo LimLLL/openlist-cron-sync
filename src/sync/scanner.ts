@@ -7,6 +7,8 @@ import type { TargetState, PrepareDirectory } from './plan-writer.js';
 import { JobFilter } from './filter.js';
 import { collisions, compareDirectory } from './planner.js';
 import type { Decision, Entry } from './planner.js';
+import type { ScanScope } from './scan-scope.js';
+import type { RunRetryItemRecord } from '../database/run-schema.js';
 import { addStat, PlanError } from './stats.js';
 
 /** 当前源目录在一个 Target 上的对应状态。 */
@@ -37,6 +39,7 @@ export class Scanner {
    * @param reader 有界读取器。
    * @param writer 批量计划写入器。
    * @param signal Run 停止信号。
+   * @param scope 重试输入范围；省略时完整扫描。
    * @returns 不适用。
    * @throws Error 模式编译失败。
    */
@@ -44,6 +47,7 @@ export class Scanner {
     private readonly reader: ScanReader,
     private readonly writer: PlanWriter,
     private readonly signal: AbortSignal,
+    private readonly scope?: ScanScope,
   ) {
     this.filter = new JobFilter(writer.run.config.job.filters);
   }
@@ -74,6 +78,7 @@ export class Scanner {
     const cursors: TargetCursor[] = [];
     for (const target of this.writer.targets) {
       const view = await this.reader.root(target);
+      if (view === undefined) await this.settleScope('', 'blocked', target);
       const path = target.row.config.target.path;
       const prepare = view === null ? { path } : undefined;
       cursors.push({
@@ -87,6 +92,7 @@ export class Scanner {
     }
     await this.visitSource(source.path, '', 0, cursors, root);
     if (
+      !this.scope &&
       this.effectiveSource === 0 &&
       !this.writer.run.config.job.allowEmptySource
     )
@@ -98,6 +104,7 @@ export class Scanner {
         false,
         true,
       );
+    this.scope?.assertComplete();
     this.writer.flush();
   }
   /** 超深只保护对应子树并使相应扫描不完整。
@@ -136,12 +143,21 @@ export class Scanner {
     existing?: DirectoryView,
   ): Promise<void> {
     await this.checkpoint();
-    if (this.depthExceeded(undefined, path, depth)) return;
+    if (this.scope && !this.scope.has(relative)) return;
+    if (this.depthExceeded(undefined, path, depth)) {
+      await this.settleScope(relative, 'blocked');
+      return;
+    }
     const view = existing ?? (await this.reader.subtree(undefined, path));
-    if (!view) return;
+    if (!view) {
+      await this.settleScope(relative, 'blocked');
+      return;
+    }
     if (view.protectSubtree) {
       let files = 0;
       for (const entry of view.items) {
+        const rel = relative ? `${relative}/${entry.name}` : entry.name;
+        if (this.scope && !this.scope.has(rel)) continue;
         addStat(
           this.writer.sourceStats,
           entry.isDir ? 'sourceDirectories' : 'sourceFiles',
@@ -151,13 +167,27 @@ export class Scanner {
       }
       for (const cursor of cursors)
         if (!cursor.disabled)
-          addStat(cursor.target.row.stats, 'protectedFiles', files);
+          addStat(
+            cursor.target.row.stats,
+            'protectedFiles',
+            this.scope
+              ? view.items.filter(
+                  (entry) =>
+                    !entry.isDir &&
+                    this.scope!.has(
+                      relative ? `${relative}/${entry.name}` : entry.name,
+                      cursor.target.row.id,
+                    ),
+                ).length
+              : files,
+          );
+      await this.settleScope(relative, 'blocked');
       return;
     }
     if (depth > 0 && this.writer.run.config.job.syncEmptyDirs && !view.suspect)
       this.countEffectiveSource();
     // 可疑视图只禁止删除；已列出的源目录仍按目录结构新建。
-    if (this.writer.run.config.job.syncEmptyDirs)
+    if (!this.scope && this.writer.run.config.job.syncEmptyDirs)
       for (const cursor of cursors)
         if (!cursor.disabled)
           await this.writer.prepare(cursor.target, cursor.prepare);
@@ -165,6 +195,7 @@ export class Scanner {
     const children = new Map<string, TargetCursor[]>();
     for (const entry of view.items) {
       const rel = relative ? `${relative}/${entry.name}` : entry.name;
+      if (this.scope && !this.scope.has(rel)) continue;
       addStat(
         this.writer.sourceStats,
         entry.isDir ? 'sourceDirectories' : 'sourceFiles',
@@ -207,7 +238,11 @@ export class Scanner {
     }[] = [];
     for (const cursor of cursors) {
       const target = cursor.target;
-      if (cursor.disabled) continue;
+      if (
+        cursor.disabled ||
+        (this.scope && !this.scope.has(relative, target.row.id))
+      )
+        continue;
       const targetView = cursor.missing
         ? {
             items: [],
@@ -217,24 +252,58 @@ export class Scanner {
             protectSubtree: false,
           }
         : (cursor.view ?? (await this.reader.subtree(target, cursor.path)));
-      if (!targetView) continue;
+      if (!targetView) {
+        await this.settleScope(relative, 'blocked', target);
+        continue;
+      }
+      const own = this.scope?.get(relative)?.items.get(target.row.id);
+      if (own?.isDir && own.scanOutcome === 'unprocessed') {
+        if (targetView.protectSubtree)
+          await this.settleScope(relative, 'blocked', target, false);
+        else {
+          const mkdir = this.writer.run.config.job.syncEmptyDirs
+            ? await this.writer.prepare(target, cursor.prepare)
+            : undefined;
+          await this.settleScope(
+            relative,
+            mkdir ? 'planned' : 'noop',
+            target,
+            false,
+          );
+        }
+      }
       for (const entry of targetView.items)
-        if (!entry.isDir) addStat(target.row.stats, 'targetFiles');
+        if (
+          !entry.isDir &&
+          (!this.scope ||
+            this.scope.has(
+              relative ? `${relative}/${entry.name}` : entry.name,
+              target.row.id,
+            ))
+        )
+          addStat(target.row.stats, 'targetFiles');
       const decisions = compareDirectory(
         view.items,
         targetView.items,
         relative,
         this.filter,
-        target.row.config.target.mode === 'mirror',
+        !this.scope && target.row.config.target.mode === 'mirror',
         view.suspect || targetView.suspect,
         path === '/',
         cursor.path === '/',
       );
+      const seen = new Set<string>();
       for (const compared of decisions) {
         await this.checkpoint();
-        if (cursor.path === '/' && compared.name.startsWith('@s')) continue;
+        if (this.scope && !this.scope.has(compared.path, target.row.id))
+          continue;
+        seen.add(compared.name);
+        if (cursor.path === '/' && compared.name.startsWith('@s')) {
+          await this.settleScope(compared.path, 'noop', target);
+          continue;
+        }
         // 不可写挂载范围不是“可疑但可新建”：整棵子树只计保护，不生成任何动作或递归。
-        const decision: Decision =
+        let decision: Decision =
           targetView.protectSubtree && compared.kind !== 'filtered'
             ? {
                 ...compared,
@@ -243,13 +312,65 @@ export class Scanner {
                 managed: false,
               }
             : compared;
+        const selected = this.scope?.get(decision.path);
+        const intent = selected?.items.get(target.row.id);
+        const needsDirectory =
+          selected &&
+          [...selected.children.values()].some((child) =>
+            child.targets.has(target.row.id),
+          );
+        if (
+          this.scope &&
+          decision.source &&
+          decision.kind !== 'filtered' &&
+          decision.kind !== 'protected' &&
+          ((intent && intent.isDir !== decision.source.isDir) ||
+            (needsDirectory && !decision.source.isDir))
+        )
+          // 文件与目录互换不借重试扩展范围；与复制期间的 SOURCE_CHANGED 区分。
+          decision = {
+            ...decision,
+            kind: 'protected',
+            code: 'RETRY_TYPE_CHANGED',
+            sourceIssue: true,
+            managed: false,
+          };
+        // 祖先只提供到达路径；删除分母只接受明确选中的文件意图。
+        if (this.scope && (!intent || intent.isDir))
+          decision = { ...decision, managed: false };
         const targetPath = this.reader.child(
           target,
           cursor.path,
           decision.name,
         );
-        if (!targetPath) continue;
+        if (!targetPath) {
+          await this.settleScope(decision.path, 'blocked', target);
+          continue;
+        }
         this.recordDecision(target, decision, path, targetPath);
+        if (
+          this.scope &&
+          !decision.source &&
+          decision.kind !== 'protected' &&
+          decision.kind !== 'filtered'
+        ) {
+          await this.settleScope(
+            decision.path,
+            view.trustMissing ? 'noop' : 'blocked',
+            target,
+            true,
+            view.trustMissing,
+          );
+          continue;
+        }
+        if (decision.kind === 'filtered' || decision.kind === 'protected')
+          await this.settleScope(
+            decision.path,
+            decision.kind === 'filtered' ? 'noop' : 'blocked',
+            target,
+          );
+        if (decision.kind === 'unchanged')
+          await this.settleScope(decision.path, 'noop', target, false);
         if (decision.kind === 'directory') {
           if (decision.source?.isDir) {
             const missing = !decision.target && targetView.trustMissing;
@@ -275,7 +396,10 @@ export class Scanner {
           }
         } else if (decision.kind === 'new' || decision.kind === 'replace') {
           const sourcePath = this.reader.child(undefined, path, decision.name);
-          if (!sourcePath) continue;
+          if (!sourcePath) {
+            await this.settleScope(decision.path, 'blocked', target);
+            continue;
+          }
           const parent = await this.writer.prepare(target, cursor.prepare);
           const dependencies = parent ? [parent] : [];
           if (decision.kind === 'replace')
@@ -301,6 +425,7 @@ export class Scanner {
             decision.target,
             dependencies,
           );
+          await this.settleScope(decision.path, 'planned', target, false);
         } else if (decision.kind === 'extra')
           this.writer.operation(
             target,
@@ -313,6 +438,18 @@ export class Scanner {
             [],
           );
       }
+      // 双边列表都没有名字时，comparator不会返回Decision；仍须处理已持久化的输入。
+      for (const [name, child] of this.scope?.get(relative)?.children ?? []) {
+        if (seen.has(name) || !child.targets.has(target.row.id)) continue;
+        const rel = relative ? `${relative}/${name}` : name;
+        await this.settleScope(
+          rel,
+          view.trustMissing ? 'noop' : 'blocked',
+          target,
+          true,
+          view.trustMissing,
+        );
+      }
     }
     for (const extra of extras)
       await this.targetOnly(
@@ -323,6 +460,7 @@ export class Scanner {
         extra.entry,
       );
     for (const [name, next] of children) {
+      if (this.scope && next.length === 0) continue;
       const child = this.reader.child(undefined, path, name);
       if (child)
         await this.visitSource(
@@ -331,6 +469,44 @@ export class Scanner {
           depth + 1,
           next,
         );
+      else
+        await this.settleScope(
+          relative ? `${relative}/${name}` : name,
+          'blocked',
+        );
+    }
+  }
+  /** 记录选中输入的扫描结论；祖先缺失可一次收敛其后代，不能从读取失败推断缺失。
+   * @param relative 范围内相对路径。
+   * @param outcome 扫描结果。
+   * @param target 仅影响的目标；省略为共享源范围。
+   * @param descendants 是否同时处理后代。
+   * @param sourceMissing 已证明源缺失时，文件项计入无需写入的unchanged。
+   * @returns 结论写入批次完成。
+   * @throws Error 停止或持久化失败。
+   */
+  private async settleScope(
+    relative: string,
+    outcome: Exclude<RunRetryItemRecord['scanOutcome'], 'unprocessed'>,
+    target?: TargetState,
+    descendants = true,
+    sourceMissing = false,
+  ): Promise<void> {
+    if (!this.scope) return;
+    for (const item of this.scope.pending(
+      relative,
+      target?.row.id,
+      descendants,
+    )) {
+      if (sourceMissing && !item.isDir) {
+        const owner = this.writer.targets.find(
+          (candidate) => candidate.row.id === item.runTargetId,
+        );
+        if (!owner) throw new Error('Retry target missing');
+        addStat(owner.row.stats, 'unchangedFiles');
+      }
+      this.writer.scopeOutcome(item, outcome);
+      await this.checkpoint();
     }
   }
   /** 累加比较事实和诊断，保护路径不生成变更 Operation。

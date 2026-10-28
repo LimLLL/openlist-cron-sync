@@ -26,6 +26,7 @@ import { EmptyQueryDto, ErrorDto } from '../common/http.dto.js';
 import { pageSchema } from '../common/api-schema.js';
 import {
   TriggerRunDto,
+  RetryRunDto,
   RunQueryDto,
   OperationQueryDto,
   PageQueryDto,
@@ -88,6 +89,44 @@ export class RunsController {
     @Res({ passthrough: true }) response: Response,
   ) {
     const run = this.runs.trigger(id, body);
+    response.setHeader('Location', `/api/v1/runs/${run.id}`);
+    return run;
+  }
+  /** 重新检查父Run未成功的创建意图；不重试extras删除。
+   * @param id 来源Run UUID。
+   * @param body 本次删除阈值覆盖，默认false。
+   * @param _query 禁止额外查询。
+   * @param response 设置新Run的Location。
+   * @returns 已接受的queued RunView。
+   * @throws ApiError RETRY_NOT_ALLOWED详情含资格原因，或JOB_BUSY、配置及队列错误。
+   */
+  @Post('runs/:id/retry')
+  @HttpCode(202)
+  @ApiAcceptedResponse({
+    schema: runViewSchema,
+    description:
+      'Location=/api/v1/runs/:id；使用当前配置，重新检查范围；不接受路径，不自动重放请求',
+  })
+  @ApiBadRequestResponse({
+    type: ErrorDto,
+    description: 'VALIDATION_ERROR：多余字段或当前端点配置不可运行',
+  })
+  @ApiConflictResponse({
+    type: ErrorDto,
+    description:
+      'RETRY_NOT_ALLOWED：details[].reason与retryEligibility.reason一致；JOB_BUSY / PATH_OVERLAP',
+  })
+  @ApiServiceUnavailableResponse({
+    type: ErrorDto,
+    description: 'QUEUE_FULL / NOT_READY',
+  })
+  retry(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Body() body: RetryRunDto,
+    @Query() _query: EmptyQueryDto,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const run = this.runs.retry(id, body);
     response.setHeader('Location', `/api/v1/runs/${run.id}`);
     return run;
   }

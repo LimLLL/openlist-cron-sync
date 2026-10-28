@@ -28,7 +28,7 @@ export interface HttpCall extends RequestContext {
   headers?: Record<string, string>;
   /** 父任务的取消或截止信号。 */
   signal?: AbortSignal;
-  /** chunk/complete 由 relay 控制期限，不使用普通 API 超时。 */
+  /** chunk/complete/空文件put由 relay 控制期限，不使用普通 API 超时。 */
   transfer?: boolean;
 }
 /** 实例网络配置。 */
@@ -301,15 +301,36 @@ export class OpenListTransport
       }
     } catch (error) {
       if (checkpoint || error instanceof OpenListError) throw error;
+      const requestName = `${call.method} ${call.endpoint.split(/[?#]/, 1)[0]}`;
+      const causeCode = errorTraits(error).causeCode;
+      // Undici已经交付的超时事实优先于收尾期间才触发的signal。
+      const transportTimeout =
+        causeCode === 'UND_ERR_CONNECT_TIMEOUT'
+          ? `connection timeout after ${settings.connectTimeoutMs} ms`
+          : causeCode === 'UND_ERR_HEADERS_TIMEOUT'
+            ? `response headers timeout after ${settings.apiTimeoutMs} ms`
+            : causeCode === 'UND_ERR_BODY_TIMEOUT'
+              ? `response body timeout after ${settings.apiTimeoutMs} ms`
+              : undefined;
+      // 组合信号保留第一个原因，不能用catch时两个controller的最终状态猜测先后。
+      const reason =
+        transportTimeout ??
+        (signal.aborted
+          ? timeout.signal.aborted && signal.reason === timeout.signal.reason
+            ? `per-attempt API timeout after ${settings.apiTimeoutMs} ms`
+            : 'caller deadline or cancellation'
+          : !dispatched && waiting.aborted
+            ? 'caller deadline or cancellation before dispatch'
+            : 'network request failed');
       this.logger.debug('OpenList transport unavailable', {
         instanceId: instance.id,
+        request: requestName,
+        reason,
         ...errorTraits(error),
       });
       throw new OpenListError(
         'OPENLIST_ERROR',
-        waiting.aborted || signal.aborted
-          ? 'OpenList request deadline or cancellation'
-          : 'OpenList network request failed',
+        `OpenList ${requestName}: ${reason}`,
         null,
         null,
         0,

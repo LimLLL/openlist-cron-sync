@@ -4,6 +4,7 @@ import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { jobs } from '../database/job-schema.js';
 import { runs } from '../database/run-schema.js';
 import { time } from '../database/job-records.js';
+import { retryOrigin } from '../runs/views.js';
 import { TERMINAL_RUNS } from '../runs/run-finalizer.js';
 import type { ACTIVE_RUN_STATUSES, RunStatus } from '../runs/run-types.js';
 import type { SchedulePreview } from '../scheduling/cron-time.js';
@@ -13,6 +14,10 @@ import type { Job } from './job-types.js';
 export interface TerminalRealRunSummary {
   /** Run UUID。 */
   id: string;
+  /** 重试来源；普通Run为null。 */
+  retryOfRunId: string | null;
+  /** 来源历史仍存在；普通Run为false。 */
+  retrySourceExists: boolean;
   /** 仅终态，不含active查询简写或活动状态。 */
   status: Exclude<RunStatus, (typeof ACTIVE_RUN_STATUSES)[number]>;
   /** 接受UTC时刻，也是最新运行排序依据。 */
@@ -61,6 +66,7 @@ export function latestTerminalRealRuns(
     .select({
       jobId: jobs.id,
       id: runs.id,
+      retryOfRunId: runs.retryOfRunId,
       status: runs.status,
       createdAt: runs.createdAt,
       startedAt: runs.startedAt,
@@ -84,6 +90,7 @@ export function latestTerminalRealRuns(
         row.jobId,
         {
           id: row.id,
+          ...retryOrigin(db, row.retryOfRunId),
           // SQL限制终态，runs_terminal CHECK保证endedAt非空。
           status: row.status as TerminalRealRunSummary['status'],
           createdAt: new Date(row.createdAt).toISOString(),

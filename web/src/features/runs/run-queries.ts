@@ -172,7 +172,7 @@ export function useRuns(params: RunListParams) {
   });
 }
 
-/** 读取运行详情；进行中每 5 秒刷新，进入终态后停止，并让操作/问题子表各刷新一次终态数据。
+/** 读取运行详情；进行中或重试资格因 Job 忙碌被阻断时每 5 秒刷新，终态子表只刷新一次。
  * @param id 运行 ID。
  * @returns 运行详情查询。
  * @throws 不适用。
@@ -188,7 +188,10 @@ export function useRun(id: string) {
         parse: parseRunDetail,
       }),
     refetchInterval: (current) =>
-      isActiveRun(current.state.data?.status) ? 5_000 : false,
+      isActiveRun(current.state.data?.status) ||
+      current.state.data?.retryEligibility.reason === 'JOB_BUSY'
+        ? 5_000
+        : false,
   });
   const status = query.data?.status;
   const previous = useRef<{ id: string; status: string } | null>(null);
@@ -285,6 +288,36 @@ export function useCancelRun() {
       void queryClient.invalidateQueries({ queryKey: runKeys.active });
       void queryClient.invalidateQueries({ queryKey: runKeys.lists });
       void queryClient.invalidateQueries({ queryKey: jobKeys.catalogs });
+    },
+  });
+}
+
+/** 重试一次运行中未成功的项目，返回新建的重试运行；不自动重放（没有幂等键）。
+ * @returns 变更对象，变量为 { id: 来源运行 ID, confirmDeletes }。
+ * @throws 不适用。
+ */
+export function useRetryRun() {
+  const { request } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      confirmDeletes,
+    }: {
+      id: string;
+      confirmDeletes: boolean;
+    }) =>
+      request(`/runs/${encodeURIComponent(id)}/retry`, {
+        method: 'POST',
+        body: { confirmDeletes },
+        parse: parseRunView,
+      }),
+    onSettled: async () => {
+      // 失败也刷新：被拒绝时来源详情会给出最新的不可重试原因，网络错误时运行可能已被接受。
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: runKeys.all }),
+        queryClient.invalidateQueries({ queryKey: jobKeys.catalogs }),
+      ]);
     },
   });
 }

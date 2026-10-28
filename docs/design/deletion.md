@@ -49,6 +49,7 @@ planned计数与D/R保留全部已识别候选，不随skipped减少；实例级
 - limits.enabled=false：不检查count/percent。单字段NULL只禁用该项，enabled=true时至少一项非NULL。
 - confirmDeletes=true只对本次Run的所有Target跳过count/percent，不修改Job保存值。
 - 删除预算 budget 的定义与 retry_cleanup 的余量规则见[执行数据表](execution-tables.md#run_targets)。
+- 重试运行（只重试未成功项）沿用同一公式，但D只计本次范围内明确选中的受管理目标文件，R只有范围内的replace（重试不规划extras），retry_cleanup共用同一预算。范围很小时比例阈值很容易拦下替换，这是有意的保守行为：不沿用来源Run的全量D，也不因是重试而自动豁免；需要放行时由本次请求的confirmDeletes显式跳过数量/比例阈值，硬保护不受影响。
 
 阈值失败：该Target全部delete及其依赖create标skipped DELETE_LIMIT；纯新建可以继续，Run partial。禁止先执行部分删除到上限再停止。
 整目录不是“一次删除”；MVP按文件与空目录执行。空目录删除数量单列，不参与R/D，但完整性、空源保护仍适用。

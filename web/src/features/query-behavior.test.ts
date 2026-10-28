@@ -26,6 +26,7 @@ import {
   useRunOperations,
   useRuns,
   useCancelRun,
+  useRetryRun,
 } from './runs/run-queries';
 
 /** 测试读取的查询 hook 参数。 */
@@ -227,6 +228,25 @@ describe('query layer behavior', () => {
     ).toBe(true);
   });
 
+  it('posts only retry options and refreshes parent eligibility after a lost response', async () => {
+    const keys = [
+      runKeys.detail('parent/id'),
+      runKeys.active,
+      runKeys.list({ page: 1, pageSize: 50 }),
+      jobKeys.catalog(false),
+    ];
+    for (const key of keys) client.setQueryData(key, {});
+    useRetryRun();
+    await mutation().mutationFn({ id: 'parent/id', confirmDeletes: false });
+    expect(capture.request).toHaveBeenCalledWith('/runs/parent%2Fid/retry', {
+      method: 'POST',
+      body: { confirmDeletes: false },
+      parse: expect.any(Function),
+    });
+    await mutation().onSettled?.(undefined, new Error('NETWORK_ERROR'));
+    for (const key of keys) expect(invalidated(key)).toBe(true);
+  });
+
   it('requests archived jobs only when asked and polls only for the owning page', async () => {
     capture.request.mockResolvedValue({
       items: [],
@@ -387,6 +407,28 @@ describe('query layer behavior', () => {
     }
   });
 
+  it('refreshes busy retry eligibility even on terminal runs and stops once the job is idle', () => {
+    useRun('parent');
+    expect(
+      interval({
+        status: 'partial',
+        retryEligibility: { eligible: false, reason: 'JOB_BUSY' },
+      }),
+    ).toBe(5_000);
+    expect(
+      interval({
+        status: 'partial',
+        retryEligibility: { eligible: true, reason: null },
+      }),
+    ).toBe(false);
+    expect(
+      interval({
+        status: 'partial',
+        retryEligibility: { eligible: false, reason: 'RUN_SUPERSEDED' },
+      }),
+    ).toBe(false);
+  });
+
   it('refreshes visible child tables once when the run reaches a terminal state', () => {
     const operations = runKeys.operations('run', { page: 1, pageSize: 50 });
     const issues = runKeys.issues('run', { page: 1, pageSize: 25 });
@@ -399,7 +441,9 @@ describe('query layer behavior', () => {
     expect(invalidated(operations)).toBe(false);
     capture.result = { data: { status: 'succeeded' } };
     useRun('run');
-    expect(interval({ status: 'succeeded' })).toBe(false);
+    expect(
+      interval({ status: 'succeeded', retryEligibility: { reason: null } }),
+    ).toBe(false);
     expect(invalidated(operations)).toBe(true);
     expect(invalidated(issues)).toBe(true);
     // 详情本身已是最新终态，不再重复失效。

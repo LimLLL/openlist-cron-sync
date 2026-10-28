@@ -10,6 +10,7 @@
 | -------------------------------------------------------- | --------------- | ------------------------------------------------------ |
 | id / job_id                                              | ID / ID FK jobs | 稳定关联                                               |
 | trigger                                                  | ENUM            | manual / cron                                          |
+| retry_of_run_id                                          | ID?             | 重试来源Run的软链接（无外键）；非空即重试运行          |
 | scheduled_at                                             | TS?             | cron理论触发点；manual为NULL                           |
 | dry_run / confirm_deletes                                | BOOL            | 接受请求时固定                                         |
 | status                                                   | ENUM RunStatus  | queued                                                 |
@@ -90,6 +91,11 @@ operation_id FK operations、depends_on_id FK operations，复合PK，CHECK不�
 id ID、run_id FK runs、run_target_id? FK run_targets、endpoint_role ENUM(source/target)、instance_id FK instances、path STR、code STR、message STR、protect_subtree BOOL、created_at TS。
 索引(run_id,id)、(run_target_id,path)。源问题run_target_id=NULL，影响全部Target。同run同endpoint/path/code应用去重，不逐个文件重复写相同子树错误。code取值及影响见[原因码分类](state-machines.md#code-classification)。
 记录限额见配置；超过限额终止扫描，不能截掉错误后继续删除。
+
+## run_retry_items
+
+重试运行独立拥有的范围输入：run_id FK runs、run_target_id FK run_targets、relative_path STR（相对目标根，空字符串仅表示根目录自身）、is_dir BOOL、scan_outcome ENUM(unprocessed/noop/planned/blocked) 默认unprocessed。
+主键(run_target_id,relative_path)，索引(run_id)；relative_path为空时is_dir必须为1。接受重试时与Run在同一事务写入；scan_outcome只记录扫描结论，由PlanWriter批量提交。planned落库时，对应计划已在同批或更早批次落库；若计划先落库后进程中断，范围项可以仍为unprocessed，下次重试会重新检查该路径。执行结果仍以operations各逻辑动作的最后attempt为准。正常完成扫描时不允许残留unprocessed。随所属Run按历史保留清理，先于run_targets删除。
 
 ## notification_deliveries
 

@@ -363,7 +363,11 @@ describe('M1 authentication' /** 注册本组 M1 行为验收用例。
     await expect(
       fixture.app
         .get(OpenListMultipart)
-        .putEmpty(fixture.record(), { directory: '/', name: 'empty' }),
+        .putEmpty(
+          fixture.record(),
+          { directory: '/', name: 'empty' },
+          { signal: AbortSignal.timeout(5000) },
+        ),
     ).rejects.toMatchObject({ upstreamCode: 401 });
     expect(fixture.record().authState).toBe('ready');
     fixture.server.responder = undefined;

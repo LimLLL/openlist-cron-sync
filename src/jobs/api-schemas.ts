@@ -222,6 +222,8 @@ export const jobListItemSchema = objectSchema({
     ...nullable(
       objectSchema({
         id: idSchema,
+        retryOfRunId: nullable(idSchema),
+        retrySourceExists: booleanSchema,
         status: { type: 'string', enum: [...TERMINAL_RUNS] },
         createdAt: timeSchema,
         startedAt: nullable(timeSchema),

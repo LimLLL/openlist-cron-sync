@@ -32,7 +32,7 @@ token模式使用管理员静态token，Authorization直接传token，不加Bear
 
 M1 尚无 jobs/runs/operations，身份比较后允许覆盖。M2 已接入非归档Job引用检查和真实未决责任查询（三项谓词完整）：Instances PATCH/DELETE执行ENDPOINT_IN_USE，Security在同一事务核对责任和保存身份，冲突持久化ACCOUNT_CHANGED且保留旧身份。downloadMode有非终态Run引用时不可改；limits已删除，创建或PATCH携带该字段（包括{}）返回400 VALIDATION_ERROR；同身份凭据可修复。PATCH仍不访问上游，不提供恒false占位函数。
 
-M1 客户端只返回协议事实；不执行 observe-after-500、unknown 历史、任务状态推进或 relay。`putEmpty` 若意外收到 `data.task`，属于协议异常，M3将其记为unknown，错误摘要UPSTREAM_PROTOCOL_ERROR；不持久化tid或引入上传task跟踪。chunk/complete 必须由调用方传入截止信号，不使用普通 API 的短超时；init/status/abort 使用每次尝试独立的普通请求期限。全部 multipart 请求均不受扫描间隔约束；实例 API 配额及控制请求优先级已删除。人工重试（retryAuth=true）只越过持久阻断尝试一次，阻断在该次尝试成功前保持不变，网络失败不会解除。
+M1 客户端只返回协议事实；不执行 observe-after-500、unknown 历史、任务状态推进或 relay。`putEmpty` 若意外收到 `data.task`，属于协议异常，M3将其记为unknown，错误摘要UPSTREAM_PROTOCOL_ERROR；不持久化tid或引入上传task跟踪。chunk/complete 与 0 字节 put 必须由调用方传入截止信号，不使用普通 API 的短超时：chunk 用于分片传输，complete 与同步 put 等待上游提交结果；建连仍受连接超时约束。init/status/abort 使用每次尝试独立的普通请求期限。网络失败与中止的错误摘要为 `OpenList <方法> <固定端点路径>: <原因>`，原因区分单次 API 超时、连接/响应头/响应体超时、调用方期限或取消与网络失败；不含 query、实例地址、文件路径或秘密。仅派发等待信号中止、在途信号尚未中止且请求未派发时，摘要额外带 `before dispatch`；不能仅凭没有该后缀推断已派发。全部 multipart 请求均不受扫描间隔约束；实例 API 配额及控制请求优先级已删除。人工重试（retryAuth=true）只越过持久阻断尝试一次，阻断在该次尝试成功前保持不变，网络失败不会解除。
 
 ## 路径与URL
 

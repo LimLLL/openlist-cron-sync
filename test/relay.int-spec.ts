@@ -158,7 +158,9 @@ describe('M3 real Local relay topologies', () => {
     const instance = record(endpoint.id);
     const file = { directory: endpoint.path, name };
     if (!data.length) {
-      await uploads.putEmpty(instance, file);
+      await uploads.putEmpty(instance, file, {
+        signal: AbortSignal.timeout(30000),
+      });
       return;
     }
     const session = await uploads.init(instance, file, data.length);

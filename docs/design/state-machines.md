@@ -76,6 +76,7 @@ queued 重启仍 queued，保留 createdAt 和 queueDeadlineAt；过期则 faile
 | EMPTY_SOURCE                              | scan_issue                  | 所有 Target 全部删除禁止                                                       | 是                       | 是       |
 | PLAN_INVALID                              | scan_issue                  | 该 Target 全部删除禁止，不可人工覆盖                                           | 是                       | 是       |
 | TYPE_CONFLICT                             | scan_issue                  | 冲突路径及子树保护                                                             | 是（该 Target）          | 是       |
+| RETRY_TYPE_CHANGED                        | scan_issue                  | 仅重试运行：该范围项保护，不扩展范围；按源问题记录                             | 是（所有 Target）        | 是       |
 | NAME_COLLISION（source 内部）             | scan_issue                  | 所有 Target 保护冲突名                                                         | 是（所有 Target）        | 是       |
 | NAME_COLLISION（source 与 Target 之间）   | scan_issue                  | 该 Target 保护                                                                 | 是（该 Target）          | 是       |
 | NAME_COLLISION（仅 Target 单侧条目之间）  | scan_issue（警告）          | 该 Target 保护，不计入阈值分母                                                 | 否                       | 否       |

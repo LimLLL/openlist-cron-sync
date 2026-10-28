@@ -13,6 +13,7 @@ import {
 import { jobViewSchema, targetViewSchema } from '../jobs/api-schemas.js';
 import { emptyStats } from '../sync/stats.js';
 import { executionSettings } from '../configuration/execution-settings.js';
+import { RETRY_REASONS } from './retry-scope.js';
 import { RUN_STATUSES, OPERATION_STATUSES } from './run-types.js';
 
 const statsSchema = {
@@ -29,7 +30,7 @@ const statsSchema = {
     ),
   ),
   description:
-    '运行列表和详情在planned/executing/cancelling/recovering时读取实时SQL聚合，排队、扫描和终态读取持久化统计；逻辑动作取最后attempt，字节含全部attempt及重传；relay进度约5秒持久化；预览执行结果和实际字节为0；源计数只计一次',
+    '运行列表和详情在planned/executing/cancelling/recovering时读取实时SQL聚合，排队、扫描和终态读取持久化统计；逻辑动作取最后attempt，字节含全部attempt及重传；relay进度约5秒持久化；预览执行结果和实际字节为0；源计数只计一次。retryOfRunId非空时只统计范围项及必要祖先；源文件已确认消失的noop也计入unchangedFiles，过滤不计入成功；不表示全树扫描完成',
 };
 const errorSchema = nullable(
   objectSchema({ code: stringSchema, message: stringSchema }),
@@ -49,6 +50,14 @@ const instanceSchema = objectSchema({
 export const runViewSchema = objectSchema({
   id: idSchema,
   jobId: idSchema,
+  retryOfRunId: {
+    ...nullable(idSchema),
+    description: '非空表示范围重试；软链接，父历史清理后仍保留',
+  },
+  retrySourceExists: {
+    ...booleanSchema,
+    description: '来源Run是否仍存在；普通Run为false',
+  },
   trigger: { type: 'string', enum: ['manual', 'cron'] },
   scheduledAt: nullable(timeSchema),
   dryRun: booleanSchema,
@@ -85,8 +94,14 @@ const runTargetSchema = objectSchema({
   instanceName: stringSchema,
   config: objectSchema({ target: targetViewSchema, instance: instanceSchema }),
   stats: statsSchema,
-  sourceComplete: booleanSchema,
-  targetComplete: booleanSchema,
+  sourceComplete: {
+    ...booleanSchema,
+    description: '重试Run仅表示共享源范围观察完整，不证明全树完整',
+  },
+  targetComplete: {
+    ...booleanSchema,
+    description: '重试Run仅表示此目标范围观察完整',
+  },
   suspect: booleanSchema,
   deleteBlocked: booleanSchema,
   extrasBlocked: booleanSchema,
@@ -95,7 +110,11 @@ const runTargetSchema = objectSchema({
     description:
       '有效扫描/安全阻断码；DELETE_BLOCKED 的具体原因在这里和 issues 中',
   },
-  observedTargetFileCount: sizeSchema,
+  observedTargetFileCount: {
+    ...sizeSchema,
+    description:
+      '删除分母D；重试仅计范围内符合managed规则的目标文件，无关兄弟不计',
+  },
   plannedReplaceCount: sizeSchema,
   plannedExtraCount: sizeSchema,
   deleteBudgetCount: {
@@ -126,6 +145,17 @@ export const runDetailSchema = objectSchema({
   }),
   targets: arraySchema(runTargetSchema),
   issueCount: sizeSchema,
+  retryEligibility: {
+    ...objectSchema({
+      eligible: booleanSchema,
+      reason: nullable({ type: 'string', enum: [...RETRY_REASONS] }),
+      candidateFiles: sizeSchema,
+      candidateDirectories: sizeSchema,
+      excludedItems: sizeSchema,
+    }),
+    description:
+      '最新终态正式Run、未过保留期、Job空闲且源instanceId/path不变才计算候选；前置资格失败时计数为0。候选按Target和路径去重，仅创建/替换文件及目录自身；excludedItems是因目标移除或instanceId/path改变排除的项。候选数不是执行数，POST事务内复查；不包含队列容量或服务就绪。',
+  },
 });
 export const operationViewSchema = objectSchema({
   id: idSchema,

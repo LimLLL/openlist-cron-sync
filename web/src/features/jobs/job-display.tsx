@@ -142,7 +142,7 @@ export function TargetsSummary({
   );
 }
 
-/** 渲染进行中的运行：状态徽标、试运行标记与已用时间，链接到运行详情。
+/** 渲染进行中的运行：状态徽标、试运行或重试标记与已用时间，链接到运行详情。
  * @param props run 进行中的运行。
  * @returns 运行链接。
  * @throws 不适用。
@@ -158,6 +158,11 @@ export function ActiveRunLink({ run }: { run: RunListItem }) {
     >
       <RunStatusBadge status={run.status} />
       {run.dryRun && <Badge>{t('common:dryRun')}</Badge>}
+      {run.retryOfRunId && (
+        <span className="shrink-0 text-xs text-muted-foreground">
+          {t('common:trigger.retry')}
+        </span>
+      )}
       <span className="truncate text-xs text-muted-foreground tabular-nums">
         {t('list.elapsed', {
           duration: formatDuration(elapsedSeconds(run, Date.now())),
@@ -167,7 +172,7 @@ export function ActiveRunLink({ run }: { run: RunListItem }) {
   );
 }
 
-/** 渲染最近一次终态正式运行：状态、结束时间，悬停显示错误；没有时显示占位文字。
+/** 渲染最近一次终态正式运行：状态、是否重试、结束时间，悬停显示错误；没有时显示占位文字。
  * @param props run 摘要或 null。
  * @returns 运行链接或占位。
  * @throws 不适用。
@@ -177,7 +182,7 @@ export function LastRealRun({
 }: {
   run: JobListItem['latestTerminalRealRun'];
 }) {
-  const { t } = useTranslation('jobs');
+  const { t } = useTranslation(['jobs', 'common']);
   const errorText = useErrorText();
   if (!run)
     return <span className="text-muted-foreground">{t('list.noRealRun')}</span>;
@@ -187,6 +192,11 @@ export function LastRealRun({
       className="inline-flex min-w-0 items-center gap-1.5 hover:underline"
     >
       <RunStatusBadge status={run.status} stopReason={run.stopReason} />
+      {run.retryOfRunId && (
+        <span className="shrink-0 text-xs text-muted-foreground">
+          {t('common:trigger.retry')}
+        </span>
+      )}
       <RelativeTime
         iso={run.endedAt}
         className="truncate text-xs text-muted-foreground"

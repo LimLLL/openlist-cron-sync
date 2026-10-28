@@ -11,6 +11,7 @@ import { Button } from '../../components/ui/button';
 import { Table, TBody, TD, TH, THead, TR } from '../../components/ui/table';
 import { RunDuration, RunResultSummary } from '../runs/run-cells';
 import { useRuns } from '../runs/run-queries';
+import { triggerKind } from '../runs/run-format';
 
 /** 最近运行表表头；加载中与加载后共用。
  * @returns 表头。
@@ -119,7 +120,7 @@ export function RecentRunsSection() {
                   )}
                 </TD>
                 <TD className="text-muted-foreground">
-                  {t(`common:trigger.${run.trigger}`)}
+                  {t(`common:trigger.${triggerKind(run)}`)}
                 </TD>
                 <TD className="whitespace-nowrap text-muted-foreground">
                   {run.startedAt ? (

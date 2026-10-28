@@ -79,6 +79,8 @@ export function mixedRunFixture(): RunDetail {
     id: 'run',
     jobId: job.id,
     trigger: 'manual',
+    retryOfRunId: null,
+    retrySourceExists: false,
     scheduledAt: null,
     dryRun: true,
     confirmDeletes: false,
@@ -95,6 +97,13 @@ export function mixedRunFixture(): RunDetail {
     queueDeadlineAt: job.createdAt,
     cancelRequestedAt: null,
     recoveryDeadlineAt: null,
+    retryEligibility: {
+      eligible: false,
+      reason: 'DRY_RUN',
+      candidateFiles: 0,
+      candidateDirectories: 0,
+      excludedItems: 0,
+    },
     sourceInstanceName: 'Source',
     config: { snapshotVersion: 1, job, instances: {}, settings: {} },
     targets: job.targets.map(

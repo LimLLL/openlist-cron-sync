@@ -75,6 +75,8 @@ Job 源配额只覆盖未完成的源读取，Target 文件配额覆盖准备、
 
 OpenList 分片接口不接受 0 字节。先确认 GET 正常 EOF 且没有任何 body 字节，再执行删除依赖，然后 `PUT /api/fs/put`：File-Path、`Content-Length: 0`、`As-Task: false`、`Overwrite: false`，按同一规则带 Last-Modified，并消费最终响应。body 非空则 SIZE_MISMATCH，不发 PUT。
 
+这个同步 put 与 complete 一样等待上游提交结果（例如把小文件攒成包、整包上传并提交后才响应的驱动），因此不使用普通 API 超时；响应等待受 relay total、取消宽限和关机宽限约束，建连仍受连接超时约束。派发后因网络失败或期限结束而未取得确定结果时记为 unknown，同一 Run 内不重放。
+
 源大小未知（含 OpenList 负数 size）按 UNKNOWN_SIZE 跳过；其他非法 size 按[依赖表](../reference/openlist-api.md#list对象)拒绝。
 
 ## 下载中断与续传
@@ -129,6 +131,7 @@ abort 成功或随后 status 404 都不证明驱动已停止：OpenList 取消�
 | init / status / abort | 每次尝试独立的普通 API 超时，含建连与响应，不含认证等待和退避      |
 | chunk 请求            | relay total；低带宽下单个 chunk 本来就可能很久                     |
 | complete 等待         | relay total；OpenList 驱动可能还在向云端上传                       |
+| 0 字节 put            | 同 complete：relay total，不用普通 API 超时；驱动可能等整包提交    |
 
 等待名额、spool 空间或令牌不算网络无进展，但计入 relay 与 Run 总期限。取消或源/分片/心跳失败时先停止并等待源读取退出、释放源位，再等待远端 abort、结果观察或 spool 清理；完整文件重试在退避之后重新申请源位，Range 恢复则始终持有原源位。
 

@@ -127,7 +127,7 @@ export default {
     retry_cleanup: 'Retry cleanup',
   },
   targetMode: { incremental: 'Incremental', mirror: 'Mirror' },
-  trigger: { manual: 'Manual', cron: 'Scheduled' },
+  trigger: { manual: 'Manual', cron: 'Scheduled', retry: 'Retry' },
   dryRun: 'Dry run',
   realRun: 'Real run',
   stopReason: {

@@ -142,7 +142,18 @@ location / {
 
 控制请求遇到代理返回的非 2xx 错误页时，摘要为 `OpenList HTTP <状态码>`；返回 2xx 但不是 JSON 时记 UPSTREAM_PROTOCOL_ERROR。
 
-`OpenList request deadline or cancellation` 表示本次请求超时或被适用的生命周期信号中止，不能单凭此消息判定为 OpenList 或驱动处理太慢。普通请求每次尝试从调用 HTTP 客户端前计时，包含建连、协议协商和完整响应，不包含扫描间隔、认证等待或退避；chunk/complete 使用文件与收尾期限。扫描间隔排队时仍可能因 Run 停止、文件期限或关机被取消；已派发的写请求则按在途/收尾期限继续等待。排查时先核对 Run 停止原因、文件/关机期限和操作是否已经提交，再检查连接、代理与上游响应耗时。
+请求层失败的错误信息形如 `OpenList PUT /api/fs/put: caller deadline or cancellation`，冒号前是请求方法和固定端点路径，冒号后是原因：
+
+| 原因 | 含义 |
+| --- | --- |
+| `per-attempt API timeout after N ms` | 普通请求单次超过 `OPENLIST_API_TIMEOUT_MS` |
+| `connection timeout after N ms` | 建连超过 `OPENLIST_CONNECT_TIMEOUT_MS` |
+| `response headers timeout after N ms` / `response body timeout after N ms` | 普通请求在响应头或响应体阶段超时 |
+| `caller deadline or cancellation` | 适用的调用方或生命周期信号中止；可能发生在派发前，也可能发生在派发后 |
+| `caller deadline or cancellation before dispatch` | 请求尚未发出，只有派发等待信号被中止（在途信号尚未中止），例如停止等待新请求派发 |
+| `network request failed` | 其他网络失败 |
+
+旧版本只记录 `OpenList request deadline or cancellation`，不区分以上原因。超时不能单凭此消息判定为 OpenList 或驱动处理太慢。普通请求每次尝试从调用 HTTP 客户端前计时，包含建连、协议协商和完整响应，不包含扫描间隔、认证等待或退避；chunk/complete 与 0 字节 put 使用文件与收尾期限。扫描间隔排队时仍可能因 Run 停止、文件期限或关机被取消；已派发的写请求则按在途/收尾期限继续等待。排查时先核对 Run 停止原因、文件/关机期限和操作是否已经提交，再检查连接、代理与上游响应耗时。
 
 ### 源并发与等待 complete 的文件数
 

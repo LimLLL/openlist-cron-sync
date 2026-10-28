@@ -13,6 +13,7 @@ import { Table, TBody, TD, TH, THead, TR } from '../../components/ui/table';
 import { usePageParams } from '../../lib/hooks';
 import { RunDuration, RunResultSummary } from '../runs/run-cells';
 import { useRuns } from '../runs/run-queries';
+import { triggerKind } from '../runs/run-format';
 
 const PAGE_DEFAULTS = { page: 1, pageSize: 25 };
 
@@ -126,7 +127,7 @@ export function JobRunsTab({ jobId }: { jobId: string }) {
                     )}
                   </TD>
                   <TD className="text-[13px] text-muted-foreground">
-                    {t(`common:trigger.${run.trigger}`)}
+                    {t(`common:trigger.${triggerKind(run)}`)}
                   </TD>
                   <TD className="text-[13px] whitespace-nowrap">
                     {run.startedAt ? (

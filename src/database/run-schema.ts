@@ -4,6 +4,7 @@ import {
   check,
   index,
   integer,
+  primaryKey,
   sqliteTable,
   text,
   uniqueIndex,
@@ -31,6 +32,8 @@ export const runs = sqliteTable(
         { onDelete: 'restrict' },
       ),
     trigger: text('trigger', { enum: ['manual', 'cron'] }).notNull(),
+    /** 仅作来源展示；父历史清理不影响本Run的独立范围。 */
+    retryOfRunId: text('retry_of_run_id'),
     scheduledAt: integer('scheduled_at'),
     dryRun: integer('dry_run', { mode: 'boolean' }).notNull(),
     confirmDeletes: integer('confirm_deletes', { mode: 'boolean' }).notNull(),
@@ -228,3 +231,60 @@ export const scanIssues = sqliteTable(
 export type RunRecord = typeof runs.$inferSelect;
 /** Run Target 数据库记录。 */
 export type RunTargetRecord = typeof runTargets.$inferSelect;
+
+/** 重试范围的扫描结果；执行结果仍以operations的最后attempt为准。 */
+export const RETRY_SCAN_OUTCOMES = [
+  'unprocessed',
+  'noop',
+  'planned',
+  'blocked',
+] as const;
+export const runRetryItems = sqliteTable(
+  'run_retry_items',
+  {
+    runId: text('run_id')
+      .notNull()
+      .references(
+        /** 获取所属Run外键。
+         * @returns Run主键列。
+         * @throws 不适用。
+         */
+        () => runs.id,
+        { onDelete: 'restrict' },
+      ),
+    runTargetId: text('run_target_id')
+      .notNull()
+      .references(
+        /** 获取本轮目标外键。
+         * @returns RunTarget主键列。
+         * @throws 不适用。
+         */
+        () => runTargets.id,
+        { onDelete: 'restrict' },
+      ),
+    relativePath: text('relative_path').notNull(),
+    isDir: integer('is_dir', { mode: 'boolean' }).notNull(),
+    scanOutcome: text('scan_outcome', { enum: RETRY_SCAN_OUTCOMES })
+      .notNull()
+      .default('unprocessed'),
+  },
+  /** 约束范围唯一性、类型和扫描结果，并支持按Run读取。
+   * @param t 范围字段。
+   * @returns 约束和索引。
+   * @throws 不适用。
+   */
+  (t) => [
+    primaryKey({ columns: [t.runTargetId, t.relativePath] }),
+    index('run_retry_items_run').on(t.runId),
+    check(
+      'run_retry_items_directory',
+      sql`${t.isDir} IN (0,1) AND (${t.relativePath} != '' OR ${t.isDir} = 1)`,
+    ),
+    check(
+      'run_retry_items_outcome',
+      sql`${t.scanOutcome} IN ('unprocessed','noop','planned','blocked')`,
+    ),
+  ],
+);
+/** 新Run独立拥有的重试输入。 */
+export type RunRetryItemRecord = typeof runRetryItems.$inferSelect;

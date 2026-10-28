@@ -1,5 +1,5 @@
 // 显式投影运行、操作与诊断响应，任何 ENC 或下载秘密均不进入 API。
-import { inArray } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { instances } from '../database/schema.js';
 import { runs } from '../database/run-schema.js';
@@ -9,14 +9,16 @@ import { time } from '../database/job-records.js';
 
 /** 投影 Run 基础字段。
  * @param row 数据库记录。
+ * @param db 当前数据库，用于读取软来源是否仍存在。
  * @returns RunView 公共对象。
  * @throws RangeError 非法数据库时间。
  */
-export function runView(row: RunRecord) {
+export function runView(row: RunRecord, db: BetterSQLite3Database) {
   return {
     id: row.id,
     jobId: row.jobId,
     trigger: row.trigger,
+    ...retryOrigin(db, row.retryOfRunId),
     scheduledAt: time(row.scheduledAt),
     dryRun: row.dryRun,
     confirmDeletes: row.confirmDeletes,
@@ -250,5 +252,27 @@ export function operationView(
     submittedAt: time(row.submittedAt),
     endedAt: time(row.endedAt),
     unknownSince: time(row.unknownSince),
+  };
+}
+
+/** 投影软历史来源；清理父Run后仍保留其ID，但不生成失效链接。
+ * @param db 数据库。
+ * @param retryOfRunId 来源ID或null。
+ * @returns 来源ID及是否仍存在；普通Run的exists为false。
+ * @throws Error 数据库读取失败。
+ */
+export function retryOrigin(
+  db: BetterSQLite3Database,
+  retryOfRunId: string | null,
+) {
+  return {
+    retryOfRunId,
+    retrySourceExists:
+      retryOfRunId !== null &&
+      db
+        .select({ id: runs.id })
+        .from(runs)
+        .where(eq(runs.id, retryOfRunId))
+        .get() !== undefined,
   };
 }

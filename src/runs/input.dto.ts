@@ -101,3 +101,12 @@ export class OperationQueryDto extends PageQueryDto {
   @IsBoolean()
   includeMaintenance = false;
 }
+
+/** 范围重试只接受删除数值阈值覆盖；路径由服务端历史提取。
+ * @param 不适用。
+ * @returns 不适用。
+ * @throws 不适用。
+ */
+export class RetryRunDto extends PickType(TriggerRunDto, [
+  'confirmDeletes',
+] as const) {}

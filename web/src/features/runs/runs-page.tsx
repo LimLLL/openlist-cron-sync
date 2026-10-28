@@ -20,6 +20,7 @@ import {
 } from '../../lib/hooks';
 import { useJobCatalog } from '../jobs/job-queries';
 import { RUN_STATUSES } from './run-contract';
+import { triggerKind } from './run-format';
 import { useRuns } from './run-queries';
 import { RunDuration, RunResultSummary } from './run-cells';
 
@@ -250,7 +251,7 @@ export function RunsPage() {
                     )}
                   </TD>
                   <TD className="text-muted-foreground">
-                    {t(`common:trigger.${run.trigger}`)}
+                    {t(`common:trigger.${triggerKind(run)}`)}
                   </TD>
                   <TD>
                     {run.startedAt ? (

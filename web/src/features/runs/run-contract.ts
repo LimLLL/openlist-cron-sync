@@ -64,8 +64,12 @@ export interface RunView {
   id: string;
   /** 所属 Job UUID。 */
   jobId: string;
-  /** 触发方式。 */
+  /** 触发方式；重试运行同样为 manual，以 retryOfRunId 区分。 */
   trigger: 'manual' | 'cron';
+  /** 重试来源运行 ID；非空表示只重试来源运行中未成功的项目。 */
+  retryOfRunId: string | null;
+  /** 来源运行是否仍在历史中；被保留期清理后为 false，普通运行恒为 false。 */
+  retrySourceExists: boolean;
   /** 调度时间。 */
   scheduledAt: string | null;
   /** 是否仅预览。 */
@@ -137,8 +141,39 @@ export interface RunTargetView {
   deleteBudgetCount: number | null;
 }
 
+/** 不能重试的原因码，与后端 retryEligibility.reason 一致。 */
+export const RETRY_REASONS = [
+  'RUN_NOT_TERMINAL',
+  'DRY_RUN',
+  'HISTORY_EXPIRED',
+  'JOB_ARCHIVED',
+  'JOB_BUSY',
+  'RUN_SUPERSEDED',
+  'SOURCE_ENDPOINT_CHANGED',
+  'NO_RETRY_ITEMS',
+] as const;
+
+/** 不能重试的原因码类型。 */
+export type RetryReason = (typeof RETRY_REASONS)[number];
+
+/** 能否“重试未成功项”及将重新检查的数量；数量不是将执行的操作数。 */
+export interface RetryEligibility {
+  /** 当前是否可以重试；提交时后端会再次检查。 */
+  eligible: boolean;
+  /** 不可重试的原因；可重试时为 null。 */
+  reason: RetryReason | null;
+  /** 将重新检查的文件数。 */
+  candidateFiles: number;
+  /** 将重新检查的目录数（仅目录自身，不含其中内容）。 */
+  candidateDirectories: number;
+  /** 因所属目标已移除或改了实例/路径而不参与的项目数。 */
+  excludedItems: number;
+}
+
 /** Run 详情（含配置快照和目标）。 */
 export interface RunDetail extends RunView {
+  /** 重试资格与候选数量。 */
+  retryEligibility: RetryEligibility;
   /** 源实例名称，解析规则同目标实例名称。 */
   sourceInstanceName: string;
   /** 固定配置快照。 */
@@ -194,6 +229,11 @@ export function parseRunView(value: unknown): RunView {
     id: value.id,
     jobId: expectString(value.jobId, 'jobId'),
     trigger: expectEnum(value.trigger, ['manual', 'cron'], 'trigger'),
+    retryOfRunId: nullableString(value.retryOfRunId, 'retryOfRunId'),
+    retrySourceExists: expectBoolean(
+      value.retrySourceExists,
+      'retrySourceExists',
+    ),
     scheduledAt: nullableString(value.scheduledAt, 'scheduledAt'),
     dryRun: expectBoolean(value.dryRun, 'dryRun'),
     confirmDeletes: expectBoolean(value.confirmDeletes, 'confirmDeletes'),
@@ -274,8 +314,28 @@ export function parseRunDetail(value: unknown): RunDetail {
   const base = parseRunView(value);
   if (!isRecord(value))
     throw new ApiError(0, 'INVALID_RESPONSE', 'Invalid run detail.');
+  const retry = expectRecord(value.retryEligibility, 'retryEligibility');
   return {
     ...base,
+    retryEligibility: {
+      eligible: expectBoolean(retry.eligible, 'retryEligibility.eligible'),
+      reason:
+        retry.reason === null
+          ? null
+          : expectEnum(retry.reason, RETRY_REASONS, 'retryEligibility.reason'),
+      candidateFiles: expectNumber(
+        retry.candidateFiles,
+        'retryEligibility.candidateFiles',
+      ),
+      candidateDirectories: expectNumber(
+        retry.candidateDirectories,
+        'retryEligibility.candidateDirectories',
+      ),
+      excludedItems: expectNumber(
+        retry.excludedItems,
+        'retryEligibility.excludedItems',
+      ),
+    },
     sourceInstanceName: expectString(
       value.sourceInstanceName,
       'sourceInstanceName',

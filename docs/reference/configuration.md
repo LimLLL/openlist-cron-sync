@@ -32,7 +32,7 @@
 | MAX_QUEUED_RUNS                | 100            | 1–10000；防止无界内存/DB积压                                                                                |
 | QUEUE_TIMEOUT_SECONDS          | 3600           | 60–86400；过期工作不长期排队                                                                                |
 | OPENLIST_CONNECT_TIMEOUT_MS    | 10000          | 1000–120000                                                                                                 |
-| OPENLIST_API_TIMEOUT_MS        | 30000          | 1000–300000；普通请求单次期限，含建连、协议协商与响应；等待规则见下文；不用于chunk/complete                 |
+| OPENLIST_API_TIMEOUT_MS        | 30000          | 1000–300000；普通请求单次期限，含建连、协议协商与响应；等待规则见下文；不用于chunk/complete/0字节put           |
 | OPENLIST_TASK_POLL_MS          | 3000           | 500–60000；请求均匀加±20%抖动                                                                               |
 | RETRY_MAX_ATTEMPTS             | 3              | 1–10，含首次；未设置Job重试次数时使用，不含OpenList内部重试                                                 |
 | RETRY_BASE_MS                  | 1000           | 100–60000                                                                                                   |

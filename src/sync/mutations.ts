@@ -83,7 +83,7 @@ export async function observeError(
     return {
       status: 'unknown',
       code: error.code,
-      message: 'Mutation observation unavailable',
+      message: `Mutation observation unavailable: ${cause instanceof OpenListError ? cause.message : error.message}`,
     };
   }
 }
@@ -286,7 +286,10 @@ export class Mutations {
       this.store.end(op.id, {
         status: 'unknown',
         code: error instanceof OpenListError ? error.code : 'OPENLIST_ERROR',
-        message: 'Delete confirmation unavailable',
+        message:
+          error instanceof OpenListError
+            ? `Delete confirmation unavailable: ${error.message}`
+            : 'Delete confirmation unavailable',
       });
     }
   }

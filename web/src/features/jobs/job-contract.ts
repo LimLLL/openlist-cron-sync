@@ -114,6 +114,10 @@ export interface JobView {
 export interface TerminalRealRunSummary {
   /** Run UUID。 */
   id: string;
+  /** 重试来源运行 ID；普通运行为 null。 */
+  retryOfRunId: string | null;
+  /** 来源运行是否仍在历史中；普通运行为 false。 */
+  retrySourceExists: boolean;
   /** 终态状态。 */
   status: 'succeeded' | 'partial' | 'failed' | 'cancelled' | 'interrupted';
   /** 接受时间，也是“最近”的排序依据。 */
@@ -336,6 +340,14 @@ function parseTerminalSummary(value: unknown): TerminalRealRunSummary | null {
   const run = expectRecord(value, 'latestTerminalRealRun');
   return {
     id: expectString(run.id, 'latestTerminalRealRun.id'),
+    retryOfRunId: nullableString(
+      run.retryOfRunId,
+      'latestTerminalRealRun.retryOfRunId',
+    ),
+    retrySourceExists: expectBoolean(
+      run.retrySourceExists,
+      'latestTerminalRealRun.retrySourceExists',
+    ),
     status: expectEnum(
       run.status,
       ['succeeded', 'partial', 'failed', 'cancelled', 'interrupted'],

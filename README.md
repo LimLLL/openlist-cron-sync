@@ -35,6 +35,7 @@
 - **定时或手动同步**：按 cron 表达式定时运行，也可以手动触发。每次运行比较源目录和目标目录中文件的名称、类型和大小，新建目标缺失的文件，替换大小发生变化的文件。
 - **两种目标模式**：`incremental` 只新增和替换文件；`mirror` 还会删除目标上源目录中没有的文件。
 - **跨实例传输**：默认由本服务边下载边分片上传，适用于任意两个 OpenList 实例；源和目标在同一实例时，也可以改用 OpenList 自带的服务端复制。
+- **只重试未成功项**：运行结束后可在运行详情页一键重试失败、结果未知或未执行的文件，只重新检查这些路径，不必完整扫描。
 - **删除保护**：支持 dry-run 预览、删除数量和比例阈值；扫描不完整时禁止删除；本轮结果未知时不重试，后续运行按自己的扫描独立规划。
 - **安全**：单管理员登录（JWT）；保存的 OpenList 凭据用 AES-256-GCM 加密存储。
 - **管理与集成**：REST API 加 OpenAPI 文档，提供 Docker 镜像。Webhook 通知和配置导入导出计划中。
@@ -173,7 +174,7 @@ curl -X POST http://localhost:3000/api/v1/auth/login \
 
 Job保存五段cron（IANA时区，默认UTC）后，`POST /jobs/:id/enable`启用定时、`POST /jobs/:id/disable`停用；两者运行期间也可调用，不影响已开始的运行，停用后仍可手动运行。`GET /jobs/:id/next-fire-times?count=5`返回接下来的触发时间（UTC，附Job时区），很稀疏的表达式可能少于count。迟到的定时只补跑一次，服务停机期间错过的不补跑。
 
-`POST /api/v1/jobs/:id/runs`默认`dryRun=false`；预览须显式传`true`。真实执行按各Target的`createMode`新建文件：`relay`（默认）由本服务下载再分片上传；`server_copy`调用OpenList服务端复制并逐个跟踪其后台任务，要求选择server_copy的目标与源使用同一Instance ID。`POST /runs/:id/cancel`取消运行；`GET /operations?status=unknown`查询未知历史。后续 Run 不因历史结果按路径跳过；未结束的已知 copy task 仍占用 Target 并发额度。取消/abort 不保证云端动作已经停止，后续扫描也无法发现同大小内容错误或自动修复类型冲突，见[未知结果与迟到副作用](docs/adr/0004-unknown-outcomes.md)。
+`POST /api/v1/jobs/:id/runs`默认`dryRun=false`；预览须显式传`true`。真实执行按各Target的`createMode`新建文件：`relay`（默认）由本服务下载再分片上传；`server_copy`调用OpenList服务端复制并逐个跟踪其后台任务，要求选择server_copy的目标与源使用同一Instance ID。`POST /runs/:id/cancel`取消运行；`POST /runs/:id/retry`只重新检查任务最近一次正式运行中未成功的项目而不完整扫描（见[只重试未成功的项目](docs/guides/jobs-and-dry-run.md#只重试未成功的项目)）；`GET /operations?status=unknown`查询未知历史。在各自扫描范围内，后续 Run 不因历史未知结果跳过路径；未结束的已知 copy task 仍占用 Target 并发额度。取消/abort 不保证云端动作已经停止，后续扫描也无法发现同大小内容错误或自动修复类型冲突，见[未知结果与迟到副作用](docs/adr/0004-unknown-outcomes.md)。
 
 连续登录失败会被限流：默认 15 分钟内失败 5 次后，接口返回 429 并带上 `Retry-After` 响应头。完整接口规范见 [REST API](docs/reference/rest-api.md)。
 

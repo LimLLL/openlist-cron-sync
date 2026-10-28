@@ -272,12 +272,13 @@ export class OpenListMultipart {
   async putEmpty(
     instance: InstanceRecord,
     file: UploadFile,
-    context: RequestContext = {},
+    context: RequestContext & { signal: AbortSignal },
   ): Promise<TaskInfo[]> {
     const data = await this.auth.call(instance, {
       ...context,
       endpoint: '/api/fs/put',
       method: 'PUT',
+      transfer: true,
       body: Buffer.alloc(0),
       headers: {
         ...uploadHeaders(file),

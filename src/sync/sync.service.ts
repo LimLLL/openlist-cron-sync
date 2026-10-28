@@ -3,7 +3,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { and, asc, count, eq, gt, inArray, placeholder } from 'drizzle-orm';
 import { setImmediate } from 'node:timers/promises';
 import { DatabaseService } from '../database/database.service.js';
-import { runTargets, runs } from '../database/run-schema.js';
+import { runTargets, runs, runRetryItems } from '../database/run-schema.js';
 import type { RunRecord } from '../database/run-schema.js';
 import {
   operations,
@@ -14,6 +14,7 @@ import { KeysService } from '../security/keys.service.js';
 import type { PathSecrets } from '../jobs/job-types.js';
 import { PlanWriter } from './plan-writer.js';
 import { ScanReader } from './scan-reader.js';
+import { ScanScope } from './scan-scope.js';
 import { Scanner } from './scanner.js';
 import { deletionSafety } from './safety.js';
 import { objectInput } from '../jobs/validation.js';
@@ -79,7 +80,17 @@ export class SyncService {
       this.secrets(run),
       signal,
     );
-    await new Scanner(reader, writer, signal).scan();
+    const scope =
+      run.retryOfRunId === null
+        ? undefined
+        : new ScanScope(
+            db
+              .select()
+              .from(runRetryItems)
+              .where(eq(runRetryItems.runId, run.id))
+              .all(),
+          );
+    await new Scanner(reader, writer, signal, scope).scan();
     signal.throwIfAborted();
     db.transaction(
       /** 在一个事务内标记扫描完成、写入剩余计划并将 Run 置为 planned。

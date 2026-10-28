@@ -138,6 +138,19 @@ export class HistoryRetention {
         await yieldLoop(undefined, { signal });
       }
     }
+    for (const id of group) {
+      for (;;) {
+        signal.throwIfAborted();
+        const rows = db.all<{ rowid: number }>(
+          sql`SELECT rowid FROM run_retry_items WHERE run_id=${id} LIMIT ${CHILD_BATCH}`,
+        );
+        if (!rows.length) break;
+        db.run(
+          sql`DELETE FROM run_retry_items WHERE rowid IN (${sql.join(rows.map(edgeId), sql`, `)})`,
+        );
+        await yieldLoop(undefined, { signal });
+      }
+    }
     for (const table of ['scan_issues', 'run_targets'] as const)
       for (const id of group) {
         for (;;) {

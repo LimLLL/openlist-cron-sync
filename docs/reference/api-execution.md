@@ -12,12 +12,13 @@
 | GET /runs                | page,pageSize,jobId?,status?,dryRun?                            | 200 Page<RunListItem>                     |
 | GET /runs/:id            | 无                                                              | 200 RunDetail                             |
 | POST /runs/:id/cancel    | {}                                                              | 202 RunView；已终态200现有Run             |
+| POST /runs/:id/retry     | {confirmDeletes?:boolean=false}                                 | 202 RunView，Location=/api/v1/runs/:runId |
 | GET /runs/:id/operations | page,pageSize,status?,action?,includeMaintenance?:boolean=false | 200 Page<OperationView>                   |
 | GET /runs/:id/issues     | page,pageSize                                                   | 200 Page<ScanIssueView>                   |
 | GET /operations/:id      | 无                                                              | 200 OperationView                         |
 | GET /operations          | page,pageSize,status?,instanceId?                               | 200 Page<OperationView>                   |
 
-分页和错误格式继承[REST](rest-api.md)，error code取值见[固定原因码](rest-api.md#reason-codes)。没有Operation直接retry API；请求新Run重新扫描，自动有限attempt由执行器负责。
+分页和错误格式继承[REST](rest-api.md)，error code取值见[固定原因码](rest-api.md#reason-codes)。没有单个Operation的直接retry API，自动有限attempt由执行器负责；需要重做时触发新的完整Run，或对Job最近一次正式Run用POST /runs/:id/retry只重新检查其未成功项（见[重试未成功项](#重试未成功项)）。
 GET /runs支持status=active，等价于queued/scanning/planned/executing/cancelling/recovering，可与jobId和dryRun组合。过滤在分页前应用，total使用同一条件；响应status仍为实际Run状态。未传dryRun时活动查询也包含预览。列表的jobName取冻结快照，不依赖Job当前名称或是否归档。
 Operation列表按(runId,seq)升序，seq是Run内的计划顺序。includeMaintenance=false时不返回旧版本留下的 REMOTE_TASK_CHANGED 历史记录；GET /operations不按此过滤。
 
@@ -38,9 +39,36 @@ dryRun=true且confirmDeletes=true只展示跳过阈值后的计划，仍没有�
 
 取消：非终态Run返回202并写cancelRequestedAt，重复请求不重复发送远程cancel或abort。recovering Run同样返回202，但只写cancelRequestedAt，并对仍未终态的已知task每进程最多尝试一次cancel（崩溃后允许重复）；该Run最终仍为interrupted（stopReason=PROCESS_RESTART），不会变为cancelled。完整转换见[取消与超时](../design/scheduling-recovery.md#取消与超时)。
 
+## 重试未成功项
+
+POST /runs/:id/retry 新建一个重试运行（trigger=manual，retryOfRunId=来源Run ID），只重新检查来源Run中未成功的项目，不重新扫描整棵树。请求体只接受confirmDeletes（默认false，不继承来源Run的值）；不接受路径、dryRun或其他字段，路径由服务端从历史中提取。
+
+资格（GET /runs/:id 的 retryEligibility 给出同样结论，POST 在接受事务中复查）：
+
+| 原因                    | 含义                                                                         |
+| ----------------------- | ---------------------------------------------------------------------------- |
+| RUN_NOT_TERMINAL        | 来源Run尚未结束                                                              |
+| DRY_RUN                 | 来源是试运行                                                                 |
+| HISTORY_EXPIRED         | 来源Run已超过RUN_RETENTION_DAYS，历史可能正被分批清理                        |
+| JOB_ARCHIVED            | Job已归档                                                                    |
+| JOB_BUSY                | Job有非终态Run（HTTP为409 JOB_BUSY）                                         |
+| RUN_SUPERSEDED          | 来源不是该Job最近一次正式Run（试运行不算）                                   |
+| SOURCE_ENDPOINT_CHANGED | Job当前源的instanceId或path与来源Run不同；需要完整运行                       |
+| NO_RETRY_ITEMS          | 没有未成功项，或其所属目标都已被移除/改了instanceId或path                    |
+
+其余拒绝为409 RETRY_NOT_ALLOWED，details=[{field:'runId',reason}]；队列满、未就绪和当前端点配置不可运行沿用手动执行的错误。并发的两个请求最多接受一个。
+
+候选：每个逻辑动作取最后一次attempt，最后结果不是succeeded的新建/替换文件（含failed、unknown、cancelled、skipped及未执行的）和mkdir目录自身；replace的删除与新建合并为一个文件项，扫描中断留下的半条replace也能提取；不包含mirror extras删除、retry_cleanup和旧版REMOTE_TASK_CHANGED记录。目录项只代表该目录自身，不展开其中后来新增的内容。来源本身是重试运行时，候选为其范围中尚未处理、受阻或已规划但最终未成功的项，确认无需操作的项不再入选。
+
+配置：使用Job当前配置（过滤、并发、超时、refresh等）并在接受时冻结。目标按稳定Target ID匹配；已移除或instanceId/path改变的目标排除（计入excludedItems），新加的目标不参与；快照只保留参与的目标。范围随新Run持久化，排队、重启恢复、取消与超时规则与普通Run相同；扫描或排队阶段中断时，尚未处理的项可再次重试。来源Run被历史保留清理不影响已接受的重试运行。
+
+执行：只遍历范围路径所在的各级目录（源端共享祖先不因多个Target重复遍历，各Target分别读取；遵守端点refresh与扫描间隔），完整父目录列表仍参与名称碰撞、过滤和挂载保护，再按普通规划规则逐项判断：源文件已不存在（可证明缺失时）或目标已有同大小文件则无需操作，计入unchangedFiles；无需操作的目录项不计入unchangedFiles；大小不同则replace。当前源与目标的类型冲突仍记TYPE_CONFLICT；原重试项在源上的类型改变、或必要祖先变成文件时，若未先被过滤或保护，则记RETRY_TYPE_CHANGED。不规划任何mirror extras删除，也不推断空源（EMPTY_SOURCE）。删除阈值按本次范围计算：分母D只计范围内明确选中的受管理目标文件，replace与retry_cleanup共用同一预算，因此范围很小时比例阈值很容易拦下替换；需要放行时在请求中设confirmDeletes=true，它与手动执行同义，只跳过数量/比例阈值。
+
+重试运行的stats、sourceComplete/targetComplete只表示范围项及必要祖先目录的观察，不代表整个Job已完整扫描；来源Run中未形成操作的纯扫描问题（不可读目录、深度超限、碰撞等）不会单独成为候选，需完整运行全面重新评估；与本次范围相交的路径仍会执行相同的扫描保护检查。
+
 ## 未知结果
 
-unknown 只作为本次尝试的历史结果，不提供管理动作或直接重试接口。需要同步时触发新的 Run，它按自己的配置和扫描规划；不改旧结果，不额外强制 refresh。旧请求仍可能迟到生效，见[ADR 0004](../adr/0004-unknown-outcomes.md)。
+unknown 只作为本次尝试的历史结果，不提供管理动作或单个操作的重试接口。需要同步时触发新的 Run（完整运行，或对最近一次正式运行做[重试未成功项](#重试未成功项)），它按自己的配置和扫描规划；不改旧结果，不额外强制 refresh。旧请求仍可能迟到生效，见[ADR 0004](../adr/0004-unknown-outcomes.md)。
 
 ## 查询与进度
 

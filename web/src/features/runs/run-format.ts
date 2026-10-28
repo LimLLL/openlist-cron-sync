@@ -184,6 +184,17 @@ export function snapshotJobName(detail: RunDetail): string | null {
   return typeof name === 'string' && name.length > 0 ? name : null;
 }
 
+/** 运行的展示触发方式：重试运行在后端仍是 manual，界面单独标为“重试”。
+ * @param run 含触发方式与重试来源的运行。
+ * @returns manual、cron 或 retry，用作 i18n 键。
+ * @throws 不适用。
+ */
+export function triggerKind(
+  run: Pick<RunView, 'trigger' | 'retryOfRunId'>,
+): 'manual' | 'cron' | 'retry' {
+  return run.retryOfRunId === null ? run.trigger : 'retry';
+}
+
 /** 运行目标的展示标签，全部来自运行快照而非当前任务配置。 */
 export interface TargetLabel {
   /** 目标路径；快照异常时为 null。 */

@@ -6,8 +6,17 @@ import {
   operations,
   operationDependencies,
 } from '../database/operation-schema.js';
-import { runs, runTargets, scanIssues } from '../database/run-schema.js';
-import type { RunRecord, RunTargetRecord } from '../database/run-schema.js';
+import {
+  runs,
+  runTargets,
+  scanIssues,
+  runRetryItems,
+} from '../database/run-schema.js';
+import type {
+  RunRecord,
+  RunTargetRecord,
+  RunRetryItemRecord,
+} from '../database/run-schema.js';
 import { addStat, emptyStats, PlanError } from './stats.js';
 import type { Stats } from './stats.js';
 import type { Entry } from './planner.js';
@@ -45,6 +54,7 @@ export class PlanWriter {
   readonly sourceStats = emptyStats();
   private pending: PendingOperation[] = [];
   private issues: (typeof scanIssues.$inferInsert)[] = [];
+  private scopeUpdates: RunRetryItemRecord[] = [];
   private operationCount = 0;
   private issueCount = 0;
   private scanComplete = false;
@@ -275,6 +285,22 @@ export class PlanWriter {
       }
     return result;
   }
+  /** 保存一个输入的扫描结论；执行状态仍由Operation记录。
+   * @param item 当前范围项。
+   * @param outcome 扫描结论，不接受未处理状态。
+   * @returns 不适用。
+   * @throws Error 重复结论或数据库失败。
+   */
+  scopeOutcome(
+    item: RunRetryItemRecord,
+    outcome: Exclude<RunRetryItemRecord['scanOutcome'], 'unprocessed'>,
+  ): void {
+    if (item.scanOutcome !== 'unprocessed')
+      throw new Error('Retry input already processed');
+    item.scanOutcome = outcome;
+    this.scopeUpdates.push(item);
+    this.maybeFlush();
+  }
   /** 达到批次上限即落库。
    * @param 不适用。
    * @returns 不适用。
@@ -282,7 +308,7 @@ export class PlanWriter {
    */
   private maybeFlush(): void {
     if (
-      this.pending.length + this.issues.length >=
+      this.pending.length + this.issues.length + this.scopeUpdates.length >=
       this.run.config.settings.planBatchSize
     )
       this.flush();
@@ -336,6 +362,18 @@ export class PlanWriter {
               .run();
           }
         }
+        for (const item of this.scopeUpdates)
+          this.db
+            .update(runRetryItems)
+            .set({ scanOutcome: item.scanOutcome })
+            .where(
+              and(
+                eq(runRetryItems.runId, this.run.id),
+                eq(runRetryItems.runTargetId, item.runTargetId),
+                eq(runRetryItems.relativePath, item.relativePath),
+              ),
+            )
+            .run();
         for (const issue of this.issues)
           this.db.insert(scanIssues).values(issue).run();
         for (const target of this.targets)
@@ -357,5 +395,6 @@ export class PlanWriter {
     );
     this.pending = [];
     this.issues = [];
+    this.scopeUpdates = [];
   }
 }

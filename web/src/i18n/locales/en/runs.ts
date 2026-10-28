@@ -41,7 +41,44 @@ export default {
     title: 'Run',
     loading: 'Loading run…',
     untitled: 'Run {{id}}',
-    trigger: { manual: 'Manual run', cron: 'Scheduled run' },
+    trigger: {
+      manual: 'Manual run',
+      cron: 'Scheduled run',
+      retry: 'Retry run',
+    },
+    retryOf: 'Retry of',
+    retrySourceCleaned: 'Source run removed by history retention',
+    retryScopeNote:
+      'This retry run covers only items that did not succeed in the source run and their required ancestor folders. Counts reflect progress within this scope, not a check of the whole job.',
+    retry: {
+      button: 'Retry unfinished items',
+      title: 'Retry items that did not succeed',
+      files_one: '{{count}} file',
+      files_other: '{{count}} files',
+      directories_one: '{{count}} folder',
+      directories_other: '{{count}} folders',
+      summary:
+        'Re-checks {{files}} and {{directories}} that did not succeed in this run.',
+      how: 'Only folders leading to these paths are listed, then each item is re-planned with the current job settings. Folder items cover the folder itself, not its contents. Missing source files or target files of the same size need no action. Deleting extra files on mirror targets is not part of a retry.',
+      excluded_one:
+        '{{count}} more item belongs to a target that was removed or moved, and is left out.',
+      excluded_other:
+        '{{count}} more items belong to targets that were removed or moved, and are left out.',
+      submit: 'Start retry',
+      started: 'Retry started: {{name}}',
+      reason: {
+        RUN_NOT_TERMINAL: 'This run has not ended yet.',
+        DRY_RUN: 'Dry runs cannot retry unfinished items.',
+        JOB_ARCHIVED: 'The job is archived and cannot start a retry.',
+        JOB_BUSY: 'The job has a run in progress; retry once it ends.',
+        RUN_SUPERSEDED: 'The job has a newer real run; check that run instead.',
+        SOURCE_ENDPOINT_CHANGED:
+          'The job source instance or path changed; run the job in full instead.',
+        HISTORY_EXPIRED:
+          'This run is past the history retention period; run the job in full instead.',
+        NO_RETRY_ITEMS: 'There are currently no items available to retry.',
+      },
+    },
     createdAt: 'created',
     viewJob: 'View job',
     cancel: 'Cancel run',

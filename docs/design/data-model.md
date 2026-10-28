@@ -24,7 +24,7 @@
 ## 表清单
 
 配置表：[admins、instances、jobs、job_targets、notification_channels、job_notification_channels](configuration-tables.md)。
-执行表：[runs、run_targets、operations、operation_dependencies、scan_issues、notification_deliveries](execution-tables.md)。
+执行表：[runs、run_targets、operations、operation_dependencies、scan_issues、run_retry_items、notification_deliveries](execution-tables.md)。
 
 ```mermaid
 erDiagram

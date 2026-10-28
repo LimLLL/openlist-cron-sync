@@ -25,7 +25,7 @@ import {
 } from '../../components/ui/tabs';
 import { useTabParam } from '../../lib/hooks';
 import { isActiveRun, useCancelRun, useRun } from './run-queries';
-import { hasPlannedWork, snapshotJobName } from './run-format';
+import { hasPlannedWork, snapshotJobName, triggerKind } from './run-format';
 import { RunLifecycle, RunLifecycleSkeleton } from './run-lifecycle';
 import { RunErrorBanner, RunFacts } from './run-summary';
 import {
@@ -36,6 +36,7 @@ import {
 import { RunIssuesSkeleton, RunIssuesTab } from './run-issues-tab';
 import { RunTargets } from './run-targets';
 import { RunConfigTab, RunStatsTab } from './run-stats-tab';
+import { RetryRunButton } from './run-retry-dialog';
 import type { RunDetail } from './run-contract';
 
 const TABS = ['operations', 'issues', 'targets', 'stats', 'snapshot'] as const;
@@ -103,7 +104,25 @@ function RunDetailView({ run, stale }: { run: RunDetail; stale: boolean }) {
         }
         description={
           <span className="inline-flex flex-wrap items-center gap-x-1.5">
-            {t(`detail.trigger.${run.trigger}`)}
+            {t(`detail.trigger.${triggerKind(run)}`)}
+            {run.retryOfRunId && (
+              <>
+                <span aria-hidden="true">·</span>
+                {run.retrySourceExists ? (
+                  <span className="inline-flex items-center gap-1">
+                    {t('detail.retryOf')}
+                    <Link
+                      to={`/runs/${run.retryOfRunId}`}
+                      className="hover:underline"
+                    >
+                      <ShortId id={run.retryOfRunId} className="text-link" />
+                    </Link>
+                  </span>
+                ) : (
+                  t('detail.retrySourceCleaned')
+                )}
+              </>
+            )}
             <span aria-hidden="true">·</span>
             {t('detail.createdAt')} <RelativeTime iso={run.createdAt} />
             <span aria-hidden="true">·</span>
@@ -114,6 +133,7 @@ function RunDetailView({ run, stale }: { run: RunDetail; stale: boolean }) {
         actions={
           <>
             <CancelRunButton run={run} />
+            <RetryRunButton run={run} name={name} />
             <Button asChild>
               <Link to={`/jobs/${run.jobId}`}>{t('detail.viewJob')}</Link>
             </Button>
@@ -123,6 +143,11 @@ function RunDetailView({ run, stale }: { run: RunDetail; stale: boolean }) {
       {stale && (
         <p role="status" className="mb-2 text-xs text-warning">
           {t('common:states.stale')}
+        </p>
+      )}
+      {run.retryOfRunId && (
+        <p className="mb-2 text-xs text-muted-foreground">
+          {t('detail.retryScopeNote')}
         </p>
       )}
       <RunErrorBanner run={run} />

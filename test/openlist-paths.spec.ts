@@ -80,7 +80,11 @@ describe('M1 path boundaries' /** 注册本组 M1 行为验收用例。
       await expect(
         fixture.app
           .get(OpenListMultipart)
-          .putEmpty(instance, { directory: '/', name }),
+          .putEmpty(
+            instance,
+            { directory: '/', name },
+            { signal: AbortSignal.timeout(5000) },
+          ),
       ).rejects.toMatchObject({ code: 'INVALID_NAME' });
       for (const mode of ['d', 'p'] as const)
         expect(
@@ -108,7 +112,11 @@ describe('M1 path boundaries' /** 注册本组 M1 行为验收用例。
     await fixture.client.remove(instance, directory, name);
     await fixture.app
       .get(OpenListMultipart)
-      .putEmpty(instance, { directory, name });
+      .putEmpty(
+        instance,
+        { directory, name },
+        { signal: AbortSignal.timeout(5000) },
+      );
     const remove = fixture.server.calls.find(
       /** 筛选所需端点的实际 HTTP 请求。
        * @param call 捕获的真实 HTTP 请求。

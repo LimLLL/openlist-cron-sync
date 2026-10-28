@@ -248,9 +248,13 @@ describe('M1 task and multipart protocols' /** 注册本组 M1 行为验收用�
       (call) =>
         call.url === '/api/fs/put' ? envelope({ task: task(0) }) : undefined;
     expect(
-      await fixture.app
-        .get(OpenListMultipart)
-        .putEmpty(fixture.record(), { directory: '/', name: 'empty' }),
+      await fixture.app.get(OpenListMultipart).putEmpty(
+        fixture.record(),
+        { directory: '/', name: 'empty' },
+        {
+          signal: AbortSignal.timeout(5000),
+        },
+      ),
     ).toMatchObject([{ id: 'tid' }]);
   });
 });

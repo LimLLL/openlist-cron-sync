@@ -6,6 +6,8 @@ import type { JobListItem, TerminalRealRunSummary } from './job-contract';
 
 const run: TerminalRealRunSummary = {
   id: 'run',
+  retryOfRunId: null,
+  retrySourceExists: false,
   status: 'failed',
   createdAt: '2026-01-01T00:00:00Z',
   startedAt: null,

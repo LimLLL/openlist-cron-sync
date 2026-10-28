@@ -262,7 +262,10 @@ export class FileCoordinator {
             this.store.end(op.id, {
               status: 'unknown',
               code: 'OPENLIST_ERROR',
-              message: 'Run stopped with unconfirmed write',
+              message:
+                error instanceof OpenListError
+                  ? `Run stopped with unconfirmed write: ${error.message}`
+                  : 'Run stopped with unconfirmed write',
             });
           if (transfer?.session) await relayOutcome.abort(transfer);
           throw this.context.signal.reason;

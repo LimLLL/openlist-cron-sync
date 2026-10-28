@@ -16,7 +16,7 @@ RunsModule负责接受触发（建立queued Run）、派发、取消和启动恢
 cron使用直接依赖cron的CronJob，由@nestjs/schedule的SchedulerRegistry管理；手动REST请求与cron回调都进入RunsModule的同一个触发服务。5段分钟表达式，不接受秒、@reboot或自然语言日期；timezone使用IANA。
 计算nextFire和实际注册使用同一版本cron。MVP遵循该库的DST规则，不自行补齐缺失时刻、不自行去重重复当地时间。next-fire-times API输出UTC时间及Job的IANA timezone，由客户端换算当地时间和UTC offset。测试固定Europe/Berlin缺失/重复时刻并锁定依赖版本行为。
 重启不补错过的cron。Job disabled禁止cron但允许显式手动Run；归档Job禁止所有触发。
-同Job存在queued/scanning/planned/executing/cancelling/recovering时：手动返回409 JOB_BUSY，cron不创建Run，仅记录一次跳过事件。queued也占Job名额。
+同Job存在queued/scanning/planned/executing/cancelling/recovering时：手动返回409 JOB_BUSY，cron不创建Run，仅记录一次跳过事件。queued也占Job名额。重试未成功项（POST /runs/:id/retry）与手动运行走同一个接受事务和队列，额外在事务内复查重试资格并写入范围；排队、取消、超时与重启恢复规则与普通Run相同，scanning/planned中断记interrupted，未处理的范围项可再次重试。
 全局队列按createdAt,id FIFO；遇到路径忙可让不冲突后项运行，保持每Job只有一个候选。队列满手动503 QUEUE_FULL、cron记录跳过。队列用最近截止时间唤醒，过期处理不依赖有空闲执行位。到queueDeadlineAt仍未开始的Run直接failed，写error_code=QUEUE_TIMEOUT、stop_reason=NULL，startedAt保持NULL。
 
 ## 资源层级

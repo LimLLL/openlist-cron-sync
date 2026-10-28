@@ -168,7 +168,11 @@ it('preserves unknown history, legacy maintenance, dependencies and frozen snaps
         const snapshot = object(JSON.parse(String(row.run_config_json)));
         const settings = { ...object(snapshot.settings) };
         delete settings.quarantineSeconds;
-        return { ...row, run_config_json: { ...snapshot, settings } };
+        return {
+          ...row,
+          retry_of_run_id: null,
+          run_config_json: { ...snapshot, settings },
+        };
       }),
     );
     const columns = db

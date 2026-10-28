@@ -130,7 +130,7 @@ export default {
     retry_cleanup: '重试清理',
   },
   targetMode: { incremental: '增量', mirror: '镜像' },
-  trigger: { manual: '手动', cron: '定时' },
+  trigger: { manual: '手动', cron: '定时', retry: '重试' },
   dryRun: '试运行',
   realRun: '正式运行',
   stopReason: {

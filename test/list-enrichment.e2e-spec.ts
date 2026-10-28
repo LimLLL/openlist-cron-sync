@@ -101,6 +101,8 @@ describe('list enrichment HTTP contracts', () => {
     });
     expect(summary.required).toEqual([
       'id',
+      'retryOfRunId',
+      'retrySourceExists',
       'status',
       'createdAt',
       'startedAt',
@@ -194,6 +196,8 @@ describe('list enrichment HTTP contracts', () => {
           scheduleError: null,
           latestTerminalRealRun: {
             id: run.id,
+            retryOfRunId: null,
+            retrySourceExists: false,
             status: 'cancelled',
             stopReason: 'RUN_TIMEOUT',
             createdAt: new Date(100).toISOString(),

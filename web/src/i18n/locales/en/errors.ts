@@ -24,6 +24,8 @@ export default {
   JOB_BUSY:
     'This job has an active run. Wait for it to finish or cancel it first.',
   PATH_OVERLAP: 'Another active run is using overlapping paths.',
+  RETRY_NOT_ALLOWED:
+    'This run can no longer be retried: a newer run may exist or the job configuration changed.',
   QUEUE_FULL: 'The run queue is full. Try again once current runs finish.',
   QUEUE_TIMEOUT: 'The run waited too long in the queue.',
   RUN_TIMEOUT: 'The run exceeded its time limit.',
@@ -62,6 +64,8 @@ export default {
   NAME_COLLISION: 'Multiple entries resolve to the same name.',
   INVALID_NAME: 'The name contains characters that can’t be synchronized.',
   TYPE_CONFLICT: 'A file and a folder share the same path.',
+  RETRY_TYPE_CHANGED:
+    'The source item changed type (file vs. folder), or an ancestor folder became a file; run the job in full instead.',
   UNKNOWN_SIZE: 'The source file size is unknown.',
   TARGET_UNKNOWN_SIZE: 'The target file size is unknown.',
   SIZE_MISMATCH: 'The copied file size doesn’t match the source.',

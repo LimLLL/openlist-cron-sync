@@ -3,7 +3,12 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { and, asc, count, desc, eq, inArray, sql } from 'drizzle-orm';
 import { DatabaseService } from '../database/database.service.js';
-import { runs, runTargets, scanIssues } from '../database/run-schema.js';
+import {
+  runs,
+  runTargets,
+  scanIssues,
+  runRetryItems,
+} from '../database/run-schema.js';
 import type { RunRecord } from '../database/run-schema.js';
 import { operations } from '../database/operation-schema.js';
 import { jobRecords, jobView } from '../database/job-records.js';
@@ -27,6 +32,9 @@ import {
   runView,
   targetView,
 } from './views.js';
+import { retrySelection } from './retry-scope.js';
+import type { RetryCandidate } from './retry-scope.js';
+import type { RetryRunDto } from './input.dto.js';
 import type { RunConfig } from './run-types.js';
 import { ACTIVE_RUN_STATUSES } from './run-types.js';
 import type {
@@ -76,6 +84,37 @@ export class RunsService {
    * @throws ApiError 不就绪、忙、队列满或配置错误；Error 数据库失败。
    */
   trigger(jobId: string, input: TriggerRunDto, scheduledAt?: number) {
+    return this.accept(jobId, input, scheduledAt);
+  }
+  /** 从最新终态正式运行接受范围重试，不接受客户端路径。
+   * @param id 父Run ID。
+   * @param input 仅本次的删除阈值覆盖。
+   * @returns queued Run公共视图。
+   * @throws ApiError 资格、配置或队列拒绝；Error 数据库失败。
+   */
+  retry(id: string, input: RetryRunDto) {
+    const parent = this.record(id);
+    return this.accept(
+      parent.jobId,
+      { dryRun: false, confirmDeletes: input.confirmDeletes },
+      undefined,
+      id,
+    );
+  }
+  /** 共用原子接受流程；重试范围与Run在同一事务提交。
+   * @param jobId Job ID。
+   * @param input 运行参数。
+   * @param scheduledAt cron理论触发时刻。
+   * @param retryOfRunId 重试来源，省略表示完整运行。
+   * @returns 新Run视图。
+   * @throws ApiError 资格或准入失败；Error 数据库失败。
+   */
+  private accept(
+    jobId: string,
+    input: TriggerRunDto,
+    scheduledAt?: number,
+    retryOfRunId?: string,
+  ) {
     if (
       !this.readiness.ready ||
       !this.readiness.recovered ||
@@ -90,7 +129,32 @@ export class RunsService {
        * @throws ApiError Job 不存在、JOB_BUSY、QUEUE_FULL 或端点校验失败；Error 解密、加密或数据库失败。
        */
       () => {
-        const { row, targets } = jobRecords(db, jobId);
+        let candidates: RetryCandidate[] | undefined;
+        if (retryOfRunId) {
+          const selection = retrySelection(
+            db,
+            this.record(retryOfRunId),
+            this.config.runRetentionDays,
+          );
+          if (!selection.summary.eligible)
+            throw new ApiError(
+              409,
+              selection.summary.reason === 'JOB_BUSY'
+                ? 'JOB_BUSY'
+                : 'RETRY_NOT_ALLOWED',
+              'Run cannot be retried',
+              [{ field: 'runId', reason: selection.summary.reason! }],
+            );
+          candidates = selection.candidates;
+        }
+        const current = jobRecords(db, jobId);
+        const row = current.row;
+        const selected = candidates
+          ? new Set(candidates.map((item) => item.targetId))
+          : undefined;
+        const targets = selected
+          ? current.targets.filter((target) => selected.has(target.id))
+          : current.targets;
         if (scheduledAt !== undefined && (!row.enabled || row.cron === null))
           throw new ApiError(409, 'INVALID_STATE', 'Job cron is disabled');
         assertJobIdle(db, jobId);
@@ -120,7 +184,11 @@ export class RunsService {
           },
         };
         const id = randomUUID();
-        const now = Date.now();
+        // 同毫秒接受的重试也必须比父Run新，沿用createdAt/id的历史排序。
+        const now = Math.max(
+          Date.now(),
+          retryOfRunId ? this.record(retryOfRunId).createdAt + 1 : 0,
+        );
         const secrets = decryptJobSecrets(this.keys, row, targets);
         const hasSecrets =
           secrets.sourcePassword !== null ||
@@ -137,6 +205,7 @@ export class RunsService {
             id,
             jobId,
             trigger: scheduledAt === undefined ? 'manual' : 'cron',
+            retryOfRunId: retryOfRunId ?? null,
             scheduledAt: scheduledAt ?? null,
             dryRun: input.dryRun ?? false,
             confirmDeletes: input.confirmDeletes,
@@ -155,10 +224,11 @@ export class RunsService {
             queueDeadlineAt: now + config.settings.queueTimeoutSeconds * 1000,
           })
           .run();
-        for (const target of job.targets)
+        for (const target of job.targets) {
+          const runTargetId = randomUUID();
           db.insert(runTargets)
             .values({
-              id: randomUUID(),
+              id: runTargetId,
               runId: id,
               targetId: target.id,
               config: { target, instance: snapshots[target.instanceId] },
@@ -166,6 +236,18 @@ export class RunsService {
               blockReasons: [],
             })
             .run();
+          for (const item of candidates ?? []) {
+            if (item.targetId !== target.id) continue;
+            db.insert(runRetryItems)
+              .values({
+                runId: id,
+                runTargetId,
+                relativePath: item.relativePath,
+                isDir: item.isDir,
+              })
+              .run();
+          }
+        }
         return this.record(id);
       },
     );
@@ -174,8 +256,9 @@ export class RunsService {
       jobId,
       runId: run.id,
       confirmDeletes: input.confirmDeletes,
+      retryOfRunId: run.retryOfRunId,
     });
-    return runView(run);
+    return runView(run, db);
   }
   /** 请求取消；重复请求不重复远程abort。
    * @param id Run ID。
@@ -183,7 +266,7 @@ export class RunsService {
    * @throws ApiError 不存在；Error 数据库失败。
    */
   cancel(id: string) {
-    return runView(this.dispatcher.cancel(id));
+    return runView(this.dispatcher.cancel(id), this.database.db);
   }
   /** 读取运行记录，历史不依赖 Job 当前配置。
    * @param id Run ID。
@@ -245,7 +328,9 @@ export class RunsService {
       ),
     ]);
     return {
-      ...runView(live ? { ...row, stats: live.stats } : row),
+      ...runView(live ? { ...row, stats: live.stats } : row, db),
+      retryEligibility: retrySelection(db, row, this.config.runRetentionDays)
+        .summary,
       config: row.config,
       sourceInstanceName: instanceLabel(
         sourceId,
@@ -330,6 +415,7 @@ export class RunsService {
               LIVE_STATUSES.has(row.status)
                 ? { ...row, stats: this.liveResult(row).stats }
                 : row,
+              db,
             ),
             jobName: row.config.job.name,
           }),

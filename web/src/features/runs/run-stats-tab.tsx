@@ -10,6 +10,7 @@ import {
   isStatKey,
   readableKey,
   STAT_GROUPS,
+  triggerKind,
 } from './run-format';
 import type { RunDetail } from './run-contract';
 
@@ -70,7 +71,7 @@ export function RunConfigTab({ run }: { run: RunDetail }) {
     { label: t('detail.settings.id'), value: <ShortId id={run.id} /> },
     {
       label: t('detail.settings.trigger'),
-      value: t(`detail.trigger.${run.trigger}`),
+      value: t(`detail.trigger.${triggerKind(run)}`),
     },
   ];
   if (run.scheduledAt)

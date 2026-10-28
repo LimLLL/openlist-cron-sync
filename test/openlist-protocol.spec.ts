@@ -221,7 +221,12 @@ describe('M1 protocol boundaries' /** 注册本组 M1 行为验收用例。
        * @returns 上游调用的 Promise。
        * @throws OpenListError 预期的上游拒绝或协议失败。
        */
-      () => uploads.putEmpty(instance, { directory: '/', name: 'empty' }),
+      () =>
+        uploads.putEmpty(
+          instance,
+          { directory: '/', name: 'empty' },
+          { signal: AbortSignal.timeout(5000) },
+        ),
       /** 执行一个真实客户端调用以验证并发或错误行为。
        * @param 不适用。
        * @returns 上游调用的 Promise。

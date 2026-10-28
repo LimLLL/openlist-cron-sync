@@ -56,6 +56,8 @@ describe('read-only list enrichment', () => {
       page.items.find((item) => item.id === job.id)?.latestTerminalRealRun,
     ).toEqual({
       id: failed.id,
+      retryOfRunId: null,
+      retrySourceExists: false,
       status: 'failed',
       createdAt: new Date(100).toISOString(),
       startedAt: null,

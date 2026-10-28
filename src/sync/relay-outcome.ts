@@ -44,7 +44,10 @@ export class RelayOutcome {
       return {
         status: op.status === 'pending' ? 'failed' : 'unknown',
         code: 'OPENLIST_ERROR',
-        message: 'Relay total deadline exceeded',
+        message:
+          error instanceof OpenListError
+            ? `Relay total deadline exceeded: ${error.message}`
+            : 'Relay total deadline exceeded',
       };
     if (error instanceof RelayError)
       return {

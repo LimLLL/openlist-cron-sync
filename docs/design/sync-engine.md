@@ -96,6 +96,19 @@ dry-run显示planned动作、blocked原因、预算及受保护项；不是可�
 create重试发现部分目标文件：先刷新并确认原远程动作已结束；生成retry_cleanup删除动作（remove），再重新检查预算余量，然后新create。禁止overwrite重试。已成功的delete不会因create重试而再次提交。
 同一目标路径的已计划替换重试仍按一个逻辑文件计数，清理字节另报actualDeletedBytes；超出预算余量的retry_cleanup及其create在提交前skipped DELETE_LIMIT。
 
+### 重试运行的范围扫描
+
+重试运行（retryOfRunId非空，见[重试未成功项](../reference/api-execution.md#重试未成功项)）沿用同一个Scanner、PlanWriter、Safety与Executor，只是扫描带上该Run独立持久化的范围（run_retry_items）：
+
+- 源端遍历各Target范围的并集，只进入范围路径所在的祖先链，不进入无关子树；每个Target只处理自己的范围。
+- 每个访问的目录仍读取完整列表，先做碰撞、过滤、类型与挂载保护判断，再按范围筛选；范围外兄弟可以阻断与其碰撞的范围项，但自身不规划、不计数。
+- 两边列表都没有的范围名、源已缺失（列表可信时）记无需操作；读取失败、不能证明缺失、受保护或类型变化（RETRY_TYPE_CHANGED）记受阻；新建/替换按普通矩阵规划。正常结束时每个范围项都必须有结论，否则扫描以实现错误失败，不执行部分计划。
+- 不规划mirror extras，也不进入目标单侧目录枚举；不做EMPTY_SOURCE推断；syncEmptyDirs只为显式目录项生成mkdir，文件所需的父目录照常按缺失链准备，不会顺带创建范围外的目录。
+- 目录项只代表目录自身，不展开其中后来新增的内容；深度仍从源根计算。
+- refresh与扫描间隔遵守端点配置；目标根缺失证明的父目录列表仍为refresh=false。
+
+范围扫描的统计、sourceComplete/targetComplete只覆盖范围内的观察；D只计范围内明确选中的受管理目标文件（见[删除保护](deletion.md#文件阈值)）。
+
 ## 统计
 
 Stats定义见[API schemas](../reference/api-schemas.md)。planned计数在planned后固定；实际动作和重试bytes分别累计，不能用成功HTTP数推算文件数。
