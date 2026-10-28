@@ -135,7 +135,7 @@ export async function initializeApplication(
     if (config.apiDocsEnabled) {
       const builder = new DocumentBuilder()
         .setTitle('openlist-cron-sync')
-        .setVersion('0.0.6')
+        .setVersion('0.0.7')
         .addBearerAuth();
       for (const status of [400, 401, 403, 404, 413, 429, 500])
         builder.addGlobalResponse({ status, type: ErrorDto });
