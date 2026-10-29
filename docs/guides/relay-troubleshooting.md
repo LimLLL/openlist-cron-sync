@@ -40,7 +40,7 @@ relay 从源实例下载文件，写入本地 spool（1 MiB 块），再用目�
 | OPENLIST_ERROR / Relay total deadline exceeded              | failed 或 unknown | 单个文件超过 `RELAY_TOTAL_TIMEOUT_SECONDS`                                                           | 见下文“低带宽”                                                                                                                                |
 | OPENLIST_ERROR / OpenList application code 403              | failed            | 目标 OpenList 拒绝上传：账号没有写权限，或文件是被忽略的系统文件（如 `.DS_Store`、`Thumbs.db`）      | 检查账号权限；系统文件在任务的排除规则中排除 `.DS_Store`、`Thumbs.db`、`@eaDir`、`._*` 等，否则每次运行都会失败并阻断该 Target 的 mirror 删除 |
 
-明确 failed 可在预算内创建新操作重试；unknown 在本 Run 不自动重试，后续 Run 按自己的扫描规划。
+明确 failed 可在预算内对同一操作再尝试一次（操作列表仍只有一行，失败过的尝试在操作详情的“尝试记录”中）；unknown 在本 Run 不自动重试，后续 Run 按自己的扫描规划。
 
 ## 302 跳转与地址可达性
 

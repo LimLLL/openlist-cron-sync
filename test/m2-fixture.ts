@@ -7,6 +7,7 @@ import { object, string } from '../src/openlist/errors.js';
 import { componentFixture, envelope, file } from './openlist-fixture.js';
 import type { ComponentFixture, Reply } from './openlist-fixture.js';
 import type { Job } from '../src/jobs/job-types.js';
+import { OperationsService } from '../src/runs/operations.service.js';
 
 /** M2 组件夹具。
  * @param 不适用。
@@ -164,6 +165,6 @@ export async function preview(
 export function plan(fixture: M2Fixture, id: string) {
   return fixture
     .runs()
-    .operations(id, { page: 1, pageSize: 200, includeMaintenance: false })
-    .items;
+    .operations(id, { page: 1, pageSize: 200 })
+    .items.map((row) => fixture.app.get(OperationsService).get(row.id));
 }

@@ -94,7 +94,7 @@ unknown 用于变更请求可能已经到达 OpenList、但没有可靠结果证
 
 server_copy 不因历史任务仍运行而按路径跳过，但未结束的已知任务继续占用该稳定 Target 的 concurrentFiles。活动 Run 的读写路径互斥独立保留。
 
-维护观察到原远程任务从终态变为非终态，只更新原行 remote_state 并记录一次日志，不新增 Operation。原 status 和 Run 统计不变；任务再次终态才删除其远程记录。旧版本留下的 REMOTE_TASK_CHANGED 行仅为历史，默认运行操作列表和所有执行统计排除这些行。
+维护观察到原远程任务从终态变为非终态，只更新原尝试的 remote_state 并记录一次日志，不新增操作或尝试。原 status 和 Run 统计不变；任务再次终态才删除其远程记录。
 
 后续扫描不保证修复同大小错误内容、TYPE_CONFLICT、持续缓存缺失的差异或无人再运行的目标；incremental 和过滤规则可能保留迟到 extras。目标作为另一 Job 的 source 时可能传播临时状态，OneDrive mkdir 也可能留下改名空目录。风险见[ADR 0004](../adr/0004-unknown-outcomes.md)。
 

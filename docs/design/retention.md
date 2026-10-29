@@ -9,15 +9,24 @@
 进程启动完成后30秒执行一次维护周期，此后每小时一次；每天UTC03:00另外执行本地历史清理。不补跑错过的维护时刻。
 每小时周期只处理 server_copy 遗留的远程任务记录，维护请求不受扫描间隔约束。先 info：非终态则继续占用 Target 的 concurrentFiles，不删除任务；终态则按现有 RETRY_* 预算删除任务记录；404 或有界观察/删除失败则结束本地跟踪并释放额度，失败记录日志。原 Operation 的 unknown 不延长这一责任。
 
-远程终态变回非终态只更新原行并记录日志，不新增操作。维护器不修改目标文件，文件删除仅发生在 Run 中。见[任务跟踪](openlist-integration.md#任务跟踪)。
+远程终态变回非终态只更新原尝试并记录日志，不新增操作或尝试。维护器不修改目标文件，文件删除仅发生在 Run 中。见[任务跟踪](openlist-integration.md#任务跟踪)。
 
 ## SQLite历史
 
-默认保留终态 Run 及 operations 30 天，依据 endedAt；dry-run 同样适用。每页选择约100个候选Run；整组资格确认后按有界子记录批次提交并让出事件循环，不以Run数界定事务工作量。
-承担[未决责任](data-model.md#responsibility)的记录所在的整组 Run 不清理；此外仍被组外后续 Run/Operation 引用的组也跳过。
-删除前沿 retry_of 双向扩展引用闭包，只选择全部Run超期且无责任的组，破坏性工作前重新核验。按有界事务删除dependencies、scan_issues及operations；先清除组内 retry 引用，删除依赖后再删除操作。随后删除run_retry_items、run_targets，runs最后删除。runs.retry_of_run_id只是重试来源的软链接，不参与引用闭包：来源Run被清理不影响子重试运行，后者显示“来源已清理”。超过保留期的Run不再接受重试，避免从部分清理的历史提取残缺范围。已过期组可能暂时呈现部分历史，崩溃后下次周期继续；不建立持久删除账本。FK RESTRICT失败仅回滚当前批次、记录并跳过该组本轮剩余工作，其他SQL错误fail-fast。foreign_keys始终开启。delivery清理及system/info统计随M7接入。
-同一次关联链只要仍有活动 Run 或待删除远程任务记录就保留；单纯 unknown 历史按普通保留期删除，不会永久保留。旧 REMOTE_TASK_CHANGED 行同样适用。
+默认保留终态 Run 及其操作、尝试 30 天，依据 endedAt；dry-run 同样适用。每页选择约100个候选Run；逐个确认资格后按有界子记录批次提交并让出事件循环，不以Run数界定事务工作量。
+承担[未决责任](data-model.md#responsibility)的 Run 不清理（任一尝试仍有待删除的远程任务记录）。操作与依赖都不跨 Run，每个 Run 单独判断，不计算引用闭包。
+破坏性工作前重新核验资格。按有界批次删除依赖边（按复合主键），再在同一事务删除一批操作及其全部尝试，使公开列表不会看到没有尝试的操作；随后删除run_retry_items、scan_issues、run_targets，runs最后删除。runs.retry_of_run_id只是重试来源的软链接，不阻止清理：来源Run被清理不影响子重试运行，后者显示“来源已清理”。超过保留期的Run不再接受重试，避免从部分清理的历史提取残缺范围。已过期Run可能暂时呈现部分历史，崩溃后下次周期继续；不建立持久删除账本。FK RESTRICT失败仅回滚当前批次、记录并跳过该Run本轮剩余工作，其他SQL错误fail-fast。foreign_keys始终开启。delivery清理及system/info统计随M7接入。
+单纯 unknown 历史按普通保留期删除，不会永久保留。
 M7接入notification_deliveries后，关联Run投递随Run清理，test投递保留30天；当前不创建占位表或清理路径。终态后立即清除投递的 URL 与 secret 副本。Run终态事务清除其路径密码副本；后续 Run 使用自己的快照。
-不自动 VACUUM 大型数据库，不添加磁盘对账服务。磁盘满或 SQL 写失败停止新远程写入并 fail-fast。relay 的 spool 不属于历史记录，规则见 [Relay](relay.md#spool)。
+
+### 空间回收
+
+删除历史只把页放回 SQLite 空闲列表，文件不会自己变小。数据库使用增量自动回收（auto_vacuum=INCREMENTAL）：
+
+- 新库在建表前设定该模式。
+- 旧库（auto_vacuum=NONE）在启动时、迁移提交且外键校验通过后、恢复与调度开始前转换一次：先截断 WAL，再设定模式并 VACUUM，再截断 WAL，日志记录前后大小与耗时。官方说明 VACUUM 最多需要约原库两倍的额外空间；数据卷可用空间不足原库两倍或临时目录不足一倍时跳过转换并告警。VACUUM 遇到 SQLITE_FULL 时回滚、告警并照常启动；前置 WAL 截断被外部读事务阻塞时同样延后。下次启动按数据库实际模式再试，已转换的库不再完整 VACUUM。I/O 错误、损坏等其他错误 fail-fast。
+- 每日历史清理结束后，若数据库为增量模式，按每批 256 页循环 incremental_vacuum 直到空闲列表为空，批次之间让出事件循环并响应关机；不设阈值或总量上限，最后截断 WAL。NONE 模式跳过这一步。
+
+空间预检只是估算，不能抵御 VACUUM 期间的并发磁盘占用。不添加磁盘对账服务。磁盘满或 SQL 写失败停止新远程写入并 fail-fast。relay 的 spool 不属于历史记录，规则见 [Relay](relay.md#spool)。
 
 小时远程维护与每日历史清理共用一个串行runner，不重叠。小时调度不是一小时内完成每行的保证：配额、读取重试、历史批次与停机均可能延迟。

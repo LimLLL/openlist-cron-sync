@@ -8,6 +8,7 @@ import { DatabaseService } from '../src/database/database.service.js';
 import { runs } from '../src/database/run-schema.js';
 import { operations } from '../src/database/operation-schema.js';
 import { OpenListMultipart } from '../src/openlist/multipart.service.js';
+import { setOperation } from './operation-fixture.js';
 
 /** 注册各持久化窗口的恢复验收。
  * @param 不适用。
@@ -55,26 +56,23 @@ describe('M3 persisted crash windows', () => {
         .where(eq(runs.id, result.id))
         .run();
       if (window === 'submitting')
-        db.update(operations)
-          .set({ status: 'submitting', submittedAt: Date.now() })
-          .where(eq(operations.id, op.id))
-          .run();
+        setOperation(db, eq(operations.id, op.id), {
+          status: 'submitting',
+          submittedAt: Date.now(),
+        });
       if (['session', 'eof', 'completed', 'result'].includes(window)) {
         const session = await f.app
           .get(OpenListMultipart)
           .init(f.record(), { directory: '/target', name: 'new.txt' }, 12);
-        db.update(operations)
-          .set({
-            status: window === 'result' ? 'succeeded' : 'running',
-            endedAt: window === 'result' ? Date.now() : null,
-            multipartUploadId: session.uploadId,
-            multipartChunkSize: session.chunkSize,
-            multipartAttempt: session.attempt,
-            multipartState: 'receiving',
-            sourceStreamCompletedAt: window === 'session' ? null : Date.now(),
-          })
-          .where(eq(operations.id, op.id))
-          .run();
+        setOperation(db, eq(operations.id, op.id), {
+          status: window === 'result' ? 'succeeded' : 'running',
+          endedAt: window === 'result' ? Date.now() : null,
+          multipartUploadId: session.uploadId,
+          multipartChunkSize: session.chunkSize,
+          multipartAttempt: session.attempt,
+          multipartState: 'receiving',
+          sourceStreamCompletedAt: window === 'session' ? null : Date.now(),
+        });
         if (window === 'completed')
           f.fault =
             /** 提供同session的completed证据以测试恢复收敛。
@@ -146,10 +144,10 @@ describe('M3 persisted crash windows', () => {
       .set({ status: 'executing', dryRun: false, endedAt: null })
       .where(eq(runs.id, result.id))
       .run();
-    db.update(operations)
-      .set({ status: 'running', submittedAt: Date.now() })
-      .where(eq(operations.id, deletion.id))
-      .run();
+    setOperation(db, eq(operations.id, deletion.id), {
+      status: 'running',
+      submittedAt: Date.now(),
+    });
     const before = f.server.calls.length;
     await f.restart();
     await terminal(f, result.id);

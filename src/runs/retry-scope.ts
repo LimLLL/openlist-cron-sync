@@ -42,7 +42,7 @@ export interface RetryEligibility {
   /** 因目标移除或instanceId/path变化排除的意图数。 */
   excludedItems: number;
 }
-/** 查询候选并规范化旧目标路径；SQL只物化本轮最后attempt及候选。
+/** 查询候选并规范化旧目标路径；每个逻辑操作已是最终结果，replace的删除与创建在SQL内合并为一个文件意图。
  * @param db 数据库或接受事务。
  * @param run 待重试的历史Run。
  * @returns 按Target和原路径去重的意图。
@@ -52,20 +52,11 @@ export function retryCandidates(
   db: BetterSQLite3Database,
   run: RunRecord,
 ): RetryCandidate[] {
-  const latest = sql`WITH latest AS MATERIALIZED (
-    SELECT o.run_target_id,o.target_path,o.is_dir,o.action,o.reason,o.status FROM operations o WHERE o.run_id=${run.id}
-      AND o.error_code IS NOT 'REMOTE_TASK_CHANGED'
-      AND o.reason != 'retry_cleanup'
-      AND NOT EXISTS (SELECT 1 FROM operations newer
-        WHERE newer.retry_of=coalesce(o.retry_of,o.id)
-        AND newer.run_id=o.run_id AND newer.target_path=o.target_path
-        AND newer.error_code IS NOT 'REMOTE_TASK_CHANGED' AND newer.reason!='retry_cleanup'
-        AND newer.attempt_no>o.attempt_no)
-  ), intents AS (
+  const intents = sql`WITH intents AS MATERIALIZED (
     SELECT run_target_id,target_path,is_dir,
       max(CASE WHEN action IN ('create','mkdir') AND status='succeeded' THEN 1 ELSE 0 END) AS succeeded,
       max(CASE WHEN status!='succeeded' THEN 1 ELSE 0 END) AS unfinished
-    FROM latest WHERE action IN ('create','mkdir') OR (action='delete' AND reason='replace')
+    FROM operations WHERE run_id=${run.id} AND (action IN ('create','mkdir') OR (action='delete' AND reason='replace'))
     GROUP BY run_target_id,target_path,is_dir
   )`;
   const rows = db.all<{
@@ -76,11 +67,11 @@ export function retryCandidates(
     relative: string | null;
   }>(
     run.retryOfRunId === null
-      ? sql`${latest} SELECT t.target_id AS targetId,json_extract(t.target_snapshot_json,'$.target.path') AS root,
+      ? sql`${intents} SELECT t.target_id AS targetId,json_extract(t.target_snapshot_json,'$.target.path') AS root,
           i.target_path AS path,i.is_dir AS isDir,NULL AS relative
         FROM intents i JOIN run_targets t ON t.id=i.run_target_id
         WHERE i.succeeded=0 AND i.unfinished=1 ORDER BY t.target_id,i.target_path`
-      : sql`${latest} SELECT t.target_id AS targetId,json_extract(t.target_snapshot_json,'$.target.path') AS root,
+      : sql`${intents} SELECT t.target_id AS targetId,json_extract(t.target_snapshot_json,'$.target.path') AS root,
           '' AS path,s.is_dir AS isDir,s.relative_path AS relative
         FROM run_retry_items s JOIN run_targets t ON t.id=s.run_target_id
         WHERE s.run_id=${run.id} AND s.scan_outcome!='noop'

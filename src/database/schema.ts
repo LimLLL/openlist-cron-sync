@@ -123,4 +123,8 @@ export type InstanceChanges = Partial<typeof instances.$inferInsert>;
 
 export { jobs, jobTargets } from './job-schema.js';
 export { runs, runTargets, scanIssues, runRetryItems } from './run-schema.js';
-export { operations, operationDependencies } from './operation-schema.js';
+export {
+  operations,
+  operationAttempts,
+  operationDependencies,
+} from './operation-schema.js';

@@ -111,6 +111,7 @@ export default {
     unknown: '结果未知',
     cancelled: '已取消',
   },
+  operationAwaitingRetry: '等待重试',
   operationAction: {
     mkdir: '创建目录',
     create: '复制文件',

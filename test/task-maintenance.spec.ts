@@ -8,6 +8,8 @@ import { DatabaseService } from '../src/database/database.service.js';
 import { operations } from '../src/database/operation-schema.js';
 import { RemoteTaskMaintenance } from '../src/maintenance/remote-tasks.js';
 import { TaskResources } from '../src/coordination/task-resources.js';
+import { executionRecord } from '../src/database/operation-records.js';
+import { setOperation } from './operation-fixture.js';
 
 /** 注册维护行为。
  * @param 不适用。
@@ -41,19 +43,14 @@ describe('M6 task maintenance responsibility', () => {
   async function flagged(unknown: boolean, state: number, job = f.copyJob()) {
     const run = await preview(f, job);
     const id = plan(f, run.id)[0].id;
-    f.app
-      .get(DatabaseService)
-      .db.update(operations)
-      .set({
-        status: unknown ? 'unknown' : 'succeeded',
-        endedAt: Date.now(),
-        unknownSince: unknown ? Date.now() : null,
-        openlistTaskId: id,
-        remoteState: state,
-        remoteCleanupPending: true,
-      })
-      .where(eq(operations.id, id))
-      .run();
+    setOperation(f.app.get(DatabaseService).db, eq(operations.id, id), {
+      status: unknown ? 'unknown' : 'succeeded',
+      endedAt: Date.now(),
+      unknownSince: unknown ? Date.now() : null,
+      openlistTaskId: id,
+      remoteState: state,
+      remoteCleanupPending: true,
+    });
     f.tasks.set(id, {
       state,
       source: '/source/new.txt',
@@ -128,14 +125,13 @@ describe('M6 task maintenance responsibility', () => {
     const all = f.runs().operations(run.id, {
       page: 1,
       pageSize: 200,
-      includeMaintenance: true,
     }).items;
     expect(all).toHaveLength(1);
     expect(all[0]).toMatchObject({
       id,
       status: 'succeeded',
-      task: { id, state: 1 },
     });
+    expect(plan(f, run.id)[0].attempts[0].task).toEqual({ id, state: 1 });
     expect(
       f.server.calls.some((call) => call.url.includes('/copy/delete_some')),
     ).toBe(false);
@@ -166,12 +162,9 @@ describe('M6 task maintenance responsibility', () => {
        */
       (call, response) => {
         if (!call.url.includes('/copy/info')) return response;
-        f.app
-          .get(DatabaseService)
-          .db.update(operations)
-          .set({ remoteState: 2 })
-          .where(eq(operations.id, id))
-          .run();
+        setOperation(f.app.get(DatabaseService).db, eq(operations.id, id), {
+          remoteState: 2,
+        });
         return envelope(null, 404);
       };
     await f.app.get(RemoteTaskMaintenance).one(id);
@@ -185,12 +178,7 @@ describe('M6 task maintenance responsibility', () => {
    * @throws Error 夹具丢失。
    */
   function record(id: string) {
-    const row = f.app
-      .get(DatabaseService)
-      .db.select()
-      .from(operations)
-      .where(eq(operations.id, id))
-      .get();
+    const row = executionRecord(f.app.get(DatabaseService).db, id);
     if (!row) throw new Error('Operation missing');
     return row;
   }

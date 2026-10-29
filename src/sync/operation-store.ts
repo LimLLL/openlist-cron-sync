@@ -1,23 +1,19 @@
-// 原子保存操作结果和有界重试依赖；不在数据库事务中执行网络请求。
+// 原子保存逻辑结果与尝试历史；重试保持依赖不变，事务内不执行网络请求。
 import { randomUUID } from 'node:crypto';
-import {
-  and,
-  asc,
-  desc,
-  eq,
-  gt,
-  inArray,
-  isNull,
-  max,
-  or,
-  sql,
-} from 'drizzle-orm';
+import { and, asc, eq, gt, max, sql } from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import {
   operations,
   operationDependencies,
+  operationAttempts,
 } from '../database/operation-schema.js';
-import type { OperationRecord } from '../database/operation-schema.js';
+import type { ExecutionRecord } from '../database/operation-schema.js';
+import {
+  currentAttempt,
+  executionColumns,
+  executionRecord,
+  insertOperation,
+} from '../database/operation-records.js';
 import { runs } from '../database/run-schema.js';
 import type { RunRecord } from '../database/run-schema.js';
 import type { MultipartSnapshot } from '../openlist/multipart.service.js';
@@ -53,18 +49,14 @@ export class OperationStore {
     readonly db: BetterSQLite3Database,
     readonly run: RunRecord,
   ) {}
-  /** 取得操作当前持久化状态。
-   * @param id 操作ID。
-   * @returns 完整操作。
+  /** 取得指定尝试的持久化状态与不可变计划。
+   * @param id Attempt ID。
+   * @returns 完整执行上下文。
    * @throws Error 记录缺失。
    */
-  get(id: string): OperationRecord {
-    const row = this.db
-      .select()
-      .from(operations)
-      .where(and(eq(operations.id, id), eq(operations.runId, this.run.id)))
-      .get();
-    if (!row) throw new Error('Operation missing');
+  get(id: string): ExecutionRecord {
+    const row = executionRecord(this.db, id);
+    if (!row || row.runId !== this.run.id) throw new Error('Attempt missing');
     return row;
   }
   /** 提交前持久化，显式401重放允许保持同一submitting。
@@ -86,12 +78,13 @@ export class OperationStore {
     if (row.status !== 'pending')
       throw new Error('Operation no longer pending');
     const now = Date.now();
-    this.db
-      .update(operations)
-      .set({ status: 'submitting', submittedAt: now, updatedAt: now })
-      .where(eq(operations.id, id))
-      .run();
+    this.transition(id, {
+      status: 'submitting',
+      submittedAt: now,
+      updatedAt: now,
+    });
   }
+
   /** 在任何chunk之前保存init响应。
    * @param id 当前尝试。
    * @param session 有效session。
@@ -108,19 +101,16 @@ export class OperationStore {
       throw new Error('Multipart identity changed during persistence');
     if (!['submitting', 'running'].includes(current.status))
       throw new Error('Session outside submitting');
-    this.db
-      .update(operations)
-      .set({
-        status: 'running',
-        multipartUploadId: session.uploadId,
-        multipartChunkSize: session.chunkSize,
-        multipartState: session.state,
-        multipartAttempt: session.attempt,
-        updatedAt: Date.now(),
-      })
-      .where(eq(operations.id, id))
-      .run();
+    this.transition(id, {
+      status: 'running',
+      multipartUploadId: session.uploadId,
+      multipartChunkSize: session.chunkSize,
+      multipartState: session.state,
+      multipartAttempt: session.attempt,
+      updatedAt: Date.now(),
+    });
   }
+
   /** 在最后chunk或空put之前记录精确源EOF。
    * @param id 当前尝试。
    * @returns 不适用。
@@ -128,9 +118,9 @@ export class OperationStore {
    */
   eof(id: string): void {
     this.db
-      .update(operations)
+      .update(operationAttempts)
       .set({ sourceStreamCompletedAt: Date.now(), updatedAt: Date.now() })
-      .where(eq(operations.id, id))
+      .where(eq(operationAttempts.id, id))
       .run();
   }
   /** remove成功响应先落库，确认读随后进行。
@@ -139,45 +129,149 @@ export class OperationStore {
    * @throws Error 数据库失败。
    */
   confirming(id: string): void {
-    this.db
-      .update(operations)
-      .set({ status: 'running', updatedAt: Date.now() })
-      .where(and(eq(operations.id, id), eq(operations.status, 'submitting')))
-      .run();
+    if (this.get(id).status === 'submitting')
+      this.transition(id, { status: 'running', updatedAt: Date.now() });
   }
-  /** 只从非终态写一次结果，unknown时间同时提交。
-   * @param id 当前操作。
-   * @param outcome 受控结果。
-   * @returns 是否实际写入，迟到结果返回false。
-   * @throws Error 数据库失败。
+  /** 同步推进当前尝试与逻辑操作的非终态；旧尝试不得覆盖新结果。
+   * @param id Attempt ID。
+   * @param changes 尝试检查点及状态。
+   * @returns 不适用。
+   * @throws Error 尝试已结束、身份不符或数据库失败。
    */
-  end(id: string, outcome: Outcome): boolean {
-    const now = Date.now();
-    return (
-      this.db
-        .update(operations)
-        .set({
-          status: outcome.status,
-          errorCode: outcome.code ?? null,
-          errorMessage: outcome.message ?? outcome.code ?? null,
-          endedAt: now,
-          updatedAt: now,
-          remoteCleanupPending: sql`CASE WHEN openlist_task_id IS NOT NULL THEN 1 ELSE 0 END`,
-          unknownSince: outcome.status === 'unknown' ? now : null,
-        })
-        .where(
-          and(
-            eq(operations.id, id),
-            inArray(operations.status, [
-              'pending',
-              'submitting',
-              'submitted',
-              'running',
-            ]),
-          ),
+  transition(
+    id: string,
+    changes: Partial<typeof operationAttempts.$inferInsert>,
+  ): void {
+    this.db.transaction(
+      /** 校验仍为当前在途尝试后，同批写入尝试检查点与父状态。
+       * @param 不适用。
+       * @returns 不适用。
+       * @throws Error 尝试已结束或数据库失败。
+       */
+      () => {
+        const row = this.get(id);
+        if (
+          row.attemptNo !== row.attemptCount ||
+          !['pending', 'submitting', 'submitted', 'running'].includes(
+            row.status,
+          )
         )
-        .run().changes === 1
+          throw new Error('Attempt no longer current');
+        this.db
+          .update(operationAttempts)
+          .set(changes)
+          .where(eq(operationAttempts.id, id))
+          .run();
+        this.db
+          .update(operations)
+          .set({
+            status: changes.status ?? row.status,
+            updatedAt: changes.updatedAt ?? Date.now(),
+          })
+          .where(eq(operations.id, row.operationId))
+          .run();
+      },
     );
+  }
+  /** 原子结束一次尝试并决定是否安排下一次；失败历史和pending父状态一起提交。
+   * @param id 当前Attempt ID。
+   * @param outcome 已完成分类的结果。
+   * @param retryable 调用方确认失败可安全重试，恢复及批量收尾恒为false。
+   * @param stopping 已停止派发的信号，阻止新尝试。
+   * @returns 本次是否实际提交；迟到完成返回false。
+   * @throws Error 数据库失败，结果及重试安排一起回滚。
+   */
+  end(
+    id: string,
+    outcome: Outcome,
+    retryable = false,
+    stopping?: AbortSignal,
+  ): boolean {
+    return this.db.transaction(
+      /** 写入尝试终态，并在同一事务内安排下一次尝试或收尾逻辑操作。
+       * @param 不适用。
+       * @returns 是否实际写入。
+       * @throws Error 数据库失败。
+       */
+      () => {
+        const row = this.get(id);
+        if (
+          row.attemptNo !== row.attemptCount ||
+          !['pending', 'submitting', 'submitted', 'running'].includes(
+            row.status,
+          )
+        )
+          return false;
+        const now = Date.now();
+        const run = this.db
+          .select({ status: runs.status })
+          .from(runs)
+          .where(eq(runs.id, this.run.id))
+          .get();
+        const retry =
+          outcome.status === 'failed' &&
+          retryable &&
+          !stopping?.aborted &&
+          run?.status === 'executing' &&
+          row.attemptNo < this.run.config.settings.retryMaxAttempts;
+        this.db
+          .update(operationAttempts)
+          .set({
+            status: outcome.status,
+            errorCode: outcome.code ?? null,
+            errorMessage: outcome.message ?? outcome.code ?? null,
+            endedAt: now,
+            updatedAt: now,
+            remoteCleanupPending: sql`CASE WHEN openlist_task_id IS NOT NULL THEN 1 ELSE 0 END`,
+            unknownSince: outcome.status === 'unknown' ? now : null,
+          })
+          .where(eq(operationAttempts.id, id))
+          .run();
+        if (retry)
+          this.db
+            .insert(operationAttempts)
+            .values({
+              id: randomUUID(),
+              operationId: row.operationId,
+              targetInstanceId: row.targetInstanceId,
+              method: row.method,
+              attemptNo: row.attemptNo + 1,
+              createdAt: now,
+              updatedAt: now,
+              nextAttemptAt:
+                now + backoffMs(this.run.config.settings, row.attemptNo),
+            })
+            .run();
+        this.db
+          .update(operations)
+          .set({
+            status: retry ? 'pending' : outcome.status,
+            attemptCount: row.attemptNo + (retry ? 1 : 0),
+            updatedAt: now,
+            endedAt: retry ? null : now,
+          })
+          .where(eq(operations.id, row.operationId))
+          .run();
+        return true;
+      },
+    );
+  }
+  /** 按稳定操作ID读取当前尝试，用于协调器推进已安排的重试。
+   * @param operationId 逻辑操作ID。
+   * @returns 当前尝试上下文。
+   * @throws Error 操作缺失或数据库失败。
+   */
+  current(operationId: string): ExecutionRecord {
+    const row = this.db
+      .select(executionColumns)
+      .from(operations)
+      .innerJoin(operationAttempts, currentAttempt)
+      .where(
+        and(eq(operations.id, operationId), eq(operations.runId, this.run.id)),
+      )
+      .get();
+    if (!row) throw new Error('Current attempt missing');
+    return row;
   }
   /** 正常缺失时显式移除下游对此delete的依赖。
    * @param id delete ID。
@@ -198,79 +292,10 @@ export class OperationStore {
         });
         this.db
           .delete(operationDependencies)
-          .where(eq(operationDependencies.dependsOnId, id))
-          .run();
-      },
-    );
-  }
-  /** 为失败尝试创建新行并重连尚未执行的下游。
-   * @param previous 已失败操作。
-   * @returns 新pending尝试，预算耗尽返回null。
-   * @throws Error 数据库或状态非法。
-   */
-  retry(previous: OperationRecord): OperationRecord | null {
-    if (
-      previous.status !== 'failed' ||
-      previous.attemptNo >= this.run.config.settings.retryMaxAttempts
-    )
-      return null;
-    return this.db.transaction(
-      /** 在同一事务追加重试attempt并重连尚未执行的下游。
-       * @param 不适用。
-       * @returns 新pending尝试。
-       * @throws Error 数据库失败。
-       */
-      () => {
-        const id = randomUUID();
-        const now = Date.now();
-        const next: OperationRecord = {
-          ...previous,
-          id,
-          seq: this.nextSeq(),
-          retryOf: previous.retryOf ?? previous.id,
-          attemptNo: previous.attemptNo + 1,
-          status: 'pending',
-          createdAt: now,
-          updatedAt: now,
-          submittedAt: null,
-          endedAt: null,
-          nextAttemptAt:
-            now + backoffMs(this.run.config.settings, previous.attemptNo),
-          errorCode: null,
-          errorMessage: null,
-          openlistTaskId: null,
-          remoteState: null,
-          remoteCleanupPending: false,
-          multipartUploadId: null,
-          multipartChunkSize: null,
-          multipartState: null,
-          multipartAttempt: null,
-          sourceStreamCompletedAt: null,
-          bytesDownloaded: 0,
-          bytesTransferred: 0,
-        };
-        this.db.insert(operations).values(next).run();
-        for (const dependency of this.db
-          .select()
-          .from(operationDependencies)
-          .where(eq(operationDependencies.operationId, previous.id))
-          .all())
-          this.db
-            .insert(operationDependencies)
-            .values({ operationId: id, dependsOnId: dependency.dependsOnId })
-            .run();
-        // 重试仍属于同一逻辑顶点；只替换其下游边，不新增反向逻辑边，因此不依赖seq证明无环。
-        this.db
-          .update(operationDependencies)
-          .set({ dependsOnId: id })
           .where(
-            and(
-              eq(operationDependencies.dependsOnId, previous.id),
-              sql`${operationDependencies.operationId} IN (SELECT id FROM operations WHERE status = 'pending')`,
-            ),
+            eq(operationDependencies.dependsOnId, this.get(id).operationId),
           )
           .run();
-        return next;
       },
     );
   }
@@ -283,11 +308,11 @@ export class OperationStore {
    * @throws Error 事务失败。
    */
   cleanup(
-    create: OperationRecord,
+    create: ExecutionRecord,
     size: number,
     budget: number | null,
     planned: number,
-  ): OperationRecord | null {
+  ): ExecutionRecord | null {
     return this.db.transaction(
       /** 按累计逻辑清理数量预留剩余预算并建立cleanup依赖。
        * @param 不适用。
@@ -306,90 +331,60 @@ export class OperationStore {
                   and(
                     eq(operations.runTargetId, create.runTargetId),
                     eq(operations.reason, 'retry_cleanup'),
-                    isNull(operations.retryOf),
                   ),
                 )
                 .get()?.n ?? 0));
         if (budget !== null && used >= budget - planned) return null;
         const now = Date.now();
-        const row: OperationRecord = {
-          ...create,
-          id: randomUUID(),
+        const id = randomUUID();
+        insertOperation(this.db, {
+          id,
+          runId: create.runId,
+          runTargetId: create.runTargetId,
           seq: this.nextSeq(),
           action: 'delete',
           method: 'remove',
           reason: 'retry_cleanup',
-          sourceInstanceId: null,
-          sourcePath: null,
-          expectedSourceSize: null,
-          expectedSourceModified: null,
+          targetInstanceId: create.targetInstanceId,
+          targetPath: create.targetPath,
+          isDir: false,
           expectedTargetSize: size,
+          affectedFileCount: 1,
           affectedBytes: size,
-          retryOf: null,
-          attemptNo: 1,
-          nextAttemptAt: null,
           createdAt: now,
           updatedAt: now,
-        };
-        this.db.insert(operations).values(row).run();
+        });
+        const row = this.current(id);
         this.cleanupCounts.set(create.runTargetId, used + 1);
         this.db
           .insert(operationDependencies)
-          .values({ operationId: create.id, dependsOnId: row.id })
+          .values({
+            operationId: create.operationId,
+            dependsOnId: row.operationId,
+          })
           .run();
         return row;
       },
     );
   }
   /** 取得必要依赖的小集合。
-   * @param id 当前动作。
+   * @param id 当前Attempt ID。
    * @returns 依赖动作，最多父mkdir和对应delete。
    * @throws Error 数据库失败。
    */
-  dependencies(id: string): OperationRecord[] {
+  dependencies(id: string): ExecutionRecord[] {
     return this.db
-      .select({ operation: operations })
+      .select(executionColumns)
       .from(operationDependencies)
       .innerJoin(
         operations,
         eq(operations.id, operationDependencies.dependsOnId),
       )
-      .where(eq(operationDependencies.operationId, id))
-      .all()
-      .map(
-        /** 从依赖查询结果中提取完整操作。
-         * @param row 当前查询记录。
-         * @returns 依赖操作记录。
-         * @throws 不适用。
-         */
-        (row) => row.operation,
-      );
+      .innerJoin(operationAttempts, currentAttempt)
+      .where(eq(operationDependencies.operationId, this.get(id).operationId))
+      .all();
   }
-  /** 当前逻辑动作的最后尝试。
-   * @param row 任一尝试。
-   * @returns 最后attempt。
-   * @throws Error 数据库失败。
-   */
-  latest(row: OperationRecord): OperationRecord {
-    const root = row.retryOf ?? row.id;
-    return (
-      this.db
-        .select()
-        .from(operations)
-        .where(
-          and(
-            eq(operations.targetInstanceId, row.targetInstanceId),
-            eq(operations.targetPath, row.targetPath),
-            eq(operations.runId, row.runId),
-            or(eq(operations.id, root), eq(operations.retryOf, root)),
-          ),
-        )
-        .orderBy(desc(operations.attemptNo))
-        .limit(1)
-        .get() ?? row
-    );
-  }
-  /** 按计划顺序取得一个目标当前阶段在游标之后的pending动作，重试行同样参与。
+  /** 按稳定计划顺序取得当前阶段的pending逻辑动作及其当前尝试。
    * @param targetId 当前目标。
    * @param phase 准备、创建、文件extras或目录extras。
    * @param after 只返回seq大于该值的行；-1表示从头读取。
@@ -402,7 +397,7 @@ export class OperationStore {
     phase: 'mkdir' | 'create' | 'files' | 'directories',
     after: number,
     limit: number,
-  ): OperationRecord[] {
+  ): ExecutionRecord[] {
     const condition =
       phase === 'mkdir' || phase === 'create'
         ? eq(operations.action, phase)
@@ -411,8 +406,9 @@ export class OperationStore {
             eq(operations.isDir, phase === 'directories'),
           );
     return this.db
-      .select()
+      .select(executionColumns)
       .from(operations)
+      .innerJoin(operationAttempts, currentAttempt)
       .where(
         and(
           eq(operations.runTargetId, targetId),
@@ -451,13 +447,13 @@ export class OperationStore {
    */
   bytes(id: string, downloaded: number, transferred: number): void {
     this.db
-      .update(operations)
+      .update(operationAttempts)
       .set({
         bytesDownloaded: downloaded,
         bytesTransferred: transferred,
         updatedAt: Date.now(),
       })
-      .where(eq(operations.id, id))
+      .where(eq(operationAttempts.id, id))
       .run();
   }
 }

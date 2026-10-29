@@ -13,6 +13,7 @@ import { DatabaseService } from '../src/database/database.service.js';
 import { runTargets } from '../src/database/run-schema.js';
 import { operations } from '../src/database/operation-schema.js';
 import { ScanPacing } from '../src/coordination/scan-pacing.service.js';
+import { executionRecord } from '../src/database/operation-records.js';
 
 /** 两个 Job 的独立目录落在同一 storage，实际 Run 扫描共享开始时间。
  * @param 不适用。
@@ -134,7 +135,7 @@ it('paces explicit directory reads but exempts entry checks and server-copy sour
       context,
       new OperationStore(db, record),
       f.app.get(CopyTracker),
-    ).source(target, op);
+    ).source(target, executionRecord(db, op.id)!);
     expect(pacing).not.toHaveBeenCalled();
     const directory = context.list(target, '/target', 'directory');
     const rejected = expect(directory).rejects.toBeDefined();

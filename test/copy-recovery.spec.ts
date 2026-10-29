@@ -8,6 +8,7 @@ import { operations } from '../src/database/operation-schema.js';
 import { runs } from '../src/database/run-schema.js';
 import { TaskResources } from '../src/coordination/task-resources.js';
 import { envelope } from './openlist-fixture.js';
+import { setOperation } from './operation-fixture.js';
 
 /** 注册恢复和关闭窗口。
  * @param 不适用。
@@ -41,10 +42,11 @@ describe('M6 recovery task ownership', () => {
     const run = await preview(f, job);
     const id = plan(f, run.id)[0].id;
     const db = f.app.get(DatabaseService).db;
-    db.update(operations)
-      .set({ status: 'running', openlistTaskId: id, remoteState: 1 })
-      .where(eq(operations.id, id))
-      .run();
+    setOperation(db, eq(operations.id, id), {
+      status: 'running',
+      openlistTaskId: id,
+      remoteState: 1,
+    });
     db.update(runs)
       .set({
         status: 'recovering',
@@ -126,7 +128,7 @@ describe('M6 recovery task ownership', () => {
     const old = await recovering(Date.now() - 5000);
     await f.restart();
     expect((await terminal(f, old.runId)).status).toBe('interrupted');
-    expect(plan(f, old.runId)[0]).toMatchObject({
+    expect(plan(f, old.runId)[0].attempts[0]).toMatchObject({
       status: 'unknown',
       task: { id: old.id },
     });
@@ -178,13 +180,13 @@ describe('M6 recovery task ownership', () => {
        * @returns 不适用。
        * @throws Error 尚未提交。
        */
-      () => expect(plan(f, run.id)[0]?.task).toBeTruthy(),
+      () => expect(plan(f, run.id)[0]?.attempts[0].task).toBeTruthy(),
     );
     await f.restart();
     expect(f.server.calls.filter(cancelRequest)).toHaveLength(0);
     expect(f.server.calls.some(deleteRequest)).toBe(false);
     expect(f.runs().get(run.id).status).toBe('recovering');
-    const tid = plan(f, run.id)[0].task?.id;
+    const tid = plan(f, run.id)[0].attempts[0].task?.id;
     const task = tid ? f.tasks.get(tid) : undefined;
     if (!task) throw new Error('Missing task');
     task.state = 2;

@@ -107,7 +107,7 @@ export class RelayService {
          */
         (error: unknown) =>
           this.logger.error('Source cleanup failed', {
-            operationId: input.operationId,
+            attemptId: input.attemptId,
             errorName: error instanceof Error ? error.name : 'Unknown',
           }),
       );
@@ -142,7 +142,7 @@ export class RelayService {
         if (size)
           transfer.blocks.add(
             await this.spool.publish(
-              input.operationId,
+              input.attemptId,
               0,
               transfer.first,
               reservation,
@@ -272,7 +272,7 @@ export class RelayService {
                 : await transfer.download.take(count);
             if (data.length !== count) throw new RelayError('SIZE_MISMATCH');
             const block = await this.spool.publish(
-              input.operationId,
+              input.attemptId,
               (index * session.chunkSize + offset) / BLOCK_BYTES,
               data,
               reservation,
@@ -443,7 +443,7 @@ export class RelayService {
             true,
           );
         this.logger.warn('Relay heartbeat unavailable', {
-          operationId: transfer.input.operationId,
+          attemptId: transfer.input.attemptId,
           errorCode: error.code,
         });
       }
@@ -473,7 +473,7 @@ export class RelayService {
       await transfer.closeSource();
       transfer.first = Buffer.alloc(0);
       await this.releaseBlocks(transfer, [...transfer.blocks]);
-      await this.spool.finish(transfer.input.operationId);
+      await this.spool.finish(transfer.input.attemptId);
     } finally {
       transfer.releaseTarget();
     }

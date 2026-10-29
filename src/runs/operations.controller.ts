@@ -10,7 +10,7 @@ import {
 import { ApiBearerAuth, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { EmptyQueryDto } from '../common/http.dto.js';
 import { pageSchema } from '../common/api-schema.js';
-import { operationViewSchema } from './api-schemas.js';
+import { operationViewSchema, operationDetailSchema } from './api-schemas.js';
 import { OperationsService } from './operations.service.js';
 import { OperationsQueryDto } from './operations.dto.js';
 
@@ -41,14 +41,14 @@ export class OperationsController {
   list(@Query() query: OperationsQueryDto) {
     return this.operations.list(query);
   }
-  /** 读取一个操作的历史结果。
-   * @param id 操作UUID。
+  /** 读取一个逻辑操作及完整尝试历史，兼容旧尝试链接。
+   * @param id Operation或Attempt UUID。
    * @param _query 禁止额外查询。
-   * @returns OperationView。
+   * @returns OperationDetail，id始终为规范逻辑ID。
    * @throws ApiError 未找到。
    */
   @Get(':id')
-  @ApiOkResponse({ schema: operationViewSchema })
+  @ApiOkResponse({ schema: operationDetailSchema })
   get(
     @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
     @Query() _query: EmptyQueryDto,

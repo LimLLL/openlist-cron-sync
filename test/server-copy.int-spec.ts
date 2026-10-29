@@ -18,6 +18,7 @@ import { OpenListMultipart } from '../src/openlist/multipart.service.js';
 import { OpenListTasks } from '../src/openlist/tasks.service.js';
 import { OpenListError } from '../src/openlist/errors.js';
 import { downloadUrl } from '../src/openlist/paths.js';
+import { OperationsService } from '../src/runs/operations.service.js';
 
 const environment = integrationEnvironment();
 /** 注册真实Local复制验收。
@@ -167,19 +168,20 @@ describe('M6 real Local server_copy topologies', () => {
     }
     const run = service.get(accepted.id);
     expect(run.status).toBe('succeeded');
-    const ops = service.operations(run.id, {
-      page: 1,
-      pageSize: 200,
-      includeMaintenance: false,
-    }).items;
+    const ops = service
+      .operations(run.id, {
+        page: 1,
+        pageSize: 200,
+      })
+      .items.map((op) => app.get(OperationsService).get(op.id));
     const copy = ops.find(isCreate);
     if (!copy) throw new Error('Copy operation missing');
     expect(ops.map(operationStatus)).toEqual(['succeeded', 'succeeded']);
-    if (label === 'L2') expect(copy.task).not.toBeNull();
-    if (copy.task) {
-      expect(copy.task.state).toBe(2);
+    if (label === 'L2') expect(copy.attempts[0].task).not.toBeNull();
+    if (copy.attempts[0].task) {
+      expect(copy.attempts[0].task.state).toBe(2);
       await expect(
-        app.get(OpenListTasks).info(record(), copy.task.id),
+        app.get(OpenListTasks).info(record(), copy.attempts[0].task.id),
       ).rejects.toMatchObject({ upstreamCode: 404 });
     } else expect(copy.status).toBe('succeeded');
     const client = app.get(OpenListClient);
@@ -202,9 +204,9 @@ describe('M6 real Local server_copy topologies', () => {
         topology: label,
         version: '4.2.7',
         driver: 'Local',
-        copy: copy.task ? 'task' : 'synchronous',
-        remoteState: copy.task?.state ?? null,
-        cleanup: copy.task ? 'info404' : 'no-task',
+        copy: copy.attempts[0].task ? 'task' : 'synchronous',
+        remoteState: copy.attempts[0].task?.state ?? null,
+        cleanup: copy.attempts[0].task ? 'info404' : 'no-task',
         bytes: bytes.length,
       }),
     );

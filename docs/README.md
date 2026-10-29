@@ -98,4 +98,5 @@ OpenList 行为依据 OpenList v4.2.6 系列源码（上游 main 分支 2026-09 
 | [0007-relay.md](adr/0007-relay.md)                                 | 记录分片流水线 relay 的取舍与后果                           |
 | [0008-license-cla.md](adr/0008-license-cla.md)                     | 记录采用AGPL-3.0-only且不设CLA的取舍与后果                  |
 | [0009-drop-move.md](adr/0009-drop-move.md)                         | 记录MVP移除源端move的取舍与后果                             |
+| [0010-operation-attempts.md](adr/0010-operation-attempts.md)       | 记录计划动作与执行尝试分两层保存的取舍与后果                |
 | [template.md](adr/template.md)                                     | 规定新增MADR决策记录的最小结构                              |

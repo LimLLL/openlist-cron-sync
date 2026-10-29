@@ -18,6 +18,7 @@ import { initializeApplication } from '../src/http-setup.js';
 import { constructApplication, environmentFor } from './helpers.js';
 import { m2Fixture, preview, plan } from './m2-fixture.js';
 import type { M2Fixture } from './m2-fixture.js';
+import { setOperation } from './operation-fixture.js';
 
 /** 覆盖执行参数映射与校验、SQLite 约束，以及新增生产密文列的启动密钥校验。
  * @param 不适用。
@@ -110,12 +111,7 @@ describe('M2 configuration and persistence', () => {
        * @returns 不适用。
        * @throws Error 预期的 CHECK 约束失败。
        */
-      () =>
-        db
-          .update(operations)
-          .set({ method: 'remove' })
-          .where(eq(operations.id, op.id))
-          .run(),
+      () => setOperation(db, eq(operations.id, op.id), { method: 'remove' }),
     ).toThrow();
     expect(
       /** 插入依赖自身的操作依赖。

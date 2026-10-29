@@ -152,7 +152,7 @@ curl -X POST http://localhost:3000/api/v1/auth/login \
 - **`keys.json` 必须和数据库一起备份。** 主密钥一旦丢失，数据库中加密保存的 OpenList 凭据就无法再解密，只能重新录入。如果数据库里已有加密数据，而密钥缺失或不匹配，服务会拒绝启动，不会换一把新密钥继续运行。
 - 备份时先停止服务，再整体复制数据目录（spool 目录除外）。不要在服务运行时只复制 `app.sqlite`。完整步骤见[备份、恢复和升级](docs/guides/backup-restore-upgrade.md)。
 - 一个数据目录同一时间只能被一个服务进程使用。
-- 运行记录（含 dry-run）在结束后默认保留 30 天，每天 UTC 03:00 自动删除过期部分；仍有未处理的 unknown 或仍在跟踪 OpenList 远程任务的记录会继续保留。清理只删数据库行，不碰 OpenList 上的文件，也不会自动 VACUUM 收缩数据库文件。
+- 运行记录（含 dry-run）在结束后默认保留 30 天，每天 UTC 03:00 自动删除过期部分；仍在跟踪 OpenList 远程任务的记录会继续保留。清理只删数据库行，不碰 OpenList 上的文件；删除后空出的空间随即还给文件系统，数据库文件会变小。旧版本建的数据库在升级后首次启动时转换一次，需要临时的额外磁盘空间，见[升级说明](docs/guides/backup-restore-upgrade.md#操作与尝试分层升级)。
 - 忘记管理员密码时，按[首次部署指南](docs/guides/getting-started.md#忘记管理员密码)中的步骤离线重置。
 
 ## API

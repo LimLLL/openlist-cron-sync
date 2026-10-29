@@ -186,7 +186,10 @@ export function OperationsPage() {
               {data.items.map((operation) => (
                 <TR key={operation.id}>
                   <TD>
-                    <OperationStatusBadge status={operation.status} />
+                    <OperationStatusBadge
+                      status={operation.status}
+                      attemptCount={operation.attemptCount}
+                    />
                   </TD>
                   <TD className="text-[13px] whitespace-nowrap">
                     {t(`common:operationAction.${operation.action}`)}

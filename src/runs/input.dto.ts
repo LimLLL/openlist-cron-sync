@@ -94,12 +94,6 @@ export class OperationQueryDto extends PageQueryDto {
   @Optional()
   @IsIn(['mkdir', 'create', 'delete'])
   action?: 'mkdir' | 'create' | 'delete';
-  /** 是否显示旧版本产生的 REMOTE_TASK_CHANGED 历史记录，默认 false。 */
-  @ApiPropertyOptional({ default: false })
-  @Optional()
-  @Transform(booleanQuery)
-  @IsBoolean()
-  includeMaintenance = false;
 }
 
 /** 范围重试只接受删除数值阈值覆盖；路径由服务端历史提取。

@@ -1,5 +1,6 @@
 // 运行与文件操作的状态徽标：全站统一的色调映射与文案（common 命名空间），进行中状态带脉冲圆点。
 import { useTranslation } from 'react-i18next';
+import { awaitingRetry } from '../features/operations/operation-contract';
 import type { OperationStatus } from '../features/operations/operation-contract';
 import type { RunStatus } from '../features/runs/run-contract';
 import { Badge } from './ui/badge';
@@ -89,17 +90,25 @@ export function operationTone(status: OperationStatus): {
   }
 }
 
-/** 渲染文件操作状态徽标。
- * @param props status 操作状态。
+/** 渲染文件操作状态徽标；已失败过、正在退避等待下一次尝试的操作显示“等待重试”。
+ * @param props status 操作状态；attemptCount 逻辑操作的尝试次数，单次尝试的徽标不传。
  * @returns 徽标。
  * @throws 不适用。
  */
-export function OperationStatusBadge({ status }: { status: OperationStatus }) {
+export function OperationStatusBadge({
+  status,
+  attemptCount = 1,
+}: {
+  status: OperationStatus;
+  attemptCount?: number;
+}) {
   const { t } = useTranslation('common');
   const { tone, pulse } = operationTone(status);
   return (
     <Badge tone={tone} dot pulse={pulse}>
-      {t(`operationStatus.${status}`)}
+      {awaitingRetry({ status, attemptCount })
+        ? t('operationAwaitingRetry')
+        : t(`operationStatus.${status}`)}
     </Badge>
   );
 }

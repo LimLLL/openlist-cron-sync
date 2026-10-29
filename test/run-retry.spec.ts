@@ -10,6 +10,7 @@ import { runs, runRetryItems } from '../src/database/run-schema.js';
 import { HistoryRetention } from '../src/maintenance/history-retention.js';
 import { object } from '../src/openlist/errors.js';
 import { latch } from './openlist-fixture.js';
+import { seedOperations, setOperation } from './operation-fixture.js';
 
 let f: RelayFixture;
 /** 创建真实协议和数据库夹具。
@@ -39,10 +40,10 @@ async function history(overrides: Record<string, unknown> = {}) {
     .set({ dryRun: false, status: 'failed' })
     .where(eq(runs.id, run.id))
     .run();
-  db.update(operations)
-    .set({ status: 'failed', endedAt: Date.now() })
-    .where(eq(operations.runId, run.id))
-    .run();
+  setOperation(db, eq(operations.runId, run.id), {
+    status: 'failed',
+    endedAt: Date.now(),
+  });
   return { job, id: run.id };
 }
 /** 读取本轮所有范围输入，不依赖实现内部树结构。
@@ -80,23 +81,20 @@ it('replans only selected paths, keeps extras and avoids unrelated source subtre
     ],
   });
   const db = f.app.get(DatabaseService).db;
-  db.update(operations)
-    .set({ status: 'succeeded' })
-    .where(eq(operations.runId, parent.id))
-    .run();
-  db.update(operations)
-    .set({ status: 'unknown', unknownSince: Date.now() })
-    .where(
-      and(
-        eq(operations.runId, parent.id),
-        eq(operations.targetPath, '/target/nested/empty'),
-      ),
-    )
-    .run();
-  db.update(operations)
-    .set({ status: 'failed' })
-    .where(and(eq(operations.runId, parent.id), eq(operations.reason, 'extra')))
-    .run();
+  setOperation(db, eq(operations.runId, parent.id), { status: 'succeeded' });
+  setOperation(
+    db,
+    and(
+      eq(operations.runId, parent.id),
+      eq(operations.targetPath, '/target/nested/empty'),
+    ),
+    { status: 'unknown', unknownSince: Date.now() },
+  );
+  setOperation(
+    db,
+    and(eq(operations.runId, parent.id), eq(operations.reason, 'extra')),
+    { status: 'failed' },
+  );
   expect(f.runs().get(parent.id).retryEligibility).toMatchObject({
     eligible: true,
     candidateFiles: 1,
@@ -249,7 +247,7 @@ it('uses scoped deletion budgets and allows an explicit numeric override', async
  * @returns 验证完成。
  * @throws Error 断言失败。
  */
-it('collapses attempts and ignores maintenance and cleanup intents', async () => {
+it('collapses attempts and ignores cleanup intents', async () => {
   const parent = await history();
   const db = f.app.get(DatabaseService).db;
   const original = db
@@ -257,37 +255,25 @@ it('collapses attempts and ignores maintenance and cleanup intents', async () =>
     .from(operations)
     .where(eq(operations.runId, parent.id))
     .get()!;
-  db.insert(operations)
-    .values({
-      ...original,
-      id: randomUUID(),
-      seq: 2,
-      retryOf: original.id,
-      attemptNo: 2,
-      status: 'succeeded',
-    })
-    .run();
-  db.insert(operations)
-    .values({
-      ...original,
-      id: randomUUID(),
-      seq: 3,
-      errorCode: 'REMOTE_TASK_CHANGED',
-    })
-    .run();
-  db.insert(operations)
-    .values({
-      ...original,
-      id: randomUUID(),
-      seq: 4,
-      action: 'delete',
-      method: 'remove',
-      reason: 'retry_cleanup',
-      sourcePath: null,
-      sourceInstanceId: null,
-      expectedSourceSize: null,
-    })
-    .run();
+  seedOperations(db, {
+    ...original,
+    id: randomUUID(),
+    seq: 2,
+    operationId: original.id,
+    attemptNo: 2,
+    status: 'succeeded',
+  });
+  seedOperations(db, {
+    ...original,
+    id: randomUUID(),
+    seq: 4,
+    action: 'delete',
+    method: 'remove',
+    reason: 'retry_cleanup',
+    sourcePath: null,
+    sourceInstanceId: null,
+    expectedSourceSize: null,
+  });
   expect(f.runs().get(parent.id).retryEligibility).toMatchObject({
     eligible: false,
     reason: 'NO_RETRY_ITEMS',
@@ -305,6 +291,9 @@ it('recovers a half-written replacement intent', async () => {
   // 模拟PlanWriter刚提交delete批次，下一批create尚未写入。
   db.run(
     sql`DELETE FROM operation_dependencies WHERE operation_id IN (SELECT id FROM operations WHERE run_id=${parent.id} AND action='create')`,
+  );
+  db.run(
+    sql`DELETE FROM operation_attempts WHERE operation_id IN (SELECT id FROM operations WHERE run_id=${parent.id} AND action='create')`,
   );
   db.run(
     sql`DELETE FROM operations WHERE run_id=${parent.id} AND action='create'`,
@@ -448,10 +437,11 @@ it('does not create missing target ancestors when all selected files vanished', 
   f.files.set('/source/dir/file', Buffer.from('data'));
   const parent = await history({ syncEmptyDirs: true });
   const db = f.app.get(DatabaseService).db;
-  db.update(operations)
-    .set({ status: 'succeeded' })
-    .where(and(eq(operations.runId, parent.id), eq(operations.action, 'mkdir')))
-    .run();
+  setOperation(
+    db,
+    and(eq(operations.runId, parent.id), eq(operations.action, 'mkdir')),
+    { status: 'succeeded' },
+  );
   f.files.delete('/source/dir/file');
   f.files.delete('/target');
   const run = await terminal(
@@ -618,15 +608,14 @@ it('keeps target-specific scope and counts source files only once', async () => 
     ],
   });
   const db = f.app.get(DatabaseService).db;
-  db.update(operations)
-    .set({ status: 'succeeded' })
-    .where(
-      and(
-        eq(operations.runId, parent.id),
-        eq(operations.targetPath, '/target/second'),
-      ),
-    )
-    .run();
+  setOperation(
+    db,
+    and(
+      eq(operations.runId, parent.id),
+      eq(operations.targetPath, '/target/second'),
+    ),
+    { status: 'succeeded' },
+  );
   const run = await terminal(
     f,
     f.runs().retry(parent.id, { confirmDeletes: false }).id,

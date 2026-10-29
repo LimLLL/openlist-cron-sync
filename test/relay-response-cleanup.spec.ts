@@ -72,7 +72,7 @@ describe('relay response cleanup', () => {
     const stop = new AbortController();
     const transfer = await relay.prepare(
       {
-        operationId: randomUUID(),
+        attemptId: randomUUID(),
         jobId: randomUUID(),
         sourceDownloadConcurrency: 2,
         bandwidth: 1,

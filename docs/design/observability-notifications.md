@@ -6,7 +6,7 @@
 
 ## 日志
 
-Nest ConsoleLogger JSON模式，记录timestamp、level、context、message及params中的requestId/runId/operationId/instanceId、decision、errorCode。
+Nest ConsoleLogger JSON模式，记录timestamp、level、context、message及params中的requestId/runId/operationId/attemptId/instanceId、decision、errorCode；attemptId是一次执行尝试的ID，第一次尝试与operationId相同。
 入口仅记录脱敏后的参数，分支记录保护/重试/未知结果原因，异常记录一次归属明确的上下文。文件循环和传输chunk不打印；每5s最多聚合一次进度，SQLite进度更新最多每5s一次且终态强制保存。
 不开debug也应看到Run接受、扫描结束、保护阻断、终态、认证阻断、远程 task 重新启动、spool写盘失败。缺少空间等不可恢复错误退出前记录原因。
 webhook URL按秘密处理（Bark、ServerChan等把key放在path中）：日志只记录其origin（scheme://host[:port]），从不记录path或query。
@@ -61,7 +61,7 @@ delivery创建时固定加密的URL快照（url_snapshot_enc）和secret快照�
 | errorCodes    | string[]                                                           | 去重、按字典序升序、最多20项；测试为[]                                                                                      |
 
 RunPayload={id:Id,status:'succeeded'|'partial'|'failed',trigger:'manual'|'cron',dryRun:false,startedAt:Time|null,endedAt:Time}。dryRun恒为false，因为dry-run不发自动通知。startedAt在Run从未开始时为null，例如排队超时以QUEUE_TIMEOUT失败的Run仍会发run.failed。
-errorCodes取以下非空错误码的并集：runs.error_code、每个逻辑动作最后一次attempt的operations.error_code、run_targets.block_reasons_json中的code、scan_issues.code。先去重，再按字典序升序取前20项；不放文件路径、秘密或原始错误消息。
+errorCodes取以下非空错误码的并集：runs.error_code、每个逻辑操作当前尝试的operation_attempts.error_code、run_targets.block_reasons_json中的code、scan_issues.code。先去重，再按字典序升序取前20项；不放文件路径、秘密或原始错误消息。
 body在首次投递前以UTF-8 JSON序列化，所有重试保持同一字节序列。
 
 ## 签名

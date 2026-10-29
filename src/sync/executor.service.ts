@@ -19,8 +19,9 @@ import { OperationStore } from './operation-store.js';
 import { Mutations } from './mutations.js';
 import { FileCoordinator } from './file-coordinator.js';
 import { targetResult } from './results.js';
-import type { OperationRecord } from '../database/operation-schema.js';
+import type { ExecutionRecord } from '../database/operation-schema.js';
 import { setImmediate as yieldTurn } from 'node:timers/promises';
+import { endOperations } from '../database/operation-records.js';
 
 /** Target内按序推进的执行阶段。 */
 type Phase = 'mkdir' | 'create' | 'files' | 'directories';
@@ -300,7 +301,7 @@ export class Executor {
     context: ExecutionContext,
     store: OperationStore,
     stop: AbortController,
-    perform: (op: OperationRecord, admitted: () => void) => Promise<void>,
+    perform: (op: ExecutionRecord, admitted: () => void) => Promise<void>,
   ): Promise<void> {
     const capacity = phaseCapacity(target, phase);
     const relay =
@@ -328,7 +329,7 @@ export class Executor {
             : [];
         for (const op of page) {
           cursor = op.seq;
-          const root = op.retryOf ?? op.id;
+          const root = op.operationId;
           if (claimed.has(root)) continue;
           claimed.add(root);
           const isRoot =
@@ -456,22 +457,18 @@ export class Executor {
           })
           .where(eq(runTargets.id, target.id))
           .run();
-        this.database.db
-          .update(operations)
-          .set({
+        endOperations(
+          this.database.db,
+          and(
+            eq(operations.runTargetId, target.id),
+            eq(operations.status, 'pending'),
+          ),
+          {
             status: 'skipped',
-            errorCode: 'DEPENDENCY_FAILED',
-            errorMessage: 'Target root refresh unavailable',
-            endedAt: now,
-            updatedAt: now,
-          })
-          .where(
-            and(
-              eq(operations.runTargetId, target.id),
-              eq(operations.status, 'pending'),
-            ),
-          )
-          .run();
+            code: 'DEPENDENCY_FAILED',
+            message: 'Target root refresh unavailable',
+          },
+        );
       },
     );
   }

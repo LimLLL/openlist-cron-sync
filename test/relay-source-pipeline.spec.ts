@@ -375,7 +375,7 @@ describe('relay source pipeline', () => {
       );
       const op = plan(f, run.id)[0];
       expect(op.status).toBe('failed');
-      expect(op.multipart?.sourceStreamCompletedAt).toBeNull();
+      expect(op.attempts[0].multipart?.sourceStreamCompletedAt).toBeNull();
       expect(
         f.server.calls.some(
           (call) =>
@@ -424,8 +424,11 @@ describe('relay source pipeline', () => {
       f.server.calls.filter((call) => call.url.startsWith('/d/')),
     ).toHaveLength(2);
     expect(plan(f, run.id).filter((op) => op.action === 'create')).toHaveLength(
-      2,
+      1,
     );
+    expect(
+      plan(f, run.id).find((op) => op.action === 'create')?.attemptCount,
+    ).toBe(2);
     expect(run.stats.retryAttempts).toBe(1);
   });
   /** 最小可用spool仍允许多个EOF文件等待complete，预读不会占住等待源位的空间。
@@ -488,6 +491,8 @@ describe('relay source pipeline', () => {
         target_instance_id,target_path,is_dir,expected_source_size,affected_file_count,affected_bytes,created_at,updated_at)
       SELECT 'lazy-' || n, ${planned.id}, ${original.runTargetId}, n+1000,'create','relay','new','pending',
         ${f.id},'/source/new.txt',${f.id},'/target/lazy-' || n,0,12,1,12,${Date.now()},${Date.now()} FROM numbers`);
+    db.run(sql`INSERT INTO operation_attempts(id,operation_id,target_instance_id,method,status,created_at,updated_at)
+      SELECT id,id,target_instance_id,method,status,created_at,updated_at FROM operations WHERE run_id=${planned.id} AND seq>=1000`);
     const run = db.select().from(runs).where(eq(runs.id, planned.id)).get();
     if (!run) throw new Error('Missing Run');
     let downloads = 0;

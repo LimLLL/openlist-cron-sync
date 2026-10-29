@@ -1,7 +1,7 @@
 // 统一mkdir/remove/空put错误观察；删除始终先刷新前提再确认效果。
 import { scanInterval } from '../coordination/scan-pacing.service.js';
 import { setTimeout as delay } from 'node:timers/promises';
-import type { OperationRecord } from '../database/operation-schema.js';
+import type { ExecutionRecord } from '../database/operation-schema.js';
 import type { RunTargetRecord } from '../database/run-schema.js';
 import { OpenListError } from '../openlist/errors.js';
 import type { FileEntry } from '../openlist/protocol.js';
@@ -27,7 +27,7 @@ export function rejected(error: OpenListError): boolean {
  * @returns 类型和已知大小是否匹配。
  * @throws 不适用。
  */
-function same(op: OperationRecord, entry: FileEntry): boolean {
+function same(op: ExecutionRecord, entry: FileEntry): boolean {
   return (
     entry.isDir === op.isDir &&
     (op.isDir || entry.size === op.expectedTargetSize)
@@ -45,7 +45,7 @@ function same(op: OperationRecord, entry: FileEntry): boolean {
 export async function observeError(
   context: ExecutionContext,
   target: RunTargetRecord,
-  op: OperationRecord,
+  op: ExecutionRecord,
   error: OpenListError,
   hard: AbortSignal = context.hard,
 ): Promise<Outcome> {
@@ -114,10 +114,10 @@ export class Mutations {
    */
   async execute(
     target: RunTargetRecord,
-    initial: OperationRecord,
+    initial: ExecutionRecord,
     deadline?: AbortSignal,
     beforeDelete?: () => Promise<void>,
-  ): Promise<OperationRecord> {
+  ): Promise<ExecutionRecord> {
     const stop = deadline
       ? AbortSignal.any([this.context.signal, deadline])
       : this.context.signal;
@@ -137,7 +137,6 @@ export class Mutations {
       )
         return this.store.get(op.id);
       if (op.action === 'delete') await beforeDelete?.();
-      let retryable = false;
       try {
         const instance = this.context.instance(op.targetInstanceId);
         const request = {
@@ -178,14 +177,16 @@ export class Mutations {
           hard,
         );
         if (hard.aborted && this.context.stopping()) throw hard.reason;
-        this.store.end(op.id, outcome);
-        retryable = outcome.status === 'failed' && !rejected(error);
+        this.store.end(
+          op.id,
+          outcome,
+          outcome.status === 'failed' && !rejected(error),
+          stop,
+        );
       }
-      const result = this.store.get(op.id);
-      if (!retryable) return result;
-      const retry = this.store.retry(result);
-      if (!retry) return result;
-      op = retry;
+      const next = this.store.current(op.operationId);
+      if (next.id === op.id) return this.store.get(op.id);
+      op = next;
     }
   }
   /** 删除前强制读取，禁止把权限错误或非空目录当作可删。
@@ -197,7 +198,7 @@ export class Mutations {
    */
   private async precondition(
     target: RunTargetRecord,
-    op: OperationRecord,
+    op: ExecutionRecord,
     stop: AbortSignal,
   ): Promise<boolean> {
     if (target.deleteBlocked) {
@@ -256,7 +257,7 @@ export class Mutations {
    */
   async confirm(
     target: RunTargetRecord,
-    op: OperationRecord,
+    op: ExecutionRecord,
     hard: AbortSignal = this.context.hard,
   ): Promise<void> {
     const settings = this.context.run.config.settings;

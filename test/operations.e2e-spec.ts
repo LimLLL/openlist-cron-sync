@@ -118,6 +118,66 @@ describe('M3 operations and execution API', () => {
       .expect(200);
     expect(detail.body).toEqual(op);
   });
+  /** 一次源503后自动重试成功，两个列表均只有最终逻辑结果，详情保留失败尝试。 */
+  it('lists one successful operation after a source 503 and resolves its old attempt URL', async () => {
+    let rejected = false;
+    f.fault = (call, response) => {
+      if (call.url.startsWith('/d/') && !rejected) {
+        rejected = true;
+        return { status: 503, body: 'temporarily unavailable' };
+      }
+      return response;
+    };
+    const run = await terminal(
+      f,
+      f.runs().trigger(f.job({ retryCount: 1 }).id, {
+        dryRun: false,
+        confirmDeletes: false,
+      }).id,
+    );
+    expect(run.status).toBe('succeeded');
+    const operation = plan(f, run.id)[0];
+    expect(operation.attemptCount).toBe(2);
+    expect(operation.attempts.map((attempt) => attempt.status)).toEqual([
+      'failed',
+      'succeeded',
+    ]);
+    expect(operation.attempts[0].error?.message).toContain('503');
+    for (const route of ['/operations', `/runs/${run.id}/operations`]) {
+      const list = await request(base)
+        .get(`/api/v1${route}`)
+        .auth(token, { type: 'bearer' })
+        .expect(200);
+      expect(list.body.total).toBe(1);
+      expect(list.body.items[0]).toMatchObject({
+        id: operation.id,
+        status: 'succeeded',
+        attemptCount: 2,
+        error: null,
+      });
+      expect(list.body.items[0]).not.toHaveProperty('attempts');
+      const failed = await request(base)
+        .get(`/api/v1${route}?status=failed`)
+        .auth(token, { type: 'bearer' })
+        .expect(200);
+      expect(failed.body.total).toBe(0);
+    }
+    const oldLink = await request(base)
+      .get(`/api/v1/operations/${operation.attempts[1].id}`)
+      .auth(token, { type: 'bearer' })
+      .expect(200);
+    expect(oldLink.body).toEqual(operation);
+    await request(base)
+      .get(`/api/v1/runs/${run.id}/operations?includeMaintenance=true`)
+      .auth(token, { type: 'bearer' })
+      .expect(400);
+    expect(run.stats).toMatchObject({
+      succeededCreates: 1,
+      failedOperations: 0,
+      retryAttempts: 1,
+    });
+  });
+
   /** 公共OpenAPI应反映新路由和默认真实执行。
    * @param 不适用。
    * @returns 验证完成。

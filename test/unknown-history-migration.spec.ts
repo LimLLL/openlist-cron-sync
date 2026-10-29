@@ -70,7 +70,7 @@ function insertLegacyOperation(
  * @returns 升级、重复启动与约束验证完成。
  * @throws Error 迁移或断言失败。
  */
-it('preserves unknown history, legacy maintenance, dependencies and frozen snapshots while allowing reused upload IDs', async () => {
+it('preserves unknown history and frozen snapshots and removes retired maintenance while allowing reused upload IDs', async () => {
   const directory = await temporaryDirectory();
   const config = new AppConfig(
     new ConfigService({ environment: environmentFor(directory.path) }),
@@ -97,14 +97,6 @@ it('preserves unknown history, legacy maintenance, dependencies and frozen snaps
       resolution_kind='observed', resolved_at=7, resolved_by_run_id=? WHERE id=?`,
       )
       .run(recovering.runId, recovering.runId, first.id);
-    old
-      .prepare('UPDATE operations SET retry_of=?, attempt_no=2 WHERE id=?')
-      .run(first.id, second.id);
-    old
-      .prepare(
-        'INSERT INTO operation_dependencies (operation_id,depends_on_id) VALUES (?,?)',
-      )
-      .run(second.id, first.id);
     const original = object(
       old
         .prepare('SELECT * FROM operations WHERE run_id=? ORDER BY seq LIMIT 1')
@@ -148,13 +140,19 @@ it('preserves unknown history, legacy maintenance, dependencies and frozen snaps
     expect(db.all(sql`SELECT * FROM operation_dependencies`)).toEqual(
       beforeEdges,
     );
-    expect(db.all(sql`SELECT * FROM operations ORDER BY id`)).toEqual(
-      beforeOps.map((row) =>
-        Object.fromEntries(
-          Object.entries(row).filter(([key]) => !REMOVED.includes(key)),
-        ),
-      ),
-    );
+    for (const oldRow of beforeOps.filter(
+      (row) => row.error_code !== 'REMOTE_TASK_CHANGED',
+    )) {
+      const attempt = db.get<Record<string, unknown>>(
+        sql`SELECT * FROM operation_attempts WHERE id=${oldRow.id}`,
+      )!;
+      for (const key of Object.keys(attempt))
+        if (key !== 'operation_id') expect(attempt[key]).toEqual(oldRow[key]);
+      expect(attempt.operation_id).toBe(oldRow.id);
+    }
+    expect(
+      db.get(sql`SELECT id FROM operation_attempts WHERE id=${maintenanceId}`),
+    ).toBeUndefined();
     expect(
       db
         .all(sql`SELECT * FROM runs ORDER BY id`)
@@ -181,11 +179,11 @@ it('preserves unknown history, legacy maintenance, dependencies and frozen snaps
     for (const field of REMOVED) expect(columns).not.toContain(field);
     // 相同 session 允许出现在不同历史尝试，单个操作的事实仍单独保存。
     db.run(
-      sql`UPDATE operations SET multipart_upload_id=${first.multipart_upload_id} WHERE id=${second.id}`,
+      sql`UPDATE operation_attempts SET multipart_upload_id=${first.multipart_upload_id} WHERE id=${second.id}`,
     );
     expect(
       db.get<{ n: number }>(
-        sql`SELECT count(*) AS n FROM operations WHERE multipart_upload_id=${first.multipart_upload_id}`,
+        sql`SELECT count(*) AS n FROM operation_attempts WHERE multipart_upload_id=${first.multipart_upload_id}`,
       )?.n,
     ).toBe(2);
     expect(db.all(sql`PRAGMA foreign_key_check`)).toEqual([]);
@@ -198,9 +196,9 @@ it('preserves unknown history, legacy maintenance, dependencies and frozen snaps
     expect(db === service.db).toBe(false);
     expect(
       service.db.get(
-        sql`SELECT error_code FROM operations WHERE id=${maintenanceId}`,
+        sql`SELECT error_code FROM operation_attempts WHERE id=${maintenanceId}`,
       ),
-    ).toEqual({ error_code: 'REMOTE_TASK_CHANGED' });
+    ).toBeUndefined();
   } finally {
     service.onApplicationShutdown();
     await directory.remove();

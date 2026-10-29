@@ -1,6 +1,6 @@
 // 分类relay尝试并有界中止session，保持文件工作流与传输细节分离。
 import { Logger } from '@nestjs/common';
-import type { OperationRecord } from '../database/operation-schema.js';
+import type { ExecutionRecord } from '../database/operation-schema.js';
 import type { RunTargetRecord } from '../database/run-schema.js';
 import type { RelayService } from '../relay/relay.service.js';
 import type { PreparedTransfer } from '../relay/relay-types.js';
@@ -36,7 +36,7 @@ export class RelayOutcome {
    */
   async classify(
     target: RunTargetRecord,
-    op: OperationRecord,
+    op: ExecutionRecord,
     error: unknown,
     timedOut: boolean,
   ): Promise<Outcome> {
@@ -95,7 +95,7 @@ export class RelayOutcome {
     } catch (error) {
       if (!(error instanceof OpenListError)) throw error;
       this.logger.warn('Relay abort unavailable', {
-        operationId: transfer.input.operationId,
+        attemptId: transfer.input.attemptId,
         errorCode: error.code,
       });
     }

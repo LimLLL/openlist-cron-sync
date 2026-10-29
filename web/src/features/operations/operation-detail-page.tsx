@@ -57,7 +57,10 @@ export function OperationDetailPage() {
         title={<span translate="no">{pathName(data.targetPath)}</span>}
         badges={
           <>
-            <OperationStatusBadge status={data.status} />
+            <OperationStatusBadge
+              status={data.status}
+              attemptCount={data.attemptCount}
+            />
             <Badge>{t(`common:operationAction.${data.action}`)}</Badge>
             {data.action === 'create' && (
               <Badge>{t(`common:operationMethod.${data.method}`)}</Badge>

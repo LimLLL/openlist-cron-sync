@@ -8,6 +8,8 @@ import { DatabaseService } from '../src/database/database.service.js';
 import { operations } from '../src/database/operation-schema.js';
 import { runs } from '../src/database/run-schema.js';
 import { TaskResources } from '../src/coordination/task-resources.js';
+import { OperationsService } from '../src/runs/operations.service.js';
+import { setOperation } from './operation-fixture.js';
 
 /** 注册生产copy链路验收。
  * @param 不适用。
@@ -109,7 +111,7 @@ describe('M6 server copy execution', () => {
        * @returns 不适用。
        * @throws Error 尚未提交。
        */
-      () => expect(plan(f, accepted.id)[0]?.task).toBeTruthy(),
+      () => expect(plan(f, accepted.id)[0]?.attempts[0].task).toBeTruthy(),
     );
     expect(
       f.app.get(TaskResources).count(plan(f, accepted.id)[0].runTargetId),
@@ -155,7 +157,11 @@ describe('M6 server copy execution', () => {
       .from(operations)
       .where(eq(operations.runId, run.id))
       .get();
-    expect(op?.remoteCleanupPending).toBe(false);
+    expect(
+      op &&
+        f.app.get(OperationsService).get(op.id).attempts[0]
+          .remoteCleanupPending,
+    ).toBe(false);
   });
   /** 旧计划仅恢复已知tid；不重新发copy且Run保持中断结论。
    * @param 不适用。
@@ -171,10 +177,11 @@ describe('M6 server copy execution', () => {
       destination: '/target/new.txt',
     });
     const db = f.app.get(DatabaseService).db;
-    db.update(operations)
-      .set({ status: 'submitted', openlistTaskId: 'recovered', remoteState: 0 })
-      .where(eq(operations.id, op.id))
-      .run();
+    setOperation(db, eq(operations.id, op.id), {
+      status: 'submitted',
+      openlistTaskId: 'recovered',
+      remoteState: 0,
+    });
     db.update(runs)
       .set({ status: 'executing', dryRun: false, endedAt: null })
       .where(eq(runs.id, run.id))
@@ -224,8 +231,13 @@ describe('M6 server copy execution', () => {
        */
       (op) => op.action === 'create',
     );
-    expect(creates.map(status)).toEqual(['failed', 'succeeded']);
-    expect(creates[0].task?.id).not.toBe(creates[1].task?.id);
+    expect(creates.flatMap((op) => op.attempts).map(status)).toEqual([
+      'failed',
+      'succeeded',
+    ]);
+    expect(creates[0].attempts[0].task?.id).not.toBe(
+      creates[0].attempts[1].task?.id,
+    );
     expect(
       rows.some(
         /** 确认部分目标经过真实删除保护链。

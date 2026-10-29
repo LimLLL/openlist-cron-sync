@@ -1,7 +1,7 @@
-// 使用真实SQLite验证闭包资格、分批删除及依赖外键完整性。
+// 使用真实SQLite验证保留资格、分批删除及依赖外键完整性。
 import { randomUUID } from 'node:crypto';
 import { eq, sql } from 'drizzle-orm';
-import { m2Fixture, preview, plan } from './m2-fixture.js';
+import { m2Fixture, preview } from './m2-fixture.js';
 import type { M2Fixture } from './m2-fixture.js';
 import { DatabaseService } from '../src/database/database.service.js';
 import {
@@ -11,13 +11,14 @@ import {
 import { runs } from '../src/database/run-schema.js';
 import { Readiness } from '../src/coordination/readiness.js';
 import { HistoryRetention } from '../src/maintenance/history-retention.js';
+import { seedOperations, setOperation } from './operation-fixture.js';
 
 /** 注册历史保留验收。
  * @param 不适用。
  * @returns 不适用。
  * @throws 不适用。
  */
-describe('M5 history closure retention', () => {
+describe('M5 history retention', () => {
   let f: M2Fixture;
   /** 创建一天保留的独立实例。
    * @param 不适用。
@@ -40,7 +41,7 @@ describe('M5 history closure retention', () => {
    * @returns 验证完成。
    * @throws Error 断言失败。
    */
-  it('retains a mixed-age closure and removes it once every run expires', async () => {
+  it('removes expired runs independently of newer runs', async () => {
     const old = await preview(f, f.job());
     const recent = await preview(f, f.job());
     const db = f.app.get(DatabaseService).db;
@@ -48,12 +49,8 @@ describe('M5 history closure retention', () => {
       .set({ endedAt: Date.now() - 3 * 86400000 })
       .where(eq(runs.id, old.id))
       .run();
-    db.update(operations)
-      .set({ retryOf: plan(f, recent.id)[0].id })
-      .where(eq(operations.id, plan(f, old.id)[0].id))
-      .run();
     await f.app.get(HistoryRetention).cycle();
-    expect(f.runs().list({ page: 1, pageSize: 50 }).total).toBe(2);
+    expect(f.runs().list({ page: 1, pageSize: 50 }).total).toBe(1);
     db.update(runs)
       .set({ endedAt: Date.now() - 2 * 86400000 })
       .where(eq(runs.id, recent.id))
@@ -71,14 +68,11 @@ describe('M5 history closure retention', () => {
     const run = await preview(f, f.job());
     const db = f.app.get(DatabaseService).db;
     db.update(runs).set({ endedAt: 1 }).where(eq(runs.id, run.id)).run();
-    db.update(operations)
-      .set({
-        status: 'unknown',
-        endedAt: 1,
-        unknownSince: 1,
-      })
-      .where(eq(operations.runId, run.id))
-      .run();
+    setOperation(db, eq(operations.runId, run.id), {
+      status: 'unknown',
+      endedAt: 1,
+      unknownSince: 1,
+    });
     await f.app.get(HistoryRetention).cycle();
     expect(f.runs().list({ page: 1, pageSize: 50 }).total).toBe(0);
   });
@@ -105,18 +99,16 @@ describe('M5 history closure retention', () => {
       () => {
         for (let seq = 2; seq <= 700; seq++) {
           const id = randomUUID();
-          db.insert(operations)
-            .values({
-              ...original,
-              id,
-              seq,
-              method: 'server_copy',
-              status: 'unknown',
-              endedAt: 1,
-              errorCode: 'REMOTE_TASK_CHANGED',
-              unknownSince: 1,
-            })
-            .run();
+          seedOperations(db, {
+            ...original,
+            id,
+            seq,
+            method: 'server_copy',
+            status: 'unknown',
+            endedAt: 1,
+            errorCode: 'OPENLIST_ERROR',
+            unknownSince: 1,
+          });
           db.insert(operationDependencies)
             .values({ operationId: id, dependsOnId: original.id })
             .run();
@@ -175,9 +167,7 @@ describe('M5 history closure retention', () => {
       .get();
     if (!original) throw new Error('Missing fixture');
     for (let seq = 2; seq <= 700; seq++)
-      db.insert(operations)
-        .values({ ...original, id: randomUUID(), seq })
-        .run();
+      seedOperations(db, { ...original, id: randomUUID(), seq });
     db.update(runs).set({ endedAt: 1 }).where(eq(runs.id, run.id)).run();
     let observed = 700;
     /** 在实际批次已提交后停止，测试可见的部分历史而非私有方法。

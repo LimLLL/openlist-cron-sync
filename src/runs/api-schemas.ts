@@ -30,7 +30,7 @@ const statsSchema = {
     ),
   ),
   description:
-    '运行列表和详情在planned/executing/cancelling/recovering时读取实时SQL聚合，排队、扫描和终态读取持久化统计；逻辑动作取最后attempt，字节含全部attempt及重传；relay进度约5秒持久化；预览执行结果和实际字节为0；源计数只计一次。retryOfRunId非空时只统计范围项及必要祖先；源文件已确认消失的noop也计入unchangedFiles，过滤不计入成功；不表示全树扫描完成',
+    '运行列表和详情在planned/executing/cancelling/recovering时读取实时SQL聚合，排队、扫描和终态读取持久化统计；逻辑动作读取Operation结果，字节含全部attempt及重传；relay进度约5秒持久化；预览执行结果和实际字节为0；源计数只计一次。retryOfRunId非空时只统计范围项及必要祖先；源文件已确认消失的noop也计入unchangedFiles，过滤不计入成功；不表示全树扫描完成',
 };
 const errorSchema = nullable(
   objectSchema({ code: stringSchema, message: stringSchema }),
@@ -184,8 +184,43 @@ export const operationViewSchema = objectSchema({
   expectedTargetSize: nullable(sizeSchema),
   affectedFileCount: sizeSchema,
   affectedBytes: sizeSchema,
-  retryOf: nullable(idSchema),
-  attemptNo: { type: 'integer', minimum: 1 },
+  attemptCount: {
+    type: 'integer',
+    minimum: 1,
+    maximum: 10,
+    description:
+      '已存在的尝试数，包含退避等待中的pending尝试；受Run冻结重试预算限制',
+  },
+  bytesDownloaded: { ...sizeSchema, description: '全部尝试累计下载字节' },
+  bytesTransferred: {
+    ...sizeSchema,
+    description: '全部尝试累计上传payload字节',
+  },
+  error: {
+    ...errorSchema,
+    description:
+      '当前尝试的错误，等待下一次重试时为null。DELETE_BLOCKED：删除保护；DELETE_LIMIT：数值/清理预算拒绝；SPOOL_FULL：真实ENOSPC/EDQUOT或session落库后独占容量不足，摘要区分insufficient spool capacity；PLAN_INTERRUPTED：旧计划失效',
+  },
+  createdAt: timeSchema,
+  updatedAt: timeSchema,
+  submittedAt: {
+    ...nullable(timeSchema),
+    description: '最早一次非空的尝试提交时间',
+  },
+  endedAt: {
+    ...nullable(timeSchema),
+    description: '逻辑操作终态时间，等待重试时为null',
+  },
+  unknownSince: {
+    ...nullable(timeSchema),
+    description: '当前尝试进入unknown的时间',
+  },
+});
+/** 每次执行的完整公开事实；数组上限来自已冻结的重试预算。 */
+export const attemptViewSchema = objectSchema({
+  id: idSchema,
+  attemptNo: { type: 'integer', minimum: 1, maximum: 10 },
+  status: { type: 'string', enum: [...OPERATION_STATUSES] },
   task: nullable(
     objectSchema({ id: stringSchema, state: nullable({ type: 'integer' }) }),
   ),
@@ -198,18 +233,21 @@ export const operationViewSchema = objectSchema({
       sourceStreamCompletedAt: nullable(timeSchema),
     }),
   ),
+  remoteCleanupPending: booleanSchema,
   bytesDownloaded: sizeSchema,
   bytesTransferred: sizeSchema,
-  error: {
-    ...errorSchema,
-    description:
-      'DELETE_BLOCKED：删除保护；DELETE_LIMIT：数值/清理预算拒绝；SPOOL_FULL：真实ENOSPC/EDQUOT或session落库后独占容量不足，摘要区分insufficient spool capacity；PLAN_INTERRUPTED：旧计划失效',
-  },
+  error: errorSchema,
   createdAt: timeSchema,
   updatedAt: timeSchema,
   submittedAt: nullable(timeSchema),
   endedAt: nullable(timeSchema),
+  nextAttemptAt: nullable(timeSchema),
   unknownSince: nullable(timeSchema),
+});
+/** 操作详情内嵌全部尝试，列表仍只返回摘要。 */
+export const operationDetailSchema = objectSchema({
+  ...operationViewSchema.properties,
+  attempts: { ...arraySchema(attemptViewSchema), minItems: 1, maxItems: 10 },
 });
 export const issueViewSchema = objectSchema({
   id: idSchema,

@@ -20,6 +20,7 @@ import type {
 import { addStat, emptyStats, PlanError } from './stats.js';
 import type { Stats } from './stats.js';
 import type { Entry } from './planner.js';
+import { insertOperation } from '../database/operation-records.js';
 
 /** 扫描期间每目标的有界累计状态。 */
 export interface TargetState {
@@ -342,7 +343,7 @@ export class PlanWriter {
        */
       () => {
         for (const op of this.pending) {
-          this.db.insert(operations).values(op.row).run();
+          insertOperation(this.db, op.row);
           for (const parent of op.dependencies) {
             const dependency = this.db
               .select()

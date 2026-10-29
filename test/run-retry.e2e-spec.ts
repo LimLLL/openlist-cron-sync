@@ -8,6 +8,7 @@ import { TEST_PASSWORD, tokenOf } from './helpers.js';
 import { DatabaseService } from '../src/database/database.service.js';
 import { runs } from '../src/database/run-schema.js';
 import { operations } from '../src/database/operation-schema.js';
+import { setOperation } from './operation-fixture.js';
 
 let f: RelayFixture;
 let base: string;
@@ -35,10 +36,10 @@ beforeEach(async () => {
     .set({ dryRun: false, status: 'failed' })
     .where(eq(runs.id, parentId))
     .run();
-  db.update(operations)
-    .set({ status: 'failed', endedAt: Date.now() })
-    .where(eq(operations.runId, parentId))
-    .run();
+  setOperation(db, eq(operations.runId, parentId), {
+    status: 'failed',
+    endedAt: Date.now(),
+  });
 });
 /** 释放本例资源。
  * @returns 清理完成。

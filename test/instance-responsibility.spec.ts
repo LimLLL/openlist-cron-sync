@@ -8,6 +8,7 @@ import { DatabaseService } from '../src/database/database.service.js';
 import { operations } from '../src/database/operation-schema.js';
 import { hasResponsibility } from '../src/database/responsibility.js';
 import { object } from '../src/openlist/errors.js';
+import { setOperation } from './operation-fixture.js';
 
 /** 覆盖实例变更与活动责任谓词，以及责任期间的 ACCOUNT_CHANGED 保护。
  * @param 不适用。
@@ -141,28 +142,22 @@ describe('M2 instance responsibility', () => {
     const op = plan(f, run.id)[0];
     const db = f.app.get(DatabaseService).db;
     const now = Date.now();
-    db.update(operations)
-      .set({
-        status: 'unknown',
-        endedAt: now,
-        unknownSince: now,
-      })
-      .where(eq(operations.id, op.id))
-      .run();
+    setOperation(db, eq(operations.id, op.id), {
+      status: 'unknown',
+      endedAt: now,
+      unknownSince: now,
+    });
     f.jobs().archive(job.id);
     expect(hasResponsibility(db, f.id)).toBe(false);
     expect(
       f.app.get(InstancesService).patch(f.id, { downloadMode: 'p' })
         .downloadMode,
     ).toBe('p');
-    db.update(operations)
-      .set({
-        method: 'server_copy',
-        openlistTaskId: 'fixture-task',
-        remoteCleanupPending: true,
-      })
-      .where(eq(operations.id, op.id))
-      .run();
+    setOperation(db, eq(operations.id, op.id), {
+      method: 'server_copy',
+      openlistTaskId: 'fixture-task',
+      remoteCleanupPending: true,
+    });
     expect(hasResponsibility(db, f.id)).toBe(true);
     expect(() =>
       f.app
@@ -172,10 +167,7 @@ describe('M2 instance responsibility', () => {
     expect(() => f.app.get(InstancesService).archive(f.id)).toThrow(
       'Instance is referenced',
     );
-    db.update(operations)
-      .set({ remoteCleanupPending: false })
-      .where(eq(operations.id, op.id))
-      .run();
+    setOperation(db, eq(operations.id, op.id), { remoteCleanupPending: false });
     f.app.get(InstancesService).archive(f.id);
   });
 });

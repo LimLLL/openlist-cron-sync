@@ -108,6 +108,7 @@ export default {
     unknown: 'Unknown',
     cancelled: 'Cancelled',
   },
+  operationAwaitingRetry: 'Retry pending',
   operationAction: {
     mkdir: 'Create folder',
     create: 'Copy file',

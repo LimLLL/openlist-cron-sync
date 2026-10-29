@@ -83,8 +83,9 @@ describe('M6 retry cleanup preparation', () => {
          */
         (row) => row.action === 'create',
       );
-      expect(creates).toHaveLength(2);
-      expect(creates[1]).toMatchObject({
+      expect(creates).toHaveLength(1);
+      expect(creates[0].attempts).toHaveLength(2);
+      expect(creates[0]).toMatchObject({
         status: expectedStatus,
         error: { code: expectedCode },
       });

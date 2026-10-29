@@ -24,7 +24,7 @@
 ## 表清单
 
 配置表：[admins、instances、jobs、job_targets、notification_channels、job_notification_channels](configuration-tables.md)。
-执行表：[runs、run_targets、operations、operation_dependencies、scan_issues、run_retry_items、notification_deliveries](execution-tables.md)。
+执行表：[runs、run_targets、operations、operation_attempts、operation_dependencies、scan_issues、run_retry_items、notification_deliveries](execution-tables.md)。
 
 ```mermaid
 erDiagram
@@ -55,11 +55,13 @@ Job 编辑在存在非终态Run时409；无活动Run时可编辑，但旧target�
 ## 事务边界
 
 1. 触发事务：检查Job状态、非终态唯一约束、队列上限，插入Run+run_targets。
-2. 规划事务：按配置批量插入operations（含按计划顺序递增的seq）/dependencies/issues；最后事务将Run改planned并记录scanCompletedAt。dry-run不创建任何远程责任。
-3. 提交事务：pending→submitting，写attemptNo/开始时间；事务提交成功后才发网络请求。relay收到有效init响应后先写upload_id等session信息，再发送chunk；源EOF验证后先写source_stream_completed_at，再发布最后一个chunk。
+2. 规划事务：按配置批量插入operations（含按计划顺序递增的seq）及各自的第一次尝试、dependencies、issues；最后事务将Run改planned并记录scanCompletedAt。dry-run不创建任何远程责任。
+3. 提交事务：当前尝试与所属操作同时pending→submitting，写开始时间；事务提交成功后才发网络请求。relay收到有效init响应后先写upload_id等session信息，再发送chunk；源EOF验证后先写source_stream_completed_at，再发布最后一个chunk。
 4. 响应事务：保存task id或结果；unknown同时写unknownSince及受影响路径。
 5. delete成功事务：标记delete成功、开放依赖create。
 6. Run终态事务：聚合计数、写结束时间、创建本次best-effort投递记录。通知发送在事务之外。
+
+尝试结束与是否安排下一次尝试在同一事务提交，不存在“已失败但未安排重试”的中间状态。
 
 远程调用不放在SQL事务中。远程提交与SQLite无法原子提交；submitting崩溃窗口是设计事实，不使用自造幂等键宣称解决。
 
@@ -80,7 +82,7 @@ Instance 编辑/归档、Job 归档后的引用保留、历史清理都使用同
 | 非终态 Run     | status 不在终态集合      |
 | 待清理远程任务 | remote_cleanup_pending=1 |
 
-历史清理在此基础上额外要求整条引用闭包（后续 Run/Operation 的 retry_of 引用）全部超期且无责任，见 [维护与历史保留](retention.md#sqlite历史)。
+历史清理逐个 Run 判断，操作与依赖都不跨 Run，见 [维护与历史保留](retention.md#sqlite历史)。
 
 Run路径密码仅服务当前Run扫描、执行和恢复；在终态事务清除，包括interrupted。后续 Run 使用自己的快照，不回借旧Run密码。M3沿用现有schema，不建立spool表、额外checkpoint列或持久化路径锁。
 

@@ -6,6 +6,7 @@ import { DatabaseService } from '../src/database/database.service.js';
 import { operations } from '../src/database/operation-schema.js';
 import { runTargets } from '../src/database/run-schema.js';
 import { TaskResources } from '../src/coordination/task-resources.js';
+import { seedOperations } from './operation-fixture.js';
 
 /** 两类索引候选跨越128行分页边界，重叠行只占一个名额。
  * @param 不适用。
@@ -42,25 +43,22 @@ it('restores paged task responsibility once and excludes released occupancy', as
                 : index < 390
                   ? 'running'
                   : 'unknown';
-          db.insert(operations)
-            .values({
-              ...original,
-              id,
-              seq: index + 2,
-              status,
-              endedAt: status === 'unknown' ? 1 : null,
-              unknownSince: status === 'unknown' ? 1 : null,
-              openlistTaskId: index === 394 ? null : id,
-              remoteCleanupPending:
-                index < 260 || (index >= 390 && index < 394),
-              remoteState:
-                index >= 390 && index < 393
-                  ? [2, 4, 7][index - 390]
-                  : index === 0
-                    ? null
-                    : 1,
-            })
-            .run();
+          seedOperations(db, {
+            ...original,
+            id,
+            seq: index + 2,
+            status,
+            endedAt: status === 'unknown' ? 1 : null,
+            unknownSince: status === 'unknown' ? 1 : null,
+            openlistTaskId: index === 394 ? null : id,
+            remoteCleanupPending: index < 260 || (index >= 390 && index < 394),
+            remoteState:
+              index >= 390 && index < 393
+                ? [2, 4, 7][index - 390]
+                : index === 0
+                  ? null
+                  : 1,
+          });
         }
       },
     );

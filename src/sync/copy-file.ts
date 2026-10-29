@@ -1,5 +1,5 @@
 // 提供server_copy源元数据前提及单文件提交，删除链仍由FileCoordinator拥有。
-import type { OperationRecord } from '../database/operation-schema.js';
+import type { ExecutionRecord } from '../database/operation-schema.js';
 import type { RunTargetRecord } from '../database/run-schema.js';
 import { OpenListError } from '../openlist/errors.js';
 import { splitPath } from './execution-context.js';
@@ -31,7 +31,7 @@ export class CopyFile {
    * @returns 源前提成立。
    * @throws OpenListError 源变化/读取失败；Error 计划损坏。
    */
-  async source(target: RunTargetRecord, op: OperationRecord): Promise<void> {
+  async source(target: RunTargetRecord, op: ExecutionRecord): Promise<void> {
     if (!op.sourcePath || !op.sourceInstanceId)
       throw new Error('Copy source missing');
     const { directory, name } = splitPath(op.sourcePath);
@@ -84,7 +84,7 @@ export class CopyFile {
    * @returns 已收敛或关机保留的操作。
    * @throws OpenListError 请求结果需观察；Error 本地错误。
    */
-  async submit(op: OperationRecord): Promise<OperationRecord> {
+  async submit(op: ExecutionRecord): Promise<ExecutionRecord> {
     if (!op.sourcePath) throw new Error('Copy source missing');
     const source = splitPath(op.sourcePath);
     const destination = splitPath(op.targetPath);
@@ -118,7 +118,7 @@ export class CopyFile {
       this.store.end(op.id, { status: 'succeeded' });
       return this.store.get(op.id);
     }
-    this.tracker.submitted(op.id, tasks[0]);
+    this.tracker.submitted(this.store, op.id, tasks[0]);
     return this.tracker.track(this.context, this.store.get(op.id));
   }
 }

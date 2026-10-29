@@ -218,7 +218,6 @@ export default {
       ended: '结束',
     },
     directory: '目录',
-    retry: '重试',
     details: '详情',
     openPage: '在新页面打开',
     loading: '正在加载操作…',

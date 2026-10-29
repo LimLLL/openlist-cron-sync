@@ -204,6 +204,7 @@ curl -X POST "$BASE/jobs/$JOB_ID/runs" \
 - `action` / `method`：`mkdir`，`create`（`relay` 或 `server_copy`），`delete`（`remove`）。
 - `reason`：`prepare`（目标根目录）、`new`（新建）、`replace`（替换）、`extra`（多余文件或目录）。
 - dry-run 中 `status` 为 `pending`（真实运行会执行）或 `skipped`。跳过的原因在 `error.code`，常见的有 `DELETE_LIMIT`（超出阈值）、`DELETE_BLOCKED`（扫描保护，具体原因见该目标的 `blockReasons` 和扫描问题）。
+- 每个动作只有一行。真实运行中失败后自动重试，`status` 是最终结果，`attemptCount` 是尝试次数：例如失败一次、重试成功显示为一条“成功”，尝试 2 次。正在等待下一次重试时状态显示为“等待重试”。每次尝试的结果和错误在操作详情的“尝试记录”中（`GET /api/v1/operations/:id` 的 `attempts`）。
 
 ### 扫描问题
 

@@ -3,7 +3,6 @@ import { and, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { jobs, jobTargets } from './job-schema.js';
 import { runs } from './run-schema.js';
-import { operations } from './operation-schema.js';
 import { ACTIVE_RUN_STATUSES } from '../runs/run-types.js';
 import { ApiError } from '../common/errors.js';
 
@@ -100,16 +99,11 @@ export function hasResponsibility(
   instanceId: string,
 ): boolean {
   if (activeRunReference(db, instanceId)) return true;
-  const endpoint = or(
-    eq(operations.sourceInstanceId, instanceId),
-    eq(operations.targetInstanceId, instanceId),
-  );
+  // 从稀疏清理责任出发，避免为一个实例遍历所有历史逻辑操作。
   return (
-    db
-      .select({ id: operations.id })
-      .from(operations)
-      .where(and(eq(operations.remoteCleanupPending, true), endpoint))
-      .limit(1)
-      .get() !== undefined
+    db.get(sql`SELECT 1 FROM operation_attempts a INDEXED BY attempts_cleanup
+    JOIN operations o ON o.id=a.operation_id
+    WHERE a.remote_cleanup_pending=1 AND (o.source_instance_id=${instanceId} OR o.target_instance_id=${instanceId}) LIMIT 1`) !==
+    undefined
   );
 }

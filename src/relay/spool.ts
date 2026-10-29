@@ -136,7 +136,7 @@ export class Spool {
     }
   }
   /** 将完整块先写临时文件再原子发布。
-   * @param operationId 当前尝试ID。
+   * @param attemptId 当前尝试ID。
    * @param index 文件内块号。
    * @param data 完整payload。
    * @param reservation 已取得空间。
@@ -144,12 +144,12 @@ export class Spool {
    * @throws RelayError 文件系统写入失败。
    */
   async publish(
-    operationId: string,
+    attemptId: string,
     index: number,
     data: Buffer,
     reservation: Reservation,
   ): Promise<Block> {
-    const directory = join(this.config.spoolDir, `relay-${operationId}`);
+    const directory = join(this.config.spoolDir, `relay-${attemptId}`);
     const path = join(directory, String(index));
     try {
       await mkdir(directory, { recursive: true, mode: 0o700 });
@@ -203,13 +203,13 @@ export class Spool {
     this.generation++;
   }
   /** 文件所有读取者退出后移除空目录或失败临时块。
-   * @param operationId 本服务创建的UUID。
+   * @param attemptId 本服务创建的UUID。
    * @returns 清理完成。
    * @throws RelayError 文件系统清理失败。
    */
-  async finish(operationId: string): Promise<void> {
+  async finish(attemptId: string): Promise<void> {
     try {
-      await rm(join(this.config.spoolDir, `relay-${operationId}`), {
+      await rm(join(this.config.spoolDir, `relay-${attemptId}`), {
         recursive: true,
         force: true,
       });

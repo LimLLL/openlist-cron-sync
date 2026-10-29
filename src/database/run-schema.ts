@@ -232,7 +232,7 @@ export type RunRecord = typeof runs.$inferSelect;
 /** Run Target 数据库记录。 */
 export type RunTargetRecord = typeof runTargets.$inferSelect;
 
-/** 重试范围的扫描结果；执行结果仍以operations的最后attempt为准。 */
+/** 重试范围的扫描结果；执行结果以operations的逻辑操作状态为准。 */
 export const RETRY_SCAN_OUTCOMES = [
   'unprocessed',
   'noop',

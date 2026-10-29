@@ -1,7 +1,7 @@
 // 协调源准备、替换/重试清理和relay提交；delete不能脱离此工作流派发。
 import { Logger } from '@nestjs/common';
 import { setTimeout as delay } from 'node:timers/promises';
-import type { OperationRecord } from '../database/operation-schema.js';
+import type { ExecutionRecord } from '../database/operation-schema.js';
 import type { RunTargetRecord } from '../database/run-schema.js';
 import type { RelayService } from '../relay/relay.service.js';
 import type { PreparedTransfer } from '../relay/relay-types.js';
@@ -49,7 +49,7 @@ export class FileCoordinator {
    */
   async execute(
     target: RunTargetRecord,
-    initial: OperationRecord,
+    initial: ExecutionRecord,
     admitted?: () => void,
   ): Promise<void> {
     const relayOutcome = new RelayOutcome(this.context, this.relay);
@@ -78,7 +78,6 @@ export class FileCoordinator {
         return;
       }
       let transfer: PreparedTransfer | undefined;
-      let retryable = false;
       let progressTimer: ReturnType<typeof setInterval> | undefined;
       let persistenceFailure: unknown;
       const localStop = new AbortController();
@@ -108,7 +107,7 @@ export class FileCoordinator {
         else {
           transfer = await this.relay.prepare(
             {
-              operationId: op.id,
+              attemptId: op.id,
               jobId: this.context.run.jobId,
               sourceDownloadConcurrency:
                 this.context.run.config.job.sourceDownloadConcurrency,
@@ -172,7 +171,8 @@ export class FileCoordinator {
           : undefined;
         for (const dep of dependencies) {
           if (dep.action !== 'delete') continue;
-          const latest = this.store.latest(dep);
+          // 依赖在源准备前读取；派发前重读当前尝试，避免使用期间已被批量收尾的状态。
+          const latest = this.store.current(dep.operationId);
           const result =
             latest.status === 'pending'
               ? await this.mutations.execute(
@@ -199,8 +199,7 @@ export class FileCoordinator {
         )
           return;
         if (serverCopy) {
-          const result = await copy.submit(op);
-          retryable = result.status === 'failed';
+          await copy.submit(op);
         } else {
           if (!transfer) throw new Error('Relay preparation missing');
           const uploading = transfer;
@@ -296,8 +295,7 @@ export class FileCoordinator {
               error,
               deadline.aborted,
             );
-        this.store.end(op.id, outcome);
-        retryable =
+        const retryable =
           outcome.status === 'failed' &&
           (error instanceof RelayError
             ? error.retryable
@@ -306,9 +304,10 @@ export class FileCoordinator {
                 ? error.code !== 'AUTH_BLOCKED' &&
                   ![400, 401, 403, 405].includes(error.upstreamCode ?? -1)
                 : !rejected(error)));
+        this.store.end(op.id, outcome, retryable, this.context.signal);
         this.logger.warn('File attempt ended', {
           runId: this.context.run.id,
-          operationId: op.id,
+          attemptId: op.id,
           errorCode: outcome.code,
           status: outcome.status,
         });
@@ -329,15 +328,12 @@ export class FileCoordinator {
         }
       }
       const result = this.store.get(op.id);
-      const retry =
-        retryable && !this.context.signal.aborted
-          ? this.store.retry(result)
-          : null;
-      if (!retry) {
+      const next = this.store.current(op.operationId);
+      if (next.id === op.id) {
         if (result.status !== 'succeeded') this.settleDeletes(op);
         return;
       }
-      op = retry;
+      op = next;
     }
   }
   /** 原动作已明确失败后刷新残留；清理仍使用同一删除保护和剩余预算。
@@ -350,7 +346,7 @@ export class FileCoordinator {
    */
   private async cleanRetry(
     target: RunTargetRecord,
-    op: OperationRecord,
+    op: ExecutionRecord,
     deadline: AbortSignal,
     beforeDelete?: () => Promise<void>,
   ): Promise<boolean> {
@@ -420,7 +416,7 @@ export class FileCoordinator {
    * @returns 不适用。
    * @throws Error 数据库失败。
    */
-  private settleDeletes(op: OperationRecord): void {
+  private settleDeletes(op: ExecutionRecord): void {
     for (const dependency of this.store.dependencies(op.id))
       if (dependency.action === 'delete' && dependency.status === 'pending')
         this.store.end(dependency.id, {

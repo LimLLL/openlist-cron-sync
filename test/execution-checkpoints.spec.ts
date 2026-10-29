@@ -154,7 +154,6 @@ it.each([
     const actions = runs.operations(runId, {
       page: 1,
       pageSize: 100,
-      includeMaintenance: false,
     }).items;
     const expected =
       window === 'submitting-before'

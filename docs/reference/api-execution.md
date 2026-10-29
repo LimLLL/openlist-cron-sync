@@ -13,14 +13,15 @@
 | GET /runs/:id            | 无                                                              | 200 RunDetail                             |
 | POST /runs/:id/cancel    | {}                                                              | 202 RunView；已终态200现有Run             |
 | POST /runs/:id/retry     | {confirmDeletes?:boolean=false}                                 | 202 RunView，Location=/api/v1/runs/:runId |
-| GET /runs/:id/operations | page,pageSize,status?,action?,includeMaintenance?:boolean=false | 200 Page<OperationView>                   |
+| GET /runs/:id/operations | page,pageSize,status?,action?                                   | 200 Page<OperationView>                   |
 | GET /runs/:id/issues     | page,pageSize                                                   | 200 Page<ScanIssueView>                   |
-| GET /operations/:id      | 无                                                              | 200 OperationView                         |
+| GET /operations/:id      | 无                                                              | 200 OperationDetail                       |
 | GET /operations          | page,pageSize,status?,instanceId?                               | 200 Page<OperationView>                   |
 
-分页和错误格式继承[REST](rest-api.md)，error code取值见[固定原因码](rest-api.md#reason-codes)。没有单个Operation的直接retry API，自动有限attempt由执行器负责；需要重做时触发新的完整Run，或对Job最近一次正式Run用POST /runs/:id/retry只重新检查其未成功项（见[重试未成功项](#重试未成功项)）。
+分页和错误格式继承[REST](rest-api.md)，error code取值见[固定原因码](rest-api.md#reason-codes)。没有单个Operation的直接retry API，自动有限尝试由执行器负责；需要重做时触发新的完整Run，或对Job最近一次正式Run用POST /runs/:id/retry只重新检查其未成功项（见[重试未成功项](#重试未成功项)）。
 GET /runs支持status=active，等价于queued/scanning/planned/executing/cancelling/recovering，可与jobId和dryRun组合。过滤在分页前应用，total使用同一条件；响应status仍为实际Run状态。未传dryRun时活动查询也包含预览。列表的jobName取冻结快照，不依赖Job当前名称或是否归档。
-Operation列表按(runId,seq)升序，seq是Run内的计划顺序。includeMaintenance=false时不返回旧版本留下的 REMOTE_TASK_CHANGED 历史记录；GET /operations不按此过滤。
+Operation列表按(runId,seq)升序，seq是Run内的计划顺序，重试不改变序号，历史序号可能有间隔。列表每项是一个计划动作（逻辑操作）：一次失败后自动重试成功只返回一条succeeded，attemptCount为2；status过滤按逻辑结果，因此这条不会出现在status=failed中。列表项不含尝试明细。
+GET /operations/:id返回OperationDetail，attempts按attemptNo升序列出每次尝试的状态、错误、远程任务、分片会话、字节与时钟。旧版本链接里的尝试ID同样返回200，响应id为所属操作的ID（不做HTTP重定向）；控制台旧的?op=链接用该ID取详情后按响应id定位。升级时删除的旧REMOTE_TASK_CHANGED维护记录返回404。includeMaintenance参数已删除，继续传入返回400。
 
 默认dryRun=false，支持relay与server_copy真实执行、取消及 unknown 历史查询；dry-run仅规划。
 
@@ -58,7 +59,7 @@ POST /runs/:id/retry 新建一个重试运行（trigger=manual，retryOfRunId=�
 
 其余拒绝为409 RETRY_NOT_ALLOWED，details=[{field:'runId',reason}]；队列满、未就绪和当前端点配置不可运行沿用手动执行的错误。并发的两个请求最多接受一个。
 
-候选：每个逻辑动作取最后一次attempt，最后结果不是succeeded的新建/替换文件（含failed、unknown、cancelled、skipped及未执行的）和mkdir目录自身；replace的删除与新建合并为一个文件项，扫描中断留下的半条replace也能提取；不包含mirror extras删除、retry_cleanup和旧版REMOTE_TASK_CHANGED记录。目录项只代表该目录自身，不展开其中后来新增的内容。来源本身是重试运行时，候选为其范围中尚未处理、受阻或已规划但最终未成功的项，确认无需操作的项不再入选。
+候选：结果不是succeeded的新建/替换文件（含failed、unknown、cancelled、skipped及未执行的）和mkdir目录自身；replace的删除与新建合并为一个文件项，扫描中断留下的半条replace也能提取；不包含mirror extras删除和retry_cleanup。目录项只代表该目录自身，不展开其中后来新增的内容。来源本身是重试运行时，候选为其范围中尚未处理、受阻或已规划但最终未成功的项，确认无需操作的项不再入选。
 
 配置：使用Job当前配置（过滤、并发、超时、refresh等）并在接受时冻结。目标按稳定Target ID匹配；已移除或instanceId/path改变的目标排除（计入excludedItems），新加的目标不参与；快照只保留参与的目标。范围随新Run持久化，排队、重启恢复、取消与超时规则与普通Run相同；扫描或排队阶段中断时，尚未处理的项可再次重试。来源Run被历史保留清理不影响已接受的重试运行。
 
@@ -73,7 +74,7 @@ unknown 只作为本次尝试的历史结果，不提供管理动作或单个操
 ## 查询与进度
 
 Operation 未知列表使用 status=unknown，可按 instanceId 过滤；历史结果不因后续 Run 成功而改写。
-Stats 按 error.code=REMOTE_TASK_CHANGED 排除旧版维护记录，含活动 Run 聚合和 extras 判断。Stats 在 Run 终态固定；维护只更新 task 事实，不改变历史同步结果或重发终态通知。
+Stats 的结果计数按逻辑操作的状态，字节累计全部尝试，retryAttempts 为额外尝试数；活动 Run 聚合、终态聚合和 extras 判断使用同一口径。Stats 在 Run 终态固定；维护只更新 task 事实，不改变历史同步结果或重发终态通知。
 GET /runs/:id及GET /runs当前页的planned/executing/cancelling/recovering运行使用同一SQL聚合口径读取当前执行统计，规则与终态聚合一致；queued/scanning显示已持久化的规划统计。列表仅聚合返回页中的运行，不聚合页外记录。issueCount读取已提交的scan_issues。下载及上传字节约每5秒持久化，因此长单文件上传中也会增长；不是逐字节更新。payload全部发送完成后刷新最终字节并停止周期写入，complete等待仍保留心跳；源EOF释放配额不等于Operation成功，也不提前持久化上传的EOF检查点。列表和详情聚合超出安全整数均返回HTTP 500 RESOURCE_LIMIT，不通过读取改变Run状态或回退成零统计。触发/取消返回的RunView仍为持久化摘要。
 RunDetail.sourceInstanceName、targets[].instanceName以及操作响应的sourceInstanceName/targetInstanceName按冻结名称、当前（含归档）实例名、8字符Instance ID前缀解析；操作没有源端时sourceInstanceName为null。所有原始ID仍返回。操作过滤的“全部”对应省略status/action，不能发送all；翻页参数仍为page/pageSize。
 RunDetail.config只包含当时有效的脱敏值；路径密码和download sign从不展示。

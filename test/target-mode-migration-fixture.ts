@@ -5,7 +5,6 @@ import { join } from 'node:path';
 import { readMigrationFiles } from 'drizzle-orm/migrator';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { instances } from '../src/database/schema.js';
-import { operations } from '../src/database/operation-schema.js';
 import { mergeJob } from '../src/jobs/validation.js';
 import { instanceSnapshot } from '../src/jobs/endpoint-validation.js';
 import { emptyStats } from '../src/sync/stats.js';
@@ -198,30 +197,43 @@ export function seedLegacyRun(
           JSON.stringify(value),
           JSON.stringify(emptyStats()),
         );
-      db.insert(operations)
-        .values({
-          id: randomUUID(),
-          runId,
-          runTargetId: id,
-          seq: target.position + 1,
-          action: 'create',
-          method: historicalMode,
-          reason: 'new',
-          status: 'pending',
-          sourceInstanceId: instance.id,
-          sourcePath: '/source/file.txt',
-          targetInstanceId: instance.id,
-          targetPath: target.path + '/file.txt',
-          isDir: false,
-          affectedFileCount: 1,
-          affectedBytes: 12,
-          openlistTaskId:
-            historicalMode === 'server_copy' ? `task-${id}` : null,
-          multipartUploadId: historicalMode === 'relay' ? `upload-${id}` : null,
-          createdAt: 1,
-          updatedAt: 2,
-        })
-        .run();
+      const operation = {
+        id: randomUUID(),
+        runId,
+        runTargetId: id,
+        seq: target.position + 1,
+        action: 'create',
+        method: historicalMode,
+        reason: 'new',
+        status: 'pending',
+        sourceInstanceId: instance.id,
+        sourcePath: '/source/file.txt',
+        targetInstanceId: instance.id,
+        targetPath: target.path + '/file.txt',
+        isDir: false,
+        affectedFileCount: 1,
+        affectedBytes: 12,
+        openlistTaskId: historicalMode === 'server_copy' ? `task-${id}` : null,
+        multipartUploadId: historicalMode === 'relay' ? `upload-${id}` : null,
+        createdAt: 1,
+        updatedAt: 2,
+      };
+      const entries = Object.entries(operation).map(
+        ([key, value]) =>
+          [
+            key.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`),
+            value,
+          ] as const,
+      );
+      connection
+        .prepare(
+          `INSERT INTO operations (${entries.map(([key]) => key).join(',')}) VALUES (${entries.map(() => '?').join(',')})`,
+        )
+        .run(
+          ...entries.map(([, value]) =>
+            typeof value === 'boolean' ? Number(value) : value,
+          ),
+        );
       return { id, value };
     },
   );

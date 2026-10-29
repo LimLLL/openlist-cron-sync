@@ -224,7 +224,6 @@ export default {
       ended: 'Ended',
     },
     directory: 'Folder',
-    retry: 'Retry',
     details: 'Details',
     openPage: 'Open in page',
     loading: 'Loading operations…',

@@ -8,7 +8,7 @@ import { OperationsService } from '../src/runs/operations.service.js';
 import { InstancesService } from '../src/instances/instances.service.js';
 import { InstanceOperations } from '../src/instances/instance-operations.service.js';
 import { DatabaseService } from '../src/database/database.service.js';
-import { operations } from '../src/database/operation-schema.js';
+import { operationAttempts } from '../src/database/operation-schema.js';
 import { object } from '../src/openlist/errors.js';
 
 /** 注册真实 HTTP、SQLite 和文件流水线的未知结果回归。
@@ -250,7 +250,7 @@ describe('unknown outcome history and execution safety', () => {
     );
     const old = plan(f, first.id)[0];
     expect(old.status).toBe('unknown');
-    const uploadId = old.multipart?.uploadId;
+    const uploadId = old.attempts[0].multipart?.uploadId;
     if (!uploadId) throw new Error('Missing historical session');
     f.fault = undefined;
     f.files.delete('/target/new.txt');
@@ -283,7 +283,9 @@ describe('unknown outcome history and execution safety', () => {
       f.runs().trigger(job.id, { dryRun: false, confirmDeletes: true }).id,
     );
     expect(next.status).toBe('succeeded');
-    const attempts = plan(f, next.id).filter((op) => op.action === 'create');
+    const attempts = plan(f, next.id)
+      .filter((op) => op.action === 'create')
+      .flatMap((op) => op.attempts);
     expect(attempts).toHaveLength(2);
     expect(attempts[0]).toMatchObject({
       status: 'failed',
@@ -291,7 +293,7 @@ describe('unknown outcome history and execution safety', () => {
     });
     expect(attempts[1]).toMatchObject({
       status: 'succeeded',
-      retryOf: attempts[0].id,
+      attemptNo: 2,
     });
     expect(attempts[1].multipart?.uploadId).not.toBe(uploadId);
     expect(f.app.get(OperationsService).get(old.id)).toEqual(old);
@@ -315,8 +317,8 @@ describe('unknown outcome history and execution safety', () => {
       f.app
         .get(DatabaseService)
         .db.select()
-        .from(operations)
-        .where(eq(operations.multipartUploadId, uploadId))
+        .from(operationAttempts)
+        .where(eq(operationAttempts.multipartUploadId, uploadId))
         .all(),
     ).toHaveLength(2);
   });

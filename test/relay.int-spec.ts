@@ -20,6 +20,7 @@ import { OpenListError } from '../src/openlist/errors.js';
 import type { InstanceRecord } from '../src/database/schema.js';
 import { resolveMount } from '../src/openlist/mounts.js';
 import { globalPath } from '../src/openlist/paths.js';
+import { OperationsService } from '../src/runs/operations.service.js';
 
 const environment = integrationEnvironment();
 /** 一个已经核实的Local测试端点。 */
@@ -359,16 +360,16 @@ describe('M3 real Local relay topologies', () => {
         .operations(accepted.id, {
           page: 1,
           pageSize: 10,
-          includeMaintenance: false,
         })
-        .items.find(
+        .items.map((op) => app.get(OperationsService).get(op.id))
+        .find(
           /** 找到已持久化session的create。
            * @param op 当前操作视图。
            * @returns 是否已有multipart事实。
            * @throws 不适用。
            */
-          (op) => op.multipart !== null,
-        )?.multipart?.uploadId;
+          (op) => op.attempts[0].multipart !== null,
+        )?.attempts[0].multipart?.uploadId;
     }
     expect(uploadId).toBeDefined();
     runs.cancel(accepted.id);
@@ -377,12 +378,10 @@ describe('M3 real Local relay topologies', () => {
       status: 'cancelled',
       stopReason: 'USER_CANCEL',
     });
+    const operation = runs.operations(accepted.id, { page: 1, pageSize: 10 })
+      .items[0];
     expect(
-      runs.operations(accepted.id, {
-        page: 1,
-        pageSize: 10,
-        includeMaintenance: false,
-      }).items[0],
+      app.get(OperationsService).get(operation.id).attempts[0],
     ).toMatchObject({ status: 'unknown', multipart: { uploadId } });
     // abort不证明驱动已停止；这里只核对OpenList不再把该session当作接收中。
     const after = await uploads.status(record(peer), uploadId ?? '').then(

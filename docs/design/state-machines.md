@@ -47,7 +47,7 @@ queued 重启仍 queued，保留 createdAt 和 queueDeadlineAt；过期则 faile
 
 ## Run 聚合
 
-聚合按本轮每个必要逻辑动作的最后一次attempt计算；同一retryOf根下早先failed被后续succeeded替代时，不再作为当前失败或extras阻断条件，原记录保持failed。unknown不在本轮自动重试，不能用此规则抹去。若计划中的依赖还可安全重试，先重连依赖并保持下游pending；预算耗尽才将下游skipped。
+聚合按本轮每个必要逻辑操作的结果计算；一次失败后重试成功的操作就是succeeded，早先失败的尝试只留在尝试记录中，不作为当前失败或extras阻断条件。unknown不在本轮自动重试，不能用此规则抹去。依赖已安排下一次尝试时下游保持pending，依赖关系不变；预算耗尽才将下游skipped。
 在未被取消/中断的 Run 内，结果为 cancelled 的 Operation（例如管理员在 OpenList 外部取消了 task）按 failed 参与聚合和 extras 判定。
 
 - dry-run：未发现降级类异常为 succeeded；降级类保护、冲突、子树读取失败为 partial；source 根失败为 failed。预览计数不冒充执行计数。
@@ -103,7 +103,7 @@ queued 重启仍 queued，保留 createdAt 和 queueDeadlineAt；过期则 faile
 
 `pending | submitting | submitted | running | succeeded | failed | skipped | unknown | cancelled`
 
-终态：`succeeded | failed | skipped | unknown | cancelled`。结果终态不修改；重试创建新的 Operation，retryOf 指向原动作，attemptNo 增加。
+终态：`succeeded | failed | skipped | unknown | cancelled`。下表描述单次尝试；尝试终态不修改。逻辑操作的状态等于当前尝试的状态：可重试的 failed 在同一事务内结束该尝试并新建下一次 pending 尝试，操作回到 pending、attemptCount 增加；不再重试时操作随该尝试进入同一终态。
 
 | 当前              | 条件                                                                            | 下一状态                                                                                                                                            |
 | ----------------- | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -134,7 +134,7 @@ queued 重启仍 queued，保留 createdAt 和 queueDeadlineAt；过期则 faile
 relay 在 init 前为 submitting，收到有效 init 响应并写入 upload_id 后为 running；init 明确拒绝则 failed，init 响应丢失则 unknown。0 字节文件的普通 put 按 create 的同步成功处理。
 delete 使用 remove 确认路径；mkdir/create 没有常规后验文件校验。
 失败可重试只有在没有仍可能进行的写入、当前前提仍满足且次数未耗尽时；见 [集成](openlist-integration.md)。
-管理员在 OpenList 中重试已结束的 task 时，维护仅更新原 remote_state 并记录终态逆转日志，不新增 Operation。原结果保持不变，任务再次终态才删除远程记录。旧 REMOTE_TASK_CHANGED 行保留历史但排除于执行统计。
+管理员在 OpenList 中重试已结束的 task 时，维护仅更新原尝试的 remote_state 并记录终态逆转日志，不新增操作或尝试。原结果保持不变，任务再次终态才删除远程记录。
 
 <a id="auxiliary-states"></a>
 

@@ -2,8 +2,8 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { and, asc, eq, gt, inArray, isNull } from 'drizzle-orm';
 import { DatabaseService } from '../database/database.service.js';
-import { operations } from '../database/operation-schema.js';
-import type { OperationRecord } from '../database/operation-schema.js';
+import { operations, operationAttempts } from '../database/operation-schema.js';
+import type { ExecutionRecord } from '../database/operation-schema.js';
 import { runTargets } from '../database/run-schema.js';
 import type { RunRecord } from '../database/run-schema.js';
 import { KeysService } from '../security/keys.service.js';
@@ -16,6 +16,7 @@ import { ExecutionContext, runSecrets } from './execution-context.js';
 import { OperationStore } from './operation-store.js';
 import { Mutations } from './mutations.js';
 import { CopyTracker } from './copy-tracker.js';
+import { executionColumns } from '../database/operation-records.js';
 /** 已提交动作恢复服务。
  * @param 不适用。
  * @returns 不适用。
@@ -72,13 +73,17 @@ export class ExecutionRecovery {
     try {
       for (;;) {
         const batch = context.db
-          .select()
+          .select(executionColumns)
           .from(operations)
+          .innerJoin(
+            operationAttempts,
+            eq(operationAttempts.operationId, operations.id),
+          )
           .where(
             and(
               eq(operations.runId, run.id),
               gt(operations.seq, after),
-              inArray(operations.status, [
+              inArray(operationAttempts.status, [
                 'submitting',
                 'submitted',
                 'running',
@@ -131,14 +136,18 @@ export class ExecutionRecovery {
       after = 0;
       for (;;) {
         const batch = context.db
-          .select()
+          .select(executionColumns)
           .from(operations)
+          .innerJoin(
+            operationAttempts,
+            eq(operationAttempts.operationId, operations.id),
+          )
           .where(
             and(
               eq(operations.runId, run.id),
               gt(operations.seq, after),
-              isNull(operations.openlistTaskId),
-              inArray(operations.status, [
+              isNull(operationAttempts.openlistTaskId),
+              inArray(operationAttempts.status, [
                 'submitting',
                 'submitted',
                 'running',
@@ -180,7 +189,7 @@ export class ExecutionRecovery {
     context: ExecutionContext,
     store: OperationStore,
     mutations: Mutations,
-    op: OperationRecord,
+    op: ExecutionRecord,
     signal: AbortSignal,
   ): Promise<void> {
     const target = context.db
@@ -231,7 +240,7 @@ export class ExecutionRecovery {
         if (!(error instanceof OpenListError) && !aborted(error, signal))
           throw error;
         this.logger.warn('Recovery session unavailable', {
-          operationId: op.id,
+          attemptId: op.id,
           errorCode:
             error instanceof OpenListError ? error.code : 'PROCESS_RESTART',
         });

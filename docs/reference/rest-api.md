@@ -79,7 +79,6 @@ Error={error:{code:string,message:string,details:FieldError[]},requestId:string}
 | DEPENDENCY_FAILED           | 依赖动作以非成功终态结束                                                                                                                     |
 | DELETE_NOT_EFFECTIVE        | delete确认期限内原名称仍存在；依赖create跳过，从不改用overwrite                                                                              |
 | OBSERVED_AFTER_ERROR        | OpenList对变更返回非成功码，但随后一次有界观察确认效果已出现；Operation记succeeded，message保留原错误摘要                                    |
-| REMOTE_TASK_CHANGED         | 旧版本记录远程任务重新启动的历史行；当前维护只更新原 task 状态并记录日志，不新增操作                                                         |
 | AUTH_BLOCKED                | Instance处于auth_blocked，相关请求立即失败                                                                                                   |
 | OPENLIST_ERROR              | 未被专用原因码覆盖的上游失败；响应错误码或网络事实只进入脱敏摘要，不按message猜测业务状态                                                    |
 | UPSTREAM_REDIRECT           | 管理API、multipart或put收到重定向；不跟随，也不重放上传body                                                                                  |

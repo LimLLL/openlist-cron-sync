@@ -47,7 +47,7 @@ describe('M3 combined relay execution', () => {
       transferredBytes: data.length,
       downloadedBytes: data.length,
     });
-    expect(plan(f, run.id)[0]).toMatchObject({
+    expect(plan(f, run.id)[0].attempts[0]).toMatchObject({
       status: 'succeeded',
       multipart: {
         state: 'completed',

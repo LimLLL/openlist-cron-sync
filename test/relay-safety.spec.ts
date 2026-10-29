@@ -7,7 +7,7 @@ import { Spool } from '../src/relay/spool.js';
 import { OperationStore } from '../src/sync/operation-store.js';
 import { object } from '../src/openlist/errors.js';
 import { DatabaseService } from '../src/database/database.service.js';
-import { operations } from '../src/database/operation-schema.js';
+import { operationAttempts } from '../src/database/operation-schema.js';
 
 /** 注册失败证据行为，不以代码实现细节替代远端副作用断言。
  * @param 不适用。
@@ -215,7 +215,7 @@ describe('M3 execution safety boundaries', () => {
           recorded = f.app
             .get(DatabaseService)
             .db.select()
-            .from(operations)
+            .from(operationAttempts)
             .all()
             .some(
               /** 检查是否保存了真实upload_id。

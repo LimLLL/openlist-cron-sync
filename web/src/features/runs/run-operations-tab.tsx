@@ -6,7 +6,6 @@ import type { SkeletonColumn } from '../../components/skeleton';
 import { EmptyState, ErrorState, StaleNotice } from '../../components/states';
 import { OperationStatusBadge } from '../../components/status';
 import { Endpoint, RelativeTime } from '../../components/text';
-import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
 import { Dialog, SheetContent } from '../../components/ui/dialog';
 import { Pagination } from '../../components/ui/pagination';
@@ -122,14 +121,19 @@ export function OperationSheet() {
           description={
             data ? (
               <span className="inline-flex items-center gap-1.5">
-                <OperationStatusBadge status={data.status} />
+                <OperationStatusBadge
+                  status={data.status}
+                  attemptCount={data.attemptCount}
+                />
                 {t(`common:operationAction.${data.action}`)}
               </span>
             ) : undefined
           }
           actions={
             <Button asChild variant="ghost" size="sm">
-              <Link to={`/operations/${id}`}>{t('operations.openPage')}</Link>
+              <Link to={`/operations/${data?.id ?? id}`}>
+                {t('operations.openPage')}
+              </Link>
             </Button>
           }
         >
@@ -301,7 +305,10 @@ export function RunOperationsTab({ run }: { run: RunDetail }) {
                     )}
                   </TD>
                   <TD>
-                    <OperationStatusBadge status={operation.status} />
+                    <OperationStatusBadge
+                      status={operation.status}
+                      attemptCount={operation.attemptCount}
+                    />
                   </TD>
                   <TD className="max-w-96">
                     <Endpoint
@@ -315,12 +322,7 @@ export function RunOperationsTab({ run }: { run: RunDetail }) {
                       directory={t('operations.directory')}
                     />
                   </TD>
-                  <TD className="whitespace-nowrap">
-                    <span className="tabular-nums">{operation.attemptNo}</span>
-                    {operation.retryOf && (
-                      <Badge className="ml-1.5">{t('operations.retry')}</Badge>
-                    )}
-                  </TD>
+                  <TD className="tabular-nums">{operation.attemptCount}</TD>
                   <TD>
                     <RelativeTime iso={operation.endedAt} />
                   </TD>

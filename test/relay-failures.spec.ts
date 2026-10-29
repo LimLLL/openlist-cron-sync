@@ -127,7 +127,7 @@ describe('M3 mutation and relay failure windows', () => {
             action: op.action,
             reason: op.reason,
             status: op.status,
-            retryOf: op.retryOf,
+            attemptCount: op.attemptCount,
             error: op.error,
           }),
         ),
@@ -167,9 +167,9 @@ describe('M3 mutation and relay failure windows', () => {
            * @returns 用于当前断言的字段。
            * @throws 不适用。
            */
-          (op) => op.status,
+          (op) => op.attempts.map((attempt) => attempt.status),
         ),
-    ).toEqual(['failed', 'succeeded']);
+    ).toEqual([['failed', 'succeeded']]);
     expect(
       f.server.calls
         .filter(
@@ -372,7 +372,7 @@ describe('M3 mutation and relay failure windows', () => {
             })
           : response;
     const result = await run();
-    expect(plan(f, result.id)[0]).toMatchObject({
+    expect(plan(f, result.id)[0].attempts[0]).toMatchObject({
       status: 'unknown',
       task: null,
       error: { code: 'UPSTREAM_PROTOCOL_ERROR' },

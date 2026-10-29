@@ -1,6 +1,6 @@
 // 编排扫描和后置安全检查，预览收尾或向执行阶段交付完整计划。
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { and, asc, count, eq, gt, inArray, placeholder } from 'drizzle-orm';
+import { and, asc, count, eq, gt, inArray } from 'drizzle-orm';
 import { setImmediate } from 'node:timers/promises';
 import { DatabaseService } from '../database/database.service.js';
 import { runTargets, runs, runRetryItems } from '../database/run-schema.js';
@@ -18,6 +18,7 @@ import { ScanScope } from './scan-scope.js';
 import { Scanner } from './scanner.js';
 import { deletionSafety } from './safety.js';
 import { objectInput } from '../jobs/validation.js';
+import { endOperations } from '../database/operation-records.js';
 
 /** 完整计划与安全边界，真实文件写入由Executor执行。
  * @param 不适用。
@@ -256,7 +257,6 @@ export class SyncService {
         (row) => row.id,
       );
       seq = rows[rows.length - 1].seq;
-      const now = Date.now();
       db.transaction(
         /** 在一个事务内将本批仍 pending 的 delete 及依赖它们的操作标记为 skipped。
          * @param 不适用。
@@ -270,25 +270,16 @@ export class SyncService {
             .where(inArray(operationDependencies.dependsOnId, ids))
             .all();
           // 只读取本批反向依赖并逐主键更新；OR 子查询会让 SQLite 每批扫描整个 Run 或 pending 集合。
-          const skip = db
-            .update(operations)
-            .set({
-              status: 'skipped',
-              errorCode: code ?? 'DELETE_BLOCKED',
-              errorMessage: code ?? 'DELETE_BLOCKED',
-              endedAt: now,
-              updatedAt: now,
-            })
-            .where(
+          for (const row of [...rows, ...dependents])
+            endOperations(
+              db,
               and(
                 eq(operations.runId, run.id),
                 eq(operations.status, 'pending'),
-                eq(operations.id, placeholder('operationId')),
+                eq(operations.id, row.id),
               ),
-            )
-            .prepare();
-          for (const row of [...rows, ...dependents])
-            skip.run({ operationId: row.id });
+              { status: 'skipped', code: code ?? 'DELETE_BLOCKED' },
+            );
         },
       );
     }

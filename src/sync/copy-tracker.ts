@@ -3,8 +3,8 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { setTimeout as delay } from 'node:timers/promises';
 import { and, eq, inArray } from 'drizzle-orm';
 import { DatabaseService } from '../database/database.service.js';
-import { operations } from '../database/operation-schema.js';
-import type { OperationRecord } from '../database/operation-schema.js';
+import { operationAttempts } from '../database/operation-schema.js';
+import type { ExecutionRecord } from '../database/operation-schema.js';
 import { runs } from '../database/run-schema.js';
 import { taskFact, updateTaskFact } from '../database/task-records.js';
 import { TaskResources } from '../coordination/task-resources.js';
@@ -45,24 +45,21 @@ export class CopyTracker {
     @Inject(Readiness) private readonly readiness: Readiness,
   ) {}
   /** 将copy响应保存为已知任务，终态也先保留tid再统一分类。
+   * @param store 当前Run的事务入口。
    * @param id 当前submitting尝试。
    * @param task 已验证单任务。
    * @returns 不适用。
    * @throws Error 状态或数据库失败。
    */
-  submitted(id: string, task: TaskInfo): void {
-    const changed = this.database.db
-      .update(operations)
-      .set({
-        openlistTaskId: task.id,
-        remoteState: task.state,
-        status: 'submitted',
-        updatedAt: Date.now(),
-      })
-      .where(and(eq(operations.id, id), eq(operations.status, 'submitting')))
-      .run();
-    if (changed.changes !== 1)
+  submitted(store: OperationStore, id: string, task: TaskInfo): void {
+    if (store.get(id).status !== 'submitting')
       throw new Error('Task response outside submitting');
+    store.transition(id, {
+      openlistTaskId: task.id,
+      remoteState: task.state,
+      status: 'submitted',
+      updatedAt: Date.now(),
+    });
   }
   /** 公平轮询一个tid；各task按固定轮询间隔独立等待，不使用扫描间隔。
    * @param context Run身份、停止及收尾期限。
@@ -73,9 +70,9 @@ export class CopyTracker {
    */
   async track(
     context: ExecutionContext,
-    initial: OperationRecord,
+    initial: ExecutionRecord,
     recovering = false,
-  ): Promise<OperationRecord> {
+  ): Promise<ExecutionRecord> {
     const tid = initial.openlistTaskId;
     if (!tid) throw new Error('Task ID missing');
     const release = this.resources.own(initial.targetInstanceId, tid);
@@ -85,7 +82,12 @@ export class CopyTracker {
     let protocolFailures = 0;
     try {
       if (taskTerminal(initial.remoteState))
-        this.result(store, initial, initial.remoteState);
+        this.result(
+          store,
+          initial,
+          initial.remoteState,
+          !recovering && !context.signal.aborted && !this.readiness.stopping,
+        );
       while (['submitted', 'running'].includes(store.get(initial.id).status)) {
         if (this.readiness.stopping) return store.get(initial.id);
         if (recovering) context.signal.throwIfAborted();
@@ -151,7 +153,7 @@ export class CopyTracker {
               if (!(error instanceof OpenListError) && !aborted(error, signal))
                 throw error;
               this.logger.warn('Task cancel unconfirmed', {
-                operationId: initial.id,
+                attemptId: initial.id,
               });
             }
           }
@@ -161,7 +163,12 @@ export class CopyTracker {
             request,
           );
           protocolFailures = 0;
-          this.result(store, store.get(initial.id), info.state);
+          this.result(
+            store,
+            store.get(initial.id),
+            info.state,
+            !recovering && !context.signal.aborted && !this.readiness.stopping,
+          );
         } catch (error) {
           if (!(error instanceof OpenListError) && !aborted(error, signal))
             throw error;
@@ -182,9 +189,9 @@ export class CopyTracker {
                   message: 'Copy task not found',
                 });
                 context.db
-                  .update(operations)
+                  .update(operationAttempts)
                   .set({ remoteCleanupPending: false })
-                  .where(eq(operations.id, initial.id))
+                  .where(eq(operationAttempts.id, initial.id))
                   .run();
               },
             );
@@ -200,7 +207,7 @@ export class CopyTracker {
           // 网络/认证错误由OpenList客户端记录；状态不变，下一周期继续观察。
           if (protocolFailures === 1)
             this.logger.warn('Task protocol unavailable', {
-              operationId: initial.id,
+              attemptId: initial.id,
             });
         }
         if (!['submitted', 'running'].includes(store.get(initial.id).status))
@@ -237,13 +244,15 @@ export class CopyTracker {
    * @param store Run存取。
    * @param op 当前操作。
    * @param state 已验证远端状态。
+   * @param retryable 当前为正常执行且尚未停止，允许按冻结预算安排重试。
    * @returns 不适用。
    * @throws Error 数据库失败。
    */
   private result(
     store: OperationStore,
-    op: OperationRecord,
+    op: ExecutionRecord,
     state: number | null,
+    retryable: boolean,
   ): void {
     if (state === null) throw new Error('Task state missing');
     const status = taskStatus(state);
@@ -254,32 +263,32 @@ export class CopyTracker {
        * @throws Error 数据库失败。
        */
       () => {
-        store.db
-          .update(operations)
-          .set({ remoteState: state, updatedAt: Date.now() })
-          .where(
-            and(
-              eq(operations.id, op.id),
-              inArray(operations.status, ['submitted', 'running']),
-            ),
-          )
-          .run();
         if (status === 'submitted' || status === 'running')
+          store.transition(op.id, {
+            status,
+            remoteState: state,
+            updatedAt: Date.now(),
+          });
+        else {
           store.db
-            .update(operations)
-            .set({ status })
+            .update(operationAttempts)
+            .set({ remoteState: state, updatedAt: Date.now() })
             .where(
               and(
-                eq(operations.id, op.id),
-                inArray(operations.status, ['submitted', 'running']),
+                eq(operationAttempts.id, op.id),
+                inArray(operationAttempts.status, ['submitted', 'running']),
               ),
             )
             .run();
-        else
-          store.end(op.id, {
-            status,
-            ...(status === 'succeeded' ? {} : { code: 'OPENLIST_ERROR' }),
-          });
+          store.end(
+            op.id,
+            {
+              status,
+              ...(status === 'succeeded' ? {} : { code: 'OPENLIST_ERROR' }),
+            },
+            retryable,
+          );
+        }
       },
     );
     if (taskTerminal(state)) this.resources.release(op.id);
@@ -292,7 +301,7 @@ export class CopyTracker {
    */
   private async cleanup(
     context: ExecutionContext,
-    op: OperationRecord,
+    op: ExecutionRecord,
   ): Promise<void> {
     if (!op.openlistTaskId) return;
     const fact = taskFact(context.db, op.id);
@@ -314,7 +323,7 @@ export class CopyTracker {
       );
       if (this.readiness.stopping) return;
       if (result.kind === 'failed') {
-        this.logger.warn('Task cleanup deferred', { operationId: op.id });
+        this.logger.warn('Task cleanup deferred', { attemptId: op.id });
         return;
       }
       const state = result.kind === 'observed' ? result.state : undefined;
@@ -330,7 +339,7 @@ export class CopyTracker {
         !aborted(error, this.readiness.shutdown.signal)
       )
         throw error;
-      this.logger.warn('Task cleanup deferred', { operationId: op.id });
+      this.logger.warn('Task cleanup deferred', { attemptId: op.id });
     }
   }
 }

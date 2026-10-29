@@ -9,8 +9,8 @@ import type {
 
 /** 单次文件尝试的固定输入。 */
 export interface RelayInput extends DownloadInput {
-  /** 当前Operation UUID；仅用于本地块目录。 */
-  operationId: string;
+  /** 当前Attempt UUID；仅用于本地块目录。 */
+  attemptId: string;
   /** Job ID，用于聚合带宽。 */
   jobId: string;
   /** Job未完成源读取的文件并发，EOF后释放；暂停的下载仍计入，0表示不限。 */

@@ -12,6 +12,7 @@ import { AppConfig } from '../configuration/app-config.js';
 import { StartupError } from '../common/errors.js';
 import { admins } from './schema.js';
 import type { AdminRecord } from './schema.js';
+import { compactDatabase, reclaimHistory } from './sqlite-storage.js';
 
 /** SQLite 连接和管理员数据访问服务。
  * @param 不适用。
@@ -39,6 +40,12 @@ export class DatabaseService implements OnModuleInit, OnApplicationShutdown {
   onModuleInit(): void {
     try {
       this.connection = new Database(join(this.config.dataDir, 'app.sqlite'));
+      if (
+        !this.connection
+          .prepare("SELECT 1 FROM sqlite_schema WHERE type='table' LIMIT 1")
+          .get()
+      )
+        this.connection.pragma('auto_vacuum=INCREMENTAL');
       this.connection.pragma('foreign_keys = ON');
       this.connection.pragma('journal_mode = WAL');
       this.connection.pragma('synchronous = FULL');
@@ -58,6 +65,7 @@ export class DatabaseService implements OnModuleInit, OnApplicationShutdown {
       this.connection.pragma('foreign_keys = OFF');
       if (this.connection.pragma('foreign_keys', { simple: true }) !== 0)
         throw new Error('Cannot disable foreign keys for migration');
+      const migrationStarted = Date.now();
       migrate(this.database, {
         migrationsFolder: fileURLToPath(
           new URL('../../drizzle/', import.meta.url),
@@ -72,11 +80,35 @@ export class DatabaseService implements OnModuleInit, OnApplicationShutdown {
           .get()
       )
         throw new Error('Foreign key integrity check failed');
+      this.logger.log('Database migrations completed', {
+        phase: 'migration',
+        elapsedMs: Date.now() - migrationStarted,
+      });
+      // DROP TEMP表只释放页，SQLite仍可能持有整个迁移临时文件。
+      // 此时迁移已提交且没有应用TEMP对象；清空临时库并恢复原设置后再压缩主库。
+      const tempStore = Number(
+        this.connection.pragma('temp_store', { simple: true }),
+      );
+      this.connection.pragma(`temp_store=${tempStore === 2 ? 0 : 2}`);
+      this.connection.pragma(`temp_store=${tempStore}`);
+      compactDatabase(this.connection);
       this.logger.log('Database initialized', {
         decision: 'migrations_applied',
       });
     } catch (error) {
       this.close();
+      let cause = error;
+      while (cause instanceof Error) {
+        const diagnostic =
+          /^OPERATION_MIGRATION ([A-Z_]+) ([0-9a-f-]{36})$/.exec(cause.message);
+        if (diagnostic)
+          throw new StartupError(
+            'INTERNAL_ERROR',
+            `Operation migration rejected: ${diagnostic[1]}; row=${diagnostic[2]}`,
+            error,
+          );
+        cause = cause.cause;
+      }
       throw new StartupError(
         'INTERNAL_ERROR',
         'Database initialization or migration failed',
@@ -85,6 +117,15 @@ export class DatabaseService implements OnModuleInit, OnApplicationShutdown {
     }
   }
 
+  /** 复用当前连接回收历史空闲页，不暴露连接给执行器。
+   * @param signal 维护关闭信号。
+   * @returns 回收结束。
+   * @throws Error 数据库未初始化、SQL失败或关闭。
+   */
+  reclaimHistory(signal: AbortSignal): Promise<void> {
+    if (!this.connection) throw new Error('Database is not initialized');
+    return reclaimHistory(this.connection, signal);
+  }
   /** 获取初始化后的数据库。
    * @param 不适用。
    * @returns Drizzle 数据库。

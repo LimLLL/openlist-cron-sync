@@ -2,10 +2,10 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, asc, count, eq, or } from 'drizzle-orm';
 import { DatabaseService } from '../database/database.service.js';
-import { operations } from '../database/operation-schema.js';
+import { operations, operationAttempts } from '../database/operation-schema.js';
 import { ApiError } from '../common/errors.js';
 import type { OperationsQueryDto } from './operations.dto.js';
-import { operationViews } from './views.js';
+import { operationViews, attemptView } from './views.js';
 
 /** 操作管理服务。
  * @param 不适用。
@@ -22,27 +22,44 @@ export class OperationsService {
   constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
   ) {}
-  /** 读取单条操作的历史结果。
-   * @param id 操作UUID。
+  /** 将逻辑ID或任意历史尝试ID解析为同一个逻辑操作。
+   * @param id Operation或Attempt UUID。
    * @returns 数据库记录。
    * @throws ApiError 未找到；Error 数据库失败。
    */
   record(id: string) {
+    const canonical =
+      this.database.db
+        .select({ operationId: operationAttempts.operationId })
+        .from(operationAttempts)
+        .where(eq(operationAttempts.id, id))
+        .get()?.operationId ?? id;
     const row = this.database.db
       .select()
       .from(operations)
-      .where(eq(operations.id, id))
+      .where(eq(operations.id, canonical))
       .get();
     if (!row) throw new ApiError(404, 'NOT_FOUND', 'Operation not found');
     return row;
   }
-  /** 显式投影公开字段。
-   * @param id 操作UUID。
-   * @returns OperationView。
+  /** 显式投影操作摘要及按编号排列的全部尝试。
+   * @param id Operation或Attempt UUID。
+   * @returns 包含规范Operation ID的OperationDetail。
    * @throws ApiError 未找到；Error 数据库失败。
    */
   get(id: string) {
-    return operationViews(this.database.db, [this.record(id)])[0];
+    const row = this.record(id);
+    const db = this.database.db;
+    return {
+      ...operationViews(db, [row])[0],
+      attempts: db
+        .select()
+        .from(operationAttempts)
+        .where(eq(operationAttempts.operationId, row.id))
+        .orderBy(asc(operationAttempts.attemptNo))
+        .all()
+        .map(attemptView),
+    };
   }
   /** 按(runId,seq)分页，不加载全部未决历史。
    * @param query 已验证过滤参数。

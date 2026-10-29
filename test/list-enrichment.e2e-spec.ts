@@ -13,6 +13,7 @@ import { m2Fixture, preview } from './m2-fixture.js';
 import type { M2Fixture } from './m2-fixture.js';
 import { seedListRun } from './list-fixture.js';
 import { TEST_PASSWORD, tokenOf } from './helpers.js';
+import { seedOperations, setOperation } from './operation-fixture.js';
 
 /** 从公开OpenAPI文档读取指定响应的内联schema。
  * @param document 未信任的JSON文档。
@@ -365,18 +366,15 @@ describe('list enrichment HTTP contracts', () => {
       .from(operations)
       .where(eq(operations.runId, run.id))
       .get()!;
-    db.update(operations)
-      .set({ bytesTransferred: Number.MAX_SAFE_INTEGER })
-      .where(eq(operations.id, operation.id))
-      .run();
-    db.insert(operations)
-      .values({
-        ...operation,
-        id: randomUUID(),
-        seq: operation.seq + 1,
-        bytesTransferred: 1,
-      })
-      .run();
+    setOperation(db, eq(operations.id, operation.id), {
+      bytesTransferred: Number.MAX_SAFE_INTEGER,
+    });
+    seedOperations(db, {
+      ...operation,
+      id: randomUUID(),
+      seq: operation.seq + 1,
+      bytesTransferred: 1,
+    });
     db.update(runs)
       .set({ status: 'executing', dryRun: false, endedAt: null })
       .where(eq(runs.id, run.id))

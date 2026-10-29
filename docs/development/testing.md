@@ -159,4 +159,6 @@ server-copy.int-spec沿用现有v4.2.7的Local /a与/b，只创建UUID临时根�
 - 执行：混合新建/替换/mirror、copy同步或task成功、relay分片、两类操作同Run恢复；两个relay Target共用Job带宽，copy不伪造传输字节。
 - 前端：新形状解析、Target控制项和错误、保留无效选值、两个提交按钮及提交入口、中英文历史目标展示；OpenAPI包含必填Target响应字段，不含Job层字段。
 
-unknown-history-migration 从真实 0009 数据库升级，验证依赖、自引用、旧 REMOTE_TASK_CHANGED、queued/recovering/已删除子记录的终态快照、重复 upload ID，以及快照或外键损坏时整组迁移回滚。
+unknown-history-migration 从真实 0009 数据库升级，验证依赖、旧 REMOTE_TASK_CHANGED 在后续分层迁移中删除、queued/recovering/已删除子记录的终态快照、重复 upload ID，以及快照或外键损坏时整组迁移回滚。
+
+operation-migration 从真实 0012 结构升级：尝试与旧 ID 保留、依赖合并为逻辑边、统计与旧口径一致，以及断链、跨 Run、编号错误、超预算、维护责任、依赖环和迟到外键错误时整体回滚且迁移位置不变。其中 30 万行生产规模用例（统计等价、阶段耗时与磁盘峰值采样）约写入 1.5 GB 临时文件，默认跳过，设置 `OPERATION_MIGRATION_SCALE=1` 运行。operation-attempts 验证原子重试（失败与下一次 pending 同时可见、插入失败整体回滚、unknown/停止/耗尽不再安排）、依赖不变与公开摘要/详情契约；sqlite-storage 用真实 SQLITE_FULL、读事务阻塞与关机信号验证压缩延期、回滚与增量回收续跑。

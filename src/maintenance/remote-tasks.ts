@@ -2,13 +2,13 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { and, asc, eq, gt } from 'drizzle-orm';
 import { DatabaseService } from '../database/database.service.js';
-import { operations } from '../database/operation-schema.js';
+import { operationAttempts } from '../database/operation-schema.js';
 import {
   taskFact,
   taskInstance,
   updateTaskFact,
 } from '../database/task-records.js';
-import type { OperationRecord } from '../database/operation-schema.js';
+import type { ExecutionRecord } from '../database/operation-schema.js';
 import { AppConfig } from '../configuration/app-config.js';
 import { Readiness } from '../coordination/readiness.js';
 import { TaskResources } from '../coordination/task-resources.js';
@@ -54,15 +54,15 @@ export class RemoteTaskMaintenance {
     let after = '';
     while (!this.readiness.stopping) {
       const rows = this.database.db
-        .select({ id: operations.id })
-        .from(operations)
+        .select({ id: operationAttempts.id })
+        .from(operationAttempts)
         .where(
           and(
-            eq(operations.remoteCleanupPending, true),
-            gt(operations.id, after),
+            eq(operationAttempts.remoteCleanupPending, true),
+            gt(operationAttempts.id, after),
           ),
         )
-        .orderBy(asc(operations.id))
+        .orderBy(asc(operationAttempts.id))
         .limit(100)
         .all();
       if (!rows.length) return;
@@ -135,12 +135,12 @@ export class RemoteTaskMaintenance {
    * @returns 不适用。
    * @throws Error 数据库失败。
    */
-  private clear(fact: OperationRecord, abandoned: boolean): void {
+  private clear(fact: ExecutionRecord, abandoned: boolean): void {
     if (!updateTaskFact(this.database.db, fact, undefined, true)) return;
     this.resources.release(fact.id);
     if (abandoned)
       this.logger.warn('Task housekeeping abandoned', {
-        operationId: fact.id,
+        attemptId: fact.id,
       });
   }
 }

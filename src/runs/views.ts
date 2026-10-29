@@ -1,10 +1,13 @@
 // 显式投影运行、操作与诊断响应，任何 ENC 或下载秘密均不进入 API。
-import { eq, inArray } from 'drizzle-orm';
+import { eq, inArray, sql } from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { instances } from '../database/schema.js';
 import { runs } from '../database/run-schema.js';
 import type { RunRecord, RunTargetRecord } from '../database/run-schema.js';
-import type { OperationRecord } from '../database/operation-schema.js';
+import type {
+  AttemptRecord,
+  OperationRecord,
+} from '../database/operation-schema.js';
 import { time } from '../database/job-records.js';
 
 /** 投影 Run 基础字段。
@@ -125,6 +128,39 @@ export function operationViews(
   rows: readonly OperationRecord[],
 ) {
   if (!rows.length) return [];
+  const ids = sql.join(
+    rows.map(
+      /** 绑定本页操作ID。
+       * @param row 操作记录。
+       * @returns SQL参数。
+       * @throws 不适用。
+       */
+      (row) => sql`${row.id}`,
+    ),
+    sql`,`,
+  );
+  // 字节和首次提交时间累计全部尝试；错误与unknown时间只取当前尝试。
+  const facts = new Map(
+    db
+      .all<OperationFacts>(
+        sql`SELECT a.operation_id AS operationId,
+          sum(a.bytes_downloaded) AS bytesDownloaded, sum(a.bytes_transferred) AS bytesTransferred,
+          min(a.submitted_at) AS submittedAt,
+          max(CASE WHEN a.attempt_no=o.attempt_count THEN a.error_code END) AS errorCode,
+          max(CASE WHEN a.attempt_no=o.attempt_count THEN a.error_message END) AS errorMessage,
+          max(CASE WHEN a.attempt_no=o.attempt_count THEN a.unknown_since END) AS unknownSince
+        FROM operation_attempts a JOIN operations o ON o.id=a.operation_id
+        WHERE a.operation_id IN (${ids}) GROUP BY a.operation_id`,
+      )
+      .map(
+        /** 转为操作ID与尝试汇总的映射条目。
+         * @param row 汇总行。
+         * @returns 映射条目。
+         * @throws 不适用。
+         */
+        (row) => [row.operationId, row],
+      ),
+  );
   const snapshots = new Map(
     db
       .select({ id: runs.id, config: runs.config })
@@ -175,7 +211,9 @@ export function operationViews(
      */
     (row) => {
       const frozen = snapshots.get(row.runId);
-      return operationView(row, {
+      const fact = facts.get(row.id);
+      if (!fact) throw new Error('Operation attempts missing');
+      return operationView(row, fact, {
         sourceInstanceName:
           row.sourceInstanceId === null
             ? null
@@ -195,16 +233,19 @@ export function operationViews(
 }
 /** 投影完整规范 Operation 形状，预览不会有远程任务或 session。
  * @param row Operation 记录。
+ * @param facts 当前尝试诊断及全部尝试累计值。
  * @param labels 已解析的源/目标实例名称。
  * @returns OperationView。
  * @throws RangeError 非法时间；Error session 数据不完整。
  */
 export function operationView(
   row: OperationRecord,
+  facts: OperationFacts,
   labels: OperationInstanceLabels,
 ) {
-  if (row.multipartUploadId !== null && row.multipartChunkSize === null)
-    throw new Error('Incomplete multipart record');
+  for (const value of [facts.bytesDownloaded, facts.bytesTransferred])
+    if (!Number.isSafeInteger(value) || value < 0)
+      throw new Error('Operation byte total exceeds safe integer range');
   return {
     id: row.id,
     runId: row.runId,
@@ -225,33 +266,21 @@ export function operationView(
     expectedTargetSize: row.expectedTargetSize,
     affectedFileCount: row.affectedFileCount,
     affectedBytes: row.affectedBytes,
-    retryOf: row.retryOf,
-    attemptNo: row.attemptNo,
-    task:
-      row.openlistTaskId === null
-        ? null
-        : { id: row.openlistTaskId, state: row.remoteState },
-    multipart:
-      row.multipartUploadId === null
+    attemptCount: row.attemptCount,
+    bytesDownloaded: facts.bytesDownloaded,
+    bytesTransferred: facts.bytesTransferred,
+    error:
+      facts.errorCode === null
         ? null
         : {
-            uploadId: row.multipartUploadId,
-            chunkSize: row.multipartChunkSize,
-            state: row.multipartState,
-            attempt: row.multipartAttempt,
-            sourceStreamCompletedAt: time(row.sourceStreamCompletedAt),
+            code: facts.errorCode,
+            message: facts.errorMessage ?? facts.errorCode,
           },
-    bytesDownloaded: row.bytesDownloaded,
-    bytesTransferred: row.bytesTransferred,
-    error:
-      row.errorCode === null
-        ? null
-        : { code: row.errorCode, message: row.errorMessage ?? row.errorCode },
     createdAt: new Date(row.createdAt).toISOString(),
     updatedAt: new Date(row.updatedAt).toISOString(),
-    submittedAt: time(row.submittedAt),
+    submittedAt: time(facts.submittedAt),
     endedAt: time(row.endedAt),
-    unknownSince: time(row.unknownSince),
+    unknownSince: time(facts.unknownSince),
   };
 }
 
@@ -274,5 +303,64 @@ export function retryOrigin(
         .from(runs)
         .where(eq(runs.id, retryOfRunId))
         .get() !== undefined,
+  };
+}
+
+/** 当前尝试诊断及全尝试累计值；只用于公开摘要，不另存一份事实。 */
+interface OperationFacts {
+  /** 逻辑操作ID。 */
+  operationId: string;
+  /** 全部尝试累计下载字节。 */
+  bytesDownloaded: number;
+  /** 全部尝试累计上传payload字节。 */
+  bytesTransferred: number;
+  /** 最早一次非空的尝试提交时间。 */
+  submittedAt: number | null;
+  /** 当前尝试错误码。 */
+  errorCode: string | null;
+  /** 当前尝试脱敏错误摘要。 */
+  errorMessage: string | null;
+  /** 当前尝试进入unknown的时间。 */
+  unknownSince: number | null;
+}
+/** 投影一次尝试的结果、远端身份及检查点。
+ * @param row 尝试事实。
+ * @returns 不含配置秘密的AttemptView。
+ * @throws Error session不完整；RangeError 时间非法。
+ */
+export function attemptView(row: AttemptRecord) {
+  if (row.multipartUploadId !== null && row.multipartChunkSize === null)
+    throw new Error('Incomplete multipart record');
+  return {
+    id: row.id,
+    attemptNo: row.attemptNo,
+    status: row.status,
+    task:
+      row.openlistTaskId === null
+        ? null
+        : { id: row.openlistTaskId, state: row.remoteState },
+    remoteCleanupPending: row.remoteCleanupPending,
+    multipart:
+      row.multipartUploadId === null
+        ? null
+        : {
+            uploadId: row.multipartUploadId,
+            chunkSize: row.multipartChunkSize,
+            state: row.multipartState,
+            attempt: row.multipartAttempt,
+            sourceStreamCompletedAt: time(row.sourceStreamCompletedAt),
+          },
+    bytesDownloaded: row.bytesDownloaded,
+    bytesTransferred: row.bytesTransferred,
+    error:
+      row.errorCode === null
+        ? null
+        : { code: row.errorCode, message: row.errorMessage ?? row.errorCode },
+    createdAt: new Date(row.createdAt).toISOString(),
+    updatedAt: new Date(row.updatedAt).toISOString(),
+    submittedAt: time(row.submittedAt),
+    endedAt: time(row.endedAt),
+    nextAttemptAt: time(row.nextAttemptAt),
+    unknownSince: time(row.unknownSince),
   };
 }

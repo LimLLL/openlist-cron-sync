@@ -98,7 +98,9 @@ describe('M2 scanner', () => {
          * @throws 不适用。
          */
         (op) =>
-          op.status === 'pending' && op.task === null && op.multipart === null,
+          op.status === 'pending' &&
+          op.attempts[0].task === null &&
+          op.attempts[0].multipart === null,
       ),
     ).toBe(true);
     expect(

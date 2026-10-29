@@ -1,4 +1,4 @@
-// 对无责任的整组过期Run分批物理清理，FK保持开启且Run行最后删除。
+// 对无责任的过期Run分批物理清理，FK保持开启且Run行最后删除。
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { setImmediate as yieldLoop } from 'node:timers/promises';
 import { sql } from 'drizzle-orm';
@@ -7,7 +7,7 @@ import { AppConfig } from '../configuration/app-config.js';
 import { Readiness } from '../coordination/readiness.js';
 import { aborted } from '../common/abort.js';
 import { errorTraits } from '../common/errors.js';
-import { eligibleRun, historyClosure, idList } from './history-closure.js';
+import { eligibleRun, idList } from './history-closure.js';
 
 /** 单批子记录上限，与Run候选页大小无关。 */
 const CHILD_BATCH = 256;
@@ -39,7 +39,6 @@ export class HistoryRetention {
   async cycle(now = Date.now()): Promise<void> {
     const db = this.database.db;
     const cutoff = now - this.config.runRetentionDays * 86400000;
-    const visited = new Set<string>();
     let ended = -1;
     let after = '';
     const signal = this.readiness.shutdown.signal;
@@ -51,127 +50,110 @@ export class HistoryRetention {
           ended: number;
         }>(sql`SELECT id,ended_at AS ended FROM runs WHERE ended_at < ${cutoff}
           AND (ended_at>${ended} OR (ended_at=${ended} AND id>${after})) ORDER BY ended_at,id LIMIT 100`);
-        if (!rows.length) return;
+        if (!rows.length) break;
         for (const row of rows) {
           ended = row.ended;
           after = row.id;
-          if (visited.has(row.id)) continue;
-          const group = await historyClosure(db, row.id, cutoff, signal);
-          for (const id of group.members) visited.add(id);
-          if (!group.eligible) continue;
-          // 最后一次资格检查与第一笔删除之间没有异步窗口；后续资格稳定由终态及 task owner 契约保证。
-          let eligible = true;
-          for (const id of group.members)
-            if (!eligibleRun(db, id, cutoff)) {
-              eligible = false;
-              break;
-            }
-          if (!eligible) continue;
+          if (!eligibleRun(db, row.id, cutoff)) continue;
           try {
-            await this.remove([...group.members], signal);
+            await this.remove(row.id, signal);
           } catch (error) {
             if (!foreignKeyRestriction(error)) throw error;
-            this.logger.warn('History group retained after FK restriction', {
+            this.logger.warn('History run retained after FK restriction', {
               runId: row.id,
               ...errorTraits(error),
             });
           }
         }
       }
+      await this.database.reclaimHistory(signal);
     } catch (error) {
       if (!aborted(error, signal)) throw error;
     }
   }
   /** 按外键依赖顺序删除子记录，清除引用和删除行在同批事务完成。
-   * @param group 已确认资格的完整组。
+   * @param id 已确认资格的Run。
    * @param signal 关机停止。
-   * @returns 本组物理清理结束。
+   * @returns 本Run物理清理结束。
    * @throws Error SQL失败或停止。
    */
-  private async remove(group: string[], signal: AbortSignal): Promise<void> {
+  private async remove(id: string, signal: AbortSignal): Promise<void> {
     const db = this.database.db;
-    for (const id of group) {
-      // 先分批清除组内 retry 自引用，再删除操作与依赖。
-      for (;;) {
-        signal.throwIfAborted();
-        const rows = db.all<{ id: string }>(
-          sql`SELECT id FROM operations WHERE run_id=${id} AND retry_of IS NOT NULL LIMIT ${CHILD_BATCH}`,
-        );
-        if (!rows.length) break;
-        db.run(
-          sql`UPDATE operations SET retry_of=NULL WHERE id IN (${idList(rows.map(recordId))})`,
-        );
-        await yieldLoop(undefined, { signal });
-      }
-    }
-    for (const id of group) {
-      for (;;) {
-        signal.throwIfAborted();
-        const rows = db.all<{
-          id: string;
-        }>(
-          sql`SELECT id FROM operations WHERE run_id=${id} LIMIT ${CHILD_BATCH}`,
-        );
-        if (!rows.length) break;
-        const ids = rows.map(recordId);
-        // 删除边数量同样分批，避免单个目录顶点带大量下游造成长事务。
-        for (;;) {
-          const edges = db.all<{ rowid: number }>(
-            sql`SELECT rowid FROM operation_dependencies WHERE operation_id IN (${idList(ids)}) OR depends_on_id IN (${idList(ids)}) LIMIT ${CHILD_BATCH}`,
-          );
-          if (!edges.length) break;
-          db.run(
-            sql`DELETE FROM operation_dependencies WHERE rowid IN (${sql.join(edges.map(edgeId), sql`, `)})`,
-          );
-          await yieldLoop(undefined, { signal });
-        }
-        db.transaction(
-          /** 单批只删除已经无依赖的操作。
-           * @param 不适用。
-           * @returns 不适用。
-           * @throws Error FK或数据库失败。
-           */
-          () => {
-            db.run(sql`DELETE FROM operations WHERE id IN (${idList(ids)})`);
-          },
-        );
-        await yieldLoop(undefined, { signal });
-      }
-    }
-    for (const id of group) {
-      for (;;) {
-        signal.throwIfAborted();
-        const rows = db.all<{ rowid: number }>(
-          sql`SELECT rowid FROM run_retry_items WHERE run_id=${id} LIMIT ${CHILD_BATCH}`,
-        );
-        if (!rows.length) break;
-        db.run(
-          sql`DELETE FROM run_retry_items WHERE rowid IN (${sql.join(rows.map(edgeId), sql`, `)})`,
-        );
-        await yieldLoop(undefined, { signal });
-      }
-    }
-    for (const table of ['scan_issues', 'run_targets'] as const)
-      for (const id of group) {
-        for (;;) {
-          signal.throwIfAborted();
-          const rows = db.all<{ id: string }>(
-            sql`SELECT id FROM ${sql.identifier(table)} WHERE run_id=${id} LIMIT ${CHILD_BATCH}`,
-          );
-          if (!rows.length) break;
-          db.run(
-            sql`DELETE FROM ${sql.identifier(table)} WHERE id IN (${idList(rows.map(recordId))})`,
-          );
-          await yieldLoop(undefined, { signal });
-        }
-      }
-    for (let offset = 0; offset < group.length; offset += 100) {
+    for (;;) {
       signal.throwIfAborted();
-      db.run(
-        sql`DELETE FROM runs WHERE id IN (${idList(group.slice(offset, offset + 100))})`,
+      const rows = db.all<{
+        id: string;
+      }>(
+        sql`SELECT id FROM operations WHERE run_id=${id} LIMIT ${CHILD_BATCH}`,
+      );
+      if (!rows.length) break;
+      const ids = rows.map(recordId);
+      // 删除边数量同样分批，避免单个目录顶点带大量下游造成长事务。
+      for (;;) {
+        const edges = db.all<{ operationId: string; dependsOnId: string }>(
+          sql`SELECT operation_id AS operationId,depends_on_id AS dependsOnId FROM operation_dependencies WHERE operation_id IN (${idList(ids)}) OR depends_on_id IN (${idList(ids)}) LIMIT ${CHILD_BATCH}`,
+        );
+        if (!edges.length) break;
+        db.run(
+          sql`DELETE FROM operation_dependencies WHERE (operation_id,depends_on_id) IN (${sql.join(
+            edges.map(
+              /** 按复合主键绑定一条依赖边。
+               * @param edge 依赖边。
+               * @returns SQL行值。
+               * @throws 不适用。
+               */
+              (edge) => sql`(${edge.operationId},${edge.dependsOnId})`,
+            ),
+            sql`, `,
+          )})`,
+        );
+        await yieldLoop(undefined, { signal });
+      }
+      db.transaction(
+        /** 单批只删除已经无依赖的操作。
+         * @param 不适用。
+         * @returns 不适用。
+         * @throws Error FK或数据库失败。
+         */
+        () => {
+          // 每个操作的尝试数受冻结重试预算限制；父子同批删除，避免公开列表看到无尝试父行。
+          db.run(
+            sql`DELETE FROM operation_attempts WHERE operation_id IN (${idList(ids)})`,
+          );
+          db.run(sql`DELETE FROM operations WHERE id IN (${idList(ids)})`);
+        },
       );
       await yieldLoop(undefined, { signal });
     }
+
+    for (;;) {
+      signal.throwIfAborted();
+      const rows = db.all<{ rowid: number }>(
+        sql`SELECT rowid FROM run_retry_items WHERE run_id=${id} LIMIT ${CHILD_BATCH}`,
+      );
+      if (!rows.length) break;
+      db.run(
+        sql`DELETE FROM run_retry_items WHERE rowid IN (${sql.join(rows.map(rowId), sql`, `)})`,
+      );
+      await yieldLoop(undefined, { signal });
+    }
+
+    for (const table of ['scan_issues', 'run_targets'] as const)
+      for (;;) {
+        signal.throwIfAborted();
+        const rows = db.all<{ id: string }>(
+          sql`SELECT id FROM ${sql.identifier(table)} WHERE run_id=${id} LIMIT ${CHILD_BATCH}`,
+        );
+        if (!rows.length) break;
+        db.run(
+          sql`DELETE FROM ${sql.identifier(table)} WHERE id IN (${idList(rows.map(recordId))})`,
+        );
+        await yieldLoop(undefined, { signal });
+      }
+
+    signal.throwIfAborted();
+    db.run(sql`DELETE FROM runs WHERE id=${id}`);
+    await yieldLoop(undefined, { signal });
   }
 }
 /** 提取查询ID用于绑定。
@@ -182,12 +164,12 @@ export class HistoryRetention {
 function recordId(row: { id: string }): string {
   return row.id;
 }
-/** 绑定依赖rowid。
- * @param row 依赖行。
+/** 绑定无业务主键表的rowid。
+ * @param row 查询行。
  * @returns SQL参数。
  * @throws 不适用。
  */
-function edgeId(row: { rowid: number }) {
+function rowId(row: { rowid: number }) {
   return sql`${row.rowid}`;
 }
 

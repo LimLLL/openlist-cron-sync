@@ -10,6 +10,7 @@ import { operations } from '../src/database/operation-schema.js';
 import { runs } from '../src/database/run-schema.js';
 import { OpenListMultipart } from '../src/openlist/multipart.service.js';
 import { TaskResources } from '../src/coordination/task-resources.js';
+import { setOperation } from './operation-fixture.js';
 
 /** 注册混合传输真实执行验收，网络服务仅使用测试夹具。
  * @param 不适用。
@@ -173,24 +174,18 @@ describe('mixed create modes in one Run', () => {
       destination: '/copy/new.txt',
     });
     const db = f.app.get(DatabaseService).db;
-    db.update(operations)
-      .set({
-        status: 'submitted',
-        openlistTaskId: 'mixed-recovered-task',
-        remoteState: 0,
-      })
-      .where(eq(operations.id, copy.id))
-      .run();
-    db.update(operations)
-      .set({
-        status: 'running',
-        multipartUploadId: session.uploadId,
-        multipartChunkSize: session.chunkSize,
-        multipartAttempt: session.attempt,
-        multipartState: 'receiving',
-      })
-      .where(eq(operations.id, relay.id))
-      .run();
+    setOperation(db, eq(operations.id, copy.id), {
+      status: 'submitted',
+      openlistTaskId: 'mixed-recovered-task',
+      remoteState: 0,
+    });
+    setOperation(db, eq(operations.id, relay.id), {
+      status: 'running',
+      multipartUploadId: session.uploadId,
+      multipartChunkSize: session.chunkSize,
+      multipartAttempt: session.attempt,
+      multipartState: 'receiving',
+    });
     db.update(runs)
       .set({ status: 'executing', dryRun: false, endedAt: null })
       .where(eq(runs.id, result.id))

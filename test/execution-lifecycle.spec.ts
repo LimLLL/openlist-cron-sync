@@ -8,6 +8,7 @@ import { DatabaseService } from '../src/database/database.service.js';
 import { runs } from '../src/database/run-schema.js';
 import { operations } from '../src/database/operation-schema.js';
 import { PathOccupancy } from '../src/coordination/path-occupancy.js';
+import { setOperation } from './operation-fixture.js';
 
 /** 注册执行生命周期行为。
  * @param 不适用。
@@ -133,10 +134,10 @@ describe('M3 cancellation, recovery and historical unknown outcomes', () => {
       .set({ status: 'executing', dryRun: false, endedAt: null })
       .where(eq(runs.id, result.id))
       .run();
-    db.update(operations)
-      .set({ status: 'submitting', submittedAt: Date.now() })
-      .where(eq(operations.runId, result.id))
-      .run();
+    setOperation(db, eq(operations.runId, result.id), {
+      status: 'submitting',
+      submittedAt: Date.now(),
+    });
     await f.restart();
     const restored = await terminal(f, result.id);
     expect(restored.status).toBe('interrupted');

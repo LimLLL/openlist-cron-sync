@@ -1,8 +1,8 @@
 // 维护copy提交额度和逐tid所有权；重启只从Operation责任恢复。
 import { Inject, Injectable } from '@nestjs/common';
-import { and, asc, eq, gt, inArray, isNotNull, sql } from 'drizzle-orm';
+import { and, asc, eq, gt, isNotNull, sql } from 'drizzle-orm';
 import { DatabaseService } from '../database/database.service.js';
-import { operations } from '../database/operation-schema.js';
+import { operations, operationAttempts } from '../database/operation-schema.js';
 import { runTargets } from '../database/run-schema.js';
 
 /** 等待copy额度的调用。
@@ -43,34 +43,44 @@ export class TaskResources {
    * @throws Error 数据库失败。
    */
   restore(): void {
-    // 两类责任分别走remote_cleanup_pending与status前导索引，避免启动时扫描全部历史Operation。
-    for (const owned of [
-      eq(operations.remoteCleanupPending, true),
-      inArray(operations.status, ['submitted', 'running']),
-    ]) {
+    // 两类责任分别走清理及在途部分索引，避免启动时扫描全部历史尝试。
+    for (const cleanup of [true, false]) {
+      const cursorColumn = cleanup
+        ? operationAttempts.id
+        : operationAttempts.operationId;
+      // 首个IN逐字重复attempts_active的部分索引谓词：SQLite只在WHERE能直接推出该谓词时才使用部分索引。
+      const owned = cleanup
+        ? sql`${operationAttempts.remoteCleanupPending}=1`
+        : sql`${operationAttempts.status} IN ('pending','submitting','submitted','running') AND ${operationAttempts.status} IN ('submitted','running')`;
+      // 在途部分索引以operation_id为键，沿相同键分页才能避免按Attempt ID扫描整段历史。
       let after = '';
       for (;;) {
         const rows = this.database.db
           .select({
-            id: operations.id,
+            id: operationAttempts.id,
+            cursor: cursorColumn,
             targetId: runTargets.targetId,
           })
-          .from(operations)
+          .from(operationAttempts)
+          .innerJoin(
+            operations,
+            eq(operations.id, operationAttempts.operationId),
+          )
           .innerJoin(runTargets, eq(runTargets.id, operations.runTargetId))
           .where(
             and(
               owned,
-              gt(operations.id, after),
-              isNotNull(operations.openlistTaskId),
-              sql`(${operations.remoteState} IS NULL OR ${operations.remoteState} NOT IN (2,4,7))`,
+              gt(cursorColumn, after),
+              isNotNull(operationAttempts.openlistTaskId),
+              sql`(${operationAttempts.remoteState} IS NULL OR ${operationAttempts.remoteState} NOT IN (2,4,7))`,
             ),
           )
-          .orderBy(asc(operations.id))
+          .orderBy(asc(cursorColumn))
           .limit(128)
           .all();
         if (!rows.length) break;
         for (const row of rows) {
-          after = row.id;
+          after = row.cursor;
           this.occupied.set(row.id, row.targetId);
         }
       }
@@ -109,21 +119,21 @@ export class TaskResources {
     return row.targetId;
   }
   /** 记录已知远程非终态，不等待新提交容量。
-   * @param operationId 原尝试ID。
+   * @param attemptId 原尝试ID。
    * @param runTargetId 操作所属Run Target。
    * @returns 不适用。
    * @throws Error Run Target不存在。
    */
-  hold(operationId: string, runTargetId: string): void {
-    this.occupied.set(operationId, this.targetKey(runTargetId));
+  hold(attemptId: string, runTargetId: string): void {
+    this.occupied.set(attemptId, this.targetKey(runTargetId));
   }
   /** 幂等释放已结束或放弃跟踪的额度。
-   * @param operationId 尝试ID。
+   * @param attemptId 尝试ID。
    * @returns 不适用。
    * @throws 不适用。
    */
-  release(operationId: string): void {
-    this.occupied.delete(operationId);
+  release(attemptId: string): void {
+    this.occupied.delete(attemptId);
     this.drain();
   }
   /** 在删除旧文件之前取得潜在copy task名额。

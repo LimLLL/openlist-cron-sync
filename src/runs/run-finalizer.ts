@@ -1,10 +1,11 @@
 // 运行终态事务统一收尾未派发动作、统计和路径密码，不改写历史终态。
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { runs, runTargets } from '../database/run-schema.js';
 import { operations } from '../database/operation-schema.js';
 import { runResult } from '../sync/results.js';
 import type { RunStatus } from './run-types.js';
+import { endOperations } from '../database/operation-records.js';
 
 export const TERMINAL_RUNS: RunStatus[] = [
   'succeeded',
@@ -41,39 +42,26 @@ export function finishRun(
       if (TERMINAL_RUNS.includes(run.status)) return;
       const now = Date.now();
       if (forced) {
-        db.update(operations)
-          .set({
+        endOperations(
+          db,
+          and(eq(operations.runId, id), eq(operations.status, 'pending')),
+          {
             status: forced === 'cancelled' ? 'cancelled' : 'skipped',
-            errorCode: forced === 'cancelled' ? null : 'PLAN_INTERRUPTED',
-            errorMessage: forced === 'cancelled' ? null : 'PLAN_INTERRUPTED',
-            endedAt: now,
-            updatedAt: now,
-          })
-          .where(
-            and(eq(operations.runId, id), eq(operations.status, 'pending')),
-          )
-          .run();
-        db.update(operations)
-          .set({
+            ...(forced === 'cancelled' ? {} : { code: 'PLAN_INTERRUPTED' }),
+          },
+        );
+        endOperations(
+          db,
+          and(
+            eq(operations.runId, id),
+            inArray(operations.status, ['submitting', 'submitted', 'running']),
+          ),
+          {
             status: 'unknown',
-            remoteCleanupPending: sql`CASE WHEN openlist_task_id IS NOT NULL THEN 1 ELSE 0 END`,
-            errorCode: 'OPENLIST_ERROR',
-            errorMessage: 'Stopped without completion evidence',
-            endedAt: now,
-            updatedAt: now,
-            unknownSince: now,
-          })
-          .where(
-            and(
-              eq(operations.runId, id),
-              inArray(operations.status, [
-                'submitting',
-                'submitted',
-                'running',
-              ]),
-            ),
-          )
-          .run();
+            code: 'OPENLIST_ERROR',
+            message: 'Stopped without completion evidence',
+          },
+        );
       }
       const result = runResult(db, run);
       if (run.dryRun) {
@@ -138,16 +126,11 @@ export function recoveringRun(db: BetterSQLite3Database, id: string) {
         })
         .where(eq(runs.id, id))
         .run();
-      db.update(operations)
-        .set({
-          status: 'skipped',
-          errorCode: 'PLAN_INTERRUPTED',
-          errorMessage: 'PLAN_INTERRUPTED',
-          endedAt: now,
-          updatedAt: now,
-        })
-        .where(and(eq(operations.runId, id), eq(operations.status, 'pending')))
-        .run();
+      endOperations(
+        db,
+        and(eq(operations.runId, id), eq(operations.status, 'pending')),
+        { status: 'skipped', code: 'PLAN_INTERRUPTED' },
+      );
       return {
         ...run,
         status: 'recovering' as const,

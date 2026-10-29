@@ -87,6 +87,7 @@ describe('per-Target create mode migration', () => {
       const oldOperations = old
         .prepare(
           `SELECT ${Object.values(getTableColumns(operations))
+            .filter((column) => column.name !== 'attempt_count')
             .map((column) => column.name)
             .join(',')} FROM operations ORDER BY id`,
         )
@@ -178,7 +179,10 @@ describe('per-Target create mode migration', () => {
         ).not.toHaveProperty('createMode');
       }
       expect(service.db.all(sql`SELECT * FROM operations ORDER BY id`)).toEqual(
-        oldOperations,
+        oldOperations.map((row) => ({
+          ...(row as Record<string, unknown>),
+          attempt_count: 1,
+        })),
       );
       expect(service.db.all(sql`PRAGMA foreign_key_check`)).toEqual([]);
       expect(service.db.get(sql`PRAGMA foreign_keys`)).toEqual({

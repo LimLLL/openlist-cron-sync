@@ -8,6 +8,7 @@ import { runs, runTargets } from '../src/database/run-schema.js';
 import { liveRunResult, runResult, targetResult } from '../src/sync/results.js';
 import { m2Fixture, preview } from './m2-fixture.js';
 import type { M2Fixture } from './m2-fixture.js';
+import { seedOperations, setOperation } from './operation-fixture.js';
 
 describe('live run statistics', () => {
   let fixture: M2Fixture;
@@ -29,63 +30,61 @@ describe('live run statistics', () => {
     const now = Date.now();
     const failedId = randomUUID();
     const retryId = randomUUID();
-    db.insert(operations)
-      .values([
-        {
-          id: failedId,
-          runId: run.id,
-          runTargetId: target.id,
-          seq: 100,
-          action: 'create',
-          method: 'relay',
-          reason: 'new',
-          status: 'failed',
-          sourceInstanceId: fixture.id,
-          sourcePath: '/source/retry.txt',
-          targetInstanceId: fixture.id,
-          targetPath: '/target/retry.txt',
-          isDir: false,
-          expectedSourceSize: 7,
-          expectedTargetSize: null,
-          affectedFileCount: 1,
-          affectedBytes: 7,
-          attemptNo: 1,
-          bytesDownloaded: 5,
-          bytesTransferred: 3,
-          errorCode: 'OPENLIST_ERROR',
-          errorMessage: 'temporary',
-          createdAt: now,
-          updatedAt: now,
-          endedAt: now,
-        },
-        {
-          id: retryId,
-          runId: run.id,
-          runTargetId: target.id,
-          seq: 101,
-          action: 'create',
-          method: 'relay',
-          reason: 'new',
-          status: 'succeeded',
-          sourceInstanceId: fixture.id,
-          sourcePath: '/source/retry.txt',
-          targetInstanceId: fixture.id,
-          targetPath: '/target/retry.txt',
-          isDir: false,
-          expectedSourceSize: 7,
-          expectedTargetSize: null,
-          affectedFileCount: 1,
-          affectedBytes: 7,
-          retryOf: failedId,
-          attemptNo: 2,
-          bytesDownloaded: 7,
-          bytesTransferred: 4,
-          createdAt: now,
-          updatedAt: now,
-          endedAt: now,
-        },
-      ])
-      .run();
+    seedOperations(db, [
+      {
+        id: failedId,
+        runId: run.id,
+        runTargetId: target.id,
+        seq: 100,
+        action: 'create',
+        method: 'relay',
+        reason: 'new',
+        status: 'failed',
+        sourceInstanceId: fixture.id,
+        sourcePath: '/source/retry.txt',
+        targetInstanceId: fixture.id,
+        targetPath: '/target/retry.txt',
+        isDir: false,
+        expectedSourceSize: 7,
+        expectedTargetSize: null,
+        affectedFileCount: 1,
+        affectedBytes: 7,
+        attemptNo: 1,
+        bytesDownloaded: 5,
+        bytesTransferred: 3,
+        errorCode: 'OPENLIST_ERROR',
+        errorMessage: 'temporary',
+        createdAt: now,
+        updatedAt: now,
+        endedAt: now,
+      },
+      {
+        id: retryId,
+        runId: run.id,
+        runTargetId: target.id,
+        seq: 101,
+        action: 'create',
+        method: 'relay',
+        reason: 'new',
+        status: 'succeeded',
+        sourceInstanceId: fixture.id,
+        sourcePath: '/source/retry.txt',
+        targetInstanceId: fixture.id,
+        targetPath: '/target/retry.txt',
+        isDir: false,
+        expectedSourceSize: 7,
+        expectedTargetSize: null,
+        affectedFileCount: 1,
+        affectedBytes: 7,
+        operationId: failedId,
+        attemptNo: 2,
+        bytesDownloaded: 7,
+        bytesTransferred: 4,
+        createdAt: now,
+        updatedAt: now,
+        endedAt: now,
+      },
+    ]);
 
     const row = db.select().from(runs).where(eq(runs.id, run.id)).get();
     if (!row) throw new Error('Run missing');
@@ -102,7 +101,7 @@ describe('live run statistics', () => {
     const prototype = db
       .select()
       .from(operations)
-      .where(eq(operations.id, retryId))
+      .where(eq(operations.id, failedId))
       .get();
     if (!prototype) throw new Error('Missing attempt');
     let seq = 102;
@@ -118,46 +117,30 @@ describe('live run statistics', () => {
       'skipped',
     ] as const) {
       for (const reason of ['replace', 'extra', 'retry_cleanup'] as const) {
-        db.insert(operations)
-          .values({
-            ...prototype,
-            id: randomUUID(),
-            retryOf: null,
-            attemptNo: 1,
-            seq: seq++,
-            targetPath: `/target/${seq}`,
-            action: 'delete',
-            method: 'remove',
-            reason,
-            status,
-            isDir: reason === 'extra',
-            affectedBytes: 4,
-            bytesDownloaded: 2,
-            bytesTransferred: 3,
-            errorCode:
-              status === 'skipped'
-                ? 'PRECONDITION_ALREADY_ABSENT'
-                : status === 'failed'
-                  ? 'DELETE_NOT_EFFECTIVE'
-                  : null,
-            unknownSince: status === 'unknown' ? now : null,
-          })
-          .run();
+        seedOperations(db, {
+          ...prototype,
+          id: randomUUID(),
+          attemptNo: 1,
+          seq: seq++,
+          targetPath: `/target/${seq}`,
+          action: 'delete',
+          method: 'remove',
+          reason,
+          status,
+          isDir: reason === 'extra',
+          affectedBytes: 4,
+          bytesDownloaded: 2,
+          bytesTransferred: 3,
+          errorCode:
+            status === 'skipped'
+              ? 'PRECONDITION_ALREADY_ABSENT'
+              : status === 'failed'
+                ? 'DELETE_NOT_EFFECTIVE'
+                : null,
+          unknownSince: status === 'unknown' ? now : null,
+        });
       }
     }
-    db.insert(operations)
-      .values({
-        ...prototype,
-        id: randomUUID(),
-        retryOf: null,
-        seq: seq++,
-        errorCode: 'REMOTE_TASK_CHANGED',
-        status: 'unknown',
-        unknownSince: now,
-        bytesDownloaded: 1000,
-        bytesTransferred: 1000,
-      })
-      .run();
     const mixed = liveRunResult(db, row);
     const mixedFinal = runResult(db, row);
     expect(mixed).toEqual({
@@ -182,10 +165,9 @@ describe('live run statistics', () => {
       expect(listed.items[0].stats).toEqual(fixture.runs().get(row.id).stats);
       expect(listed.items[0].jobName).toBe(row.config.job.name);
     }
-    db.update(operations)
-      .set({ bytesTransferred: Number.MAX_SAFE_INTEGER })
-      .where(eq(operations.id, retryId))
-      .run();
+    setOperation(db, eq(operations.id, failedId), {
+      bytesTransferred: Number.MAX_SAFE_INTEGER,
+    });
     expect(() => liveRunResult(db, row)).toThrow('RESOURCE_LIMIT');
     db.update(runs)
       .set({ status: 'executing', endedAt: null })
@@ -243,6 +225,8 @@ describe('live run statistics', () => {
         'extra', 'succeeded', ${fixture.id}, '/target/perf-' || n, 0, 1, 1,
         ${now}, ${now}, ${now} FROM numbers
     `);
+    db.run(sql`INSERT INTO operation_attempts (id,operation_id,target_instance_id,method,status,created_at,updated_at,ended_at)
+      SELECT id,id,target_instance_id,method,status,created_at,updated_at,ended_at FROM operations WHERE run_id=${run.id} AND seq>=1000`);
     const row = db.select().from(runs).where(eq(runs.id, run.id)).get();
     if (!row) throw new Error('Run missing');
     const samples: number[] = [];

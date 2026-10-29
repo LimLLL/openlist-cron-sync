@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../auth/auth-context';
 import {
   operationNeedsPolling,
-  parseOperation,
+  parseOperationDetail,
   parseOperationPage,
 } from './operation-contract';
 
@@ -56,8 +56,8 @@ export function useOperations(params: OperationListParams) {
   });
 }
 
-/** 读取单条操作；未完成时每 5 秒刷新。enabled=false 时不请求（例如侧边面板未打开）。
- * @param id 操作 ID。
+/** 读取单条操作及全部尝试；未完成时每 5 秒刷新。enabled=false 时不请求（例如侧边面板未打开）。
+ * @param id 操作 ID，也接受旧版本的尝试 ID（响应返回所属操作）。
  * @param enabled 是否请求。
  * @returns 操作查询。
  * @throws 不适用。
@@ -69,7 +69,7 @@ export function useOperation(id: string, enabled = true) {
     queryFn: ({ signal }) =>
       request(`/operations/${encodeURIComponent(id)}`, {
         signal,
-        parse: parseOperation,
+        parse: parseOperationDetail,
       }),
     enabled: enabled && id !== '',
     refetchInterval: (query) =>

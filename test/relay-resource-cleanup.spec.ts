@@ -46,7 +46,7 @@ describe('relay failure cleanup', () => {
    */
   function input(signal: AbortSignal): RelayInput {
     return {
-      operationId: randomUUID(),
+      attemptId: randomUUID(),
       jobId: 'job',
       sourceDownloadConcurrency: 2,
       bandwidth: 0,
@@ -180,7 +180,7 @@ describe('relay failure cleanup', () => {
     );
     const reservation = await spool.reserve(8, 8, transfer.input.signal, false);
     const second = await spool.publish(
-      transfer.input.operationId,
+      transfer.input.attemptId,
       1,
       Buffer.alloc(8),
       reservation,

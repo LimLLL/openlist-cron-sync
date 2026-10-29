@@ -2,25 +2,26 @@
 import { Logger } from '@nestjs/common';
 import { and, eq } from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
-import { operations } from './operation-schema.js';
-import type { OperationRecord } from './operation-schema.js';
+import { operationAttempts } from './operation-schema.js';
+import type { ExecutionRecord } from './operation-schema.js';
 import { runTargets } from './run-schema.js';
 import { instances } from './schema.js';
 import { taskTerminal } from '../openlist/task-protocol.js';
+import { executionRecord } from './operation-records.js';
 
 const logger = new Logger('RemoteTaskFacts');
 
 /** 读取一次异步任务请求所依据的操作事实。
  * @param db 共享连接或事务。
- * @param id 原 Operation ID。
- * @returns 当前操作；历史已删除时为 undefined。
+ * @param id Attempt ID。
+ * @returns 指定尝试及其计划；历史已删除时为 undefined。
  * @throws Error 数据库失败。
  */
 export function taskFact(
   db: BetterSQLite3Database,
   id: string,
-): OperationRecord | undefined {
-  return db.select().from(operations).where(eq(operations.id, id)).get();
+): ExecutionRecord | undefined {
+  return executionRecord(db, id);
 }
 /** 为终态历史取得固定身份与当前凭据。
  * @param db 共享连接。
@@ -28,7 +29,7 @@ export function taskFact(
  * @returns 请求实例，不读取旧路径密码。
  * @throws Error 原身份或实例不存在。
  */
-export function taskInstance(db: BetterSQLite3Database, op: OperationRecord) {
+export function taskInstance(db: BetterSQLite3Database, op: ExecutionRecord) {
   const target = db
     .select()
     .from(runTargets)
@@ -62,7 +63,7 @@ export function taskInstance(db: BetterSQLite3Database, op: OperationRecord) {
  */
 export function updateTaskFact(
   db: BetterSQLite3Database,
-  before: OperationRecord,
+  before: ExecutionRecord,
   state: number | undefined,
   clear: boolean,
 ): boolean {
@@ -80,7 +81,7 @@ export function updateTaskFact(
         current.remoteState !== before.remoteState
       )
         return false;
-      db.update(operations)
+      db.update(operationAttempts)
         .set({
           remoteState: state ?? current.remoteState,
           remoteCleanupPending: !clear,
@@ -88,8 +89,8 @@ export function updateTaskFact(
         })
         .where(
           and(
-            eq(operations.id, before.id),
-            eq(operations.remoteCleanupPending, true),
+            eq(operationAttempts.id, before.id),
+            eq(operationAttempts.remoteCleanupPending, true),
           ),
         )
         .run();
@@ -104,7 +105,7 @@ export function updateTaskFact(
     taskTerminal(before.remoteState)
   )
     logger.warn('Remote copy task restarted', {
-      operationId: before.id,
+      attemptId: before.id,
       taskId: before.openlistTaskId,
       previousState: before.remoteState,
       remoteState: state,
